@@ -3,9 +3,10 @@
 
 import { NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
-import { bkashCreatePayment } from '@/lib/bkash'
-import { CartItem } from '@/types/cart'
+
 import { v4 as uuidv4 } from 'uuid'
+import { CartItem } from '@/app/types/cart'
+import { bkashCreatePayment } from '@/app/lib/bkash'
 
 export async function POST(request: Request) {
   const supabase = createServerClient()
