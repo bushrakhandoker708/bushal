@@ -1,5 +1,3 @@
-// components/auth/RegisterForm.tsx
-
 'use client'
 
 import { useState } from 'react'
@@ -7,7 +5,6 @@ import { useRouter } from 'next/navigation'
 import { createBrowserClient } from '@/lib/supabase/client'
 import Input from '../ui/Input'
 import Button from '../ui/Button'
-
 
 export default function RegisterForm() {
   const router = useRouter()
@@ -24,6 +21,7 @@ export default function RegisterForm() {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }))
+    if (error) setError('')
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -42,7 +40,7 @@ export default function RegisterForm() {
 
     setLoading(true)
 
-    const { error } = await supabase.auth.signUp({
+    const { error: signUpError } = await supabase.auth.signUp({
       email: form.email,
       password: form.password,
       options: {
@@ -52,8 +50,8 @@ export default function RegisterForm() {
 
     setLoading(false)
 
-    if (error) {
-      setError(error.message)
+    if (signUpError) {
+      setError(signUpError.message)
       return
     }
 
@@ -62,7 +60,7 @@ export default function RegisterForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-4" noValidate>
       <Input
         id="fullName"
         name="fullName"
@@ -90,7 +88,7 @@ export default function RegisterForm() {
         label="Password"
         value={form.password}
         onChange={handleChange}
-        placeholder="Min 6 characters"
+        placeholder="At least 6 characters"
         required
         autoComplete="new-password"
       />
@@ -106,9 +104,12 @@ export default function RegisterForm() {
       />
 
       {error && (
-        <p className="text-sm text-red-500 bg-red-50 px-4 py-2 rounded-lg">
+        <div className="flex items-center gap-2.5 text-sm text-rose-600 bg-rose-50 border border-rose-200 px-4 py-3 rounded-xl animate-fade-in">
+          <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+          </svg>
           {error}
-        </p>
+        </div>
       )}
 
       <Button type="submit" loading={loading} className="w-full" size="lg">

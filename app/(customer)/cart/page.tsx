@@ -1,109 +1,71 @@
 // app/(customer)/cart/page.tsx
-
-'use client'
-
-import CartItem from '@/app/components/cart/CartItem'
-// Note: Kept 'CartSummery' as per your original import. 
-// If your file is actually named 'CartSummary.tsx', update this import path.
-import CartSummary from '@/app/components/cart/CartSummery' 
-
+import { createServerClient } from '@/lib/supabase/server'
+import ProductGrid from '@/app/components/product/ProductGrid'
 import Navbar from '@/app/components/layout/Navbar'
-import { useCart } from '@/app/hooks/useCart'
+import Footer from '@/app/components/layout/Footer'
 
-import Link from 'next/link'
-import { useSearchParams } from 'next/navigation'
-import { Suspense } from 'react' // 1. Import Suspense from React
+export default async function DashboardPage() {
+  const supabase = createServerClient()
 
-// 2. Extract the logic that uses useSearchParams into a separate component
-function CartContent() {
-  const { items, clearCart } = useCart()
-  const searchParams = useSearchParams()
-  const bkashStatus = searchParams.get('bkash')
-  const bkashReason = searchParams.get('reason')
+  const { data: products, error } = await supabase
+    .from('products')
+    .select(`
+      *,
+      comments (
+        rating
+      )
+    `)
+    .order('created_at', { ascending: false })
 
-  if (items.length === 0) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <Navbar />
-        <main className="max-w-4xl mx-auto px-4 py-20 text-center">
-          <h1 className="text-3xl font-bold text-gray-900 mb-4">
-            Your cart is empty
-          </h1>
-          <p className="text-gray-500 mb-8">
-            Add some products to get started.
-          </p>
-          <Link
-            href="/dashboard"
-            className="inline-block bg-orange-500 text-white px-6 py-3 rounded-lg font-medium hover:bg-orange-600 transition"
-          >
-            Continue Shopping
-          </Link>
-        </main>
-      </div>
-    )
+  if (error) {
+    console.error('Error fetching products:', error)
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-slate-50">
       <Navbar />
-      {bkashStatus === 'failed' && (
-        <div className="max-w-6xl mx-auto px-4 pt-6">
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
-            {bkashReason === 'cancel'
-              ? 'Payment was cancelled. Your cart is still saved.'
-              : 'Payment failed. Please try again.'}
-          </div>
-        </div>
-      )}
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-        <h1 className="text-3xl font-bold text-gray-900 mb-8">Shopping Cart</h1>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Cart items list */}
-          <div className="lg:col-span-2 space-y-4">
-            {items.map((item) => (
-              <CartItem key={item.id} item={item} />
-            ))}
-            <button
-              onClick={clearCart}
-              className="text-sm text-red-500 underline hover:text-red-700"
+
+      <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14 sm:py-20">
+          <div className="max-w-2xl animate-fade-in-up">
+            <h1
+              className="text-3xl sm:text-5xl font-extrabold tracking-tight mb-4 leading-tight"
+              style={{ fontFamily: 'Plus Jakarta Sans, sans-serif' }}
             >
-              Clear cart
-            </button>
+              Shop with <span className="text-orange-500">Confidence</span>
+            </h1>
+            <p className="text-slate-300 text-base sm:text-lg leading-relaxed mb-6">
+              Quality products delivered fast across Bangladesh. Secure bKash payments, transparent pricing.
+            </p>
+            <div className="flex flex-wrap gap-4 text-sm">
+              {[
+                { icon: '🚚', text: 'Free delivery over ৳1000' },
+                { icon: '🔒', text: 'Secure bKash payments' },
+                { icon: '🔄', text: '7-day easy returns' },
+              ].map(({ icon, text }) => (
+                <div key={text} className="flex items-center gap-2 bg-white/10 backdrop-blur-sm px-3.5 py-2 rounded-full border border-white/10">
+                  <span>{icon}</span>
+                  <span className="text-slate-200">{text}</span>
+                </div>
+              ))}
+            </div>
           </div>
-          {/* Order summary */}
+        </div>
+      </div>
+
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+        <div className="flex items-center justify-between mb-7">
           <div>
-            <CartSummary items={items} />
+            <h2 className="text-2xl font-bold text-slate-900">All Products</h2>
+            {products && (
+              <p className="text-sm text-slate-400 mt-0.5">{products.length} items available</p>
+            )}
           </div>
         </div>
+        <ProductGrid products={products ?? []} />
       </main>
-    </div>
-  )
-}
 
-// 3. Create a fallback UI (Skeleton) to show while the component loads
-function CartSkeleton() {
-  return (
-    <div className="min-h-screen bg-gray-50">
-      <Navbar />
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 animate-pulse">
-        <div className="h-8 bg-gray-200 rounded w-1/4 mb-8"></div>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2 space-y-4">
-            <div className="h-24 bg-gray-200 rounded"></div>
-            <div className="h-24 bg-gray-200 rounded"></div>
-          </div>
-          <div className="h-64 bg-gray-200 rounded"></div>
-        </div>
-      </main>
+      <Footer />
     </div>
-  )
-}
-
-// 4. Wrap the extracted component in a <Suspense> boundary
-export default function CartPage() {
-  return (
-    <Suspense fallback={<CartSkeleton />}>
-      <CartContent />
-    </Suspense>
   )
 }

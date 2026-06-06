@@ -1,37 +1,30 @@
 // components/ui/Badge.tsx
+import type { Metadata } from 'next'
+import '../../globals.css'
 
-import { cn } from "@/app/lib/utils/cn"
-
-
-
-interface BadgeProps {
-  children: React.ReactNode
-  variant?: 'success' | 'warning' | 'danger' | 'info' | 'neutral'
-  className?: string
+export const metadata: Metadata = {
+  title: 'Sagitus — Your Trusted Store',
+  description: 'Quality products, delivered fast across Bangladesh.',
 }
 
-const variantClasses = {
-  success: 'bg-green-100 text-green-700',
-  warning: 'bg-yellow-100 text-yellow-700',
-  danger: 'bg-red-100 text-red-700',
-  info: 'bg-blue-100 text-blue-700',
-  neutral: 'bg-gray-100 text-gray-700',
-}
-
-export default function Badge({
+export default function RootLayout({
   children,
-  variant = 'neutral',
-  className,
-}: BadgeProps) {
+}: {
+  children: React.ReactNode
+}) {
   return (
-    <span
-      className={cn(
-        'inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold',
-        variantClasses[variant],
-        className
-      )}
-    >
-      {children}
-    </span>
+    <html lang="en">
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap"
+          rel="stylesheet"
+        />
+      </head>
+      <body>
+        {children}
+      </body>
+    </html>
   )
 }

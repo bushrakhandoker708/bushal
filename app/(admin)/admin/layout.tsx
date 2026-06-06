@@ -1,10 +1,7 @@
 // app/(admin)/admin/layout.tsx
-
-
 import AdminSidebar from '@/app/components/layout/AdminSidebar'
 import { createServerClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
-
 
 export default async function AdminLayout({
   children,
@@ -19,7 +16,6 @@ export default async function AdminLayout({
 
   if (!session) redirect('/login')
 
-  // Check if user has admin role in profiles table
   const { data: profile } = await supabase
     .from('profiles')
     .select('role')
@@ -29,9 +25,11 @@ export default async function AdminLayout({
   if (profile?.role !== 'admin') redirect('/dashboard')
 
   return (
-    <div className="flex min-h-screen bg-gray-100">
+    <div className="flex min-h-screen bg-slate-100">
       <AdminSidebar />
-      <main className="flex-1 p-8 overflow-auto">{children}</main>
+      <main className="flex-1 p-6 sm:p-8 overflow-auto min-w-0">
+        {children}
+      </main>
     </div>
   )
 }

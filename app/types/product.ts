@@ -8,7 +8,9 @@ export interface Product {
   description?: string | null
   price: number
   image_url?: string | null
+  images: string[]
   in_stock: boolean
+  stock_quantity: number
   discount_percent?: number | null
   created_at: string
   updated_at?: string
