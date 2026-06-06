@@ -10,9 +10,14 @@ export default async function DashboardPage() {
   const supabase = createServerClient()
 
   const { data: products, error } = await supabase
-    .from('products')
-    .select('*')
-    .order('created_at', { ascending: false })
+  .from('products')
+  .select(`
+    *,
+    comments (
+      rating
+    )
+  `)
+  .order('created_at', { ascending: false })
 
   if (error) {
     console.error('Error fetching products:', error)

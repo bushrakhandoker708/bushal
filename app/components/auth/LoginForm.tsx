@@ -1,3 +1,4 @@
+// components/auth/LoginForm.tsx
 'use client'
 
 import { useState } from 'react'
@@ -8,8 +9,6 @@ import Button from '../ui/Button'
 
 export default function LoginForm() {
   const router = useRouter()
-  const supabase = createBrowserClient()
-
   const [form, setForm] = useState({ email: '', password: '' })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -19,46 +18,39 @@ export default function LoginForm() {
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
-  e.preventDefault()
-  setLoading(true)
-  setError('')
+    e.preventDefault()
+    setLoading(true)
+    setError('')
 
-  const { data, error: signInError } = await supabase.auth.signInWithPassword({
-    email: form.email,
-    password: form.password,
-  })
+    const supabase = createBrowserClient()
 
-  if (signInError) {
-    setLoading(false)
-    setError(signInError.message)
-    return
-  }
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      email: form.email,
+      password: form.password,
+    })
 
-  // Debug logging
-  console.log('User data:', data.user)
+    if (authError || !authData.user) {
+      setLoading(false)
+      setError(authError?.message ?? 'Login failed')
+      return
+    }
 
-  if (data.user) {
-    const { data: profile, error: profileError } = await supabase
+    // Fetch the profile AFTER sign-in confirms the user exists
+    const { data: profile } = await supabase
       .from('profiles')
       .select('role')
-      .eq('id', data.user.id)
+      .eq('id', authData.user.id)
       .single()
 
-    console.log('Profile data:', profile)
-    console.log('Profile error:', profileError)
+    const role = profile?.role ?? 'customer'
 
-    if (profile?.role === 'admin') {
-      console.log('Redirecting to /admin')
-      router.push('/admin')
+    if (role === 'admin') {
+      window.location.href = '/admin'
     } else {
-      console.log('Redirecting to /dashboard, role is:', profile?.role)
-      router.push('/dashboard')
+      window.location.href = '/dashboard'
     }
   }
 
-  setLoading(false)
-  router.refresh()
-}
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <Input

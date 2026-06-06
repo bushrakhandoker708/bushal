@@ -105,13 +105,13 @@ export default function ProductForm({ mode, product }: Props) {
       <Input
         id="price"
         name="price"
-        label="Price (USD)"
+        label="Price (taka)"
         type="number"
         min="0"
         step="0.01"
         value={form.price}
         onChange={handleChange}
-        placeholder="29.99"
+        placeholder="999999.99"
         required
       />
 

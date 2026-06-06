@@ -14,7 +14,12 @@ export async function GET(_req: Request, { params }: Params) {
 
   const { data, error } = await supabase
     .from('products')
-    .select('*')
+    .select(`
+      *,
+      comments (
+        *
+      )
+    `)
     .eq('id', params.id)
     .single()
 

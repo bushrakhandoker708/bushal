@@ -1,5 +1,4 @@
 // components/comments/CommentForm.tsx
-
 'use client'
 
 import { useState } from 'react'
@@ -15,12 +14,12 @@ interface Props {
 export default function CommentForm({ productId }: Props) {
   const router = useRouter()
   const { user } = useAuth()
-
   const [body, setBody] = useState('')
   const [rating, setRating] = useState(0)
   const [hoveredRating, setHoveredRating] = useState(0)
   const [loading, setLoading] = useState(false)
-  const [success, setSuccess] = useState(false)
+  const [error, setError] = useState('')
+  const [submitted, setSubmitted] = useState(false)
 
   if (!user) {
     return (
@@ -33,26 +32,48 @@ export default function CommentForm({ productId }: Props) {
     )
   }
 
+  if (submitted) {
+    return (
+      <div className="bg-green-50 border border-green-200 rounded-xl p-5 mb-6 text-center">
+        <p className="text-green-700 font-semibold text-lg">✓ Review submitted!</p>
+        <p className="text-green-600 text-sm mt-1">Refreshing page to show your review...</p>
+      </div>
+    )
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!body.trim()) return
 
     setLoading(true)
+    setError('')
 
     const res = await fetch('/api/comments', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ product_id: productId, body, rating: rating || null }),
+      body: JSON.stringify({
+        product_id: productId,
+        body,
+        rating: rating || null,
+      }),
     })
 
+    const data = await res.json()
     setLoading(false)
 
     if (res.ok) {
-      setBody('')
-      setRating(0)
-      setSuccess(true)
-      setTimeout(() => setSuccess(false), 3000)
-      router.refresh()
+      setSubmitted(true)
+      setTimeout(() => window.location.reload(), 800)
+    } else {
+      if (
+        data.error?.includes('duplicate') ||
+        data.error?.includes('unique') ||
+        data.error?.includes('comments_user_product_unique')
+      ) {
+        setError('You have already reviewed this product. Only one review per product is allowed.')
+      } else {
+        setError(data.error ?? 'Failed to submit review. Please try again.')
+      }
     }
   }
 
@@ -60,8 +81,7 @@ export default function CommentForm({ productId }: Props) {
     <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow p-5 mb-6">
       <h3 className="font-semibold text-gray-900 mb-4">Write a Review</h3>
 
-      {/* Star rating input */}
-      <div className="flex gap-1 mb-4">
+      <div className="flex items-center gap-1 mb-4">
         {Array.from({ length: 5 }).map((_, i) => (
           <button
             key={i}
@@ -71,10 +91,8 @@ export default function CommentForm({ productId }: Props) {
             onMouseLeave={() => setHoveredRating(0)}
           >
             <svg
-              className={`w-6 h-6 fill-current ${
-                i < (hoveredRating || rating)
-                  ? 'text-yellow-400'
-                  : 'text-gray-200'
+              className={`w-7 h-7 fill-current transition-colors ${
+                i < (hoveredRating || rating) ? 'text-yellow-400' : 'text-gray-200'
               }`}
               viewBox="0 0 20 20"
             >
@@ -82,21 +100,26 @@ export default function CommentForm({ productId }: Props) {
             </svg>
           </button>
         ))}
+        {rating > 0 && (
+          <span className="text-sm text-gray-500 ml-2">
+            {['', 'Poor', 'Fair', 'Good', 'Very Good', 'Excellent'][rating]}
+          </span>
+        )}
       </div>
 
       <textarea
         value={body}
         onChange={(e) => setBody(e.target.value)}
-        rows={3}
+        rows={4}
         placeholder="Share your experience with this product..."
         className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none"
         required
       />
 
-      {success && (
-        <p className="mt-2 text-sm text-green-600">
-          ✓ Review submitted successfully!
-        </p>
+      {error && (
+        <div className="mt-3 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+          <p className="text-sm text-red-600">{error}</p>
+        </div>
       )}
 
       <Button type="submit" loading={loading} className="mt-3" size="sm">
