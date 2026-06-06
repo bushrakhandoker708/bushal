@@ -2,17 +2,20 @@
 
 'use client'
 
-
 import CartItem from '@/app/components/cart/CartItem'
-import CartSummary from '@/app/components/cart/CartSummery'
+// Note: Kept 'CartSummery' as per your original import. 
+// If your file is actually named 'CartSummary.tsx', update this import path.
+import CartSummary from '@/app/components/cart/CartSummery' 
 
 import Navbar from '@/app/components/layout/Navbar'
 import { useCart } from '@/app/hooks/useCart'
 
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
+import { Suspense } from 'react' // 1. Import Suspense from React
 
-export default function CartPage() {
+// 2. Extract the logic that uses useSearchParams into a separate component
+function CartContent() {
   const { items, clearCart } = useCart()
   const searchParams = useSearchParams()
   const bkashStatus = searchParams.get('bkash')
@@ -74,5 +77,33 @@ export default function CartPage() {
         </div>
       </main>
     </div>
+  )
+}
+
+// 3. Create a fallback UI (Skeleton) to show while the component loads
+function CartSkeleton() {
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <Navbar />
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 animate-pulse">
+        <div className="h-8 bg-gray-200 rounded w-1/4 mb-8"></div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="lg:col-span-2 space-y-4">
+            <div className="h-24 bg-gray-200 rounded"></div>
+            <div className="h-24 bg-gray-200 rounded"></div>
+          </div>
+          <div className="h-64 bg-gray-200 rounded"></div>
+        </div>
+      </main>
+    </div>
+  )
+}
+
+// 4. Wrap the extracted component in a <Suspense> boundary
+export default function CartPage() {
+  return (
+    <Suspense fallback={<CartSkeleton />}>
+      <CartContent />
+    </Suspense>
   )
 }
