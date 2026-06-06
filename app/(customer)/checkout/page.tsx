@@ -4,7 +4,7 @@
 
 
 import CheckoutForm from '@/app/components/Checkout/CheckoutForm'
-import OrderSummary from '@/app/components/Checkout/OrderSummary'
+import OrderSummary from '@/app/components/Checkout/OrderSummery'
 import Navbar from '@/app/components/layout/Navbar'
 import { useCart } from '@/app/hooks/useCart'
 import { useRouter } from 'next/navigation'
