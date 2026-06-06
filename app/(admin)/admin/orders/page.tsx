@@ -19,8 +19,7 @@ export default async function AdminOrdersPage() {
   }
 
   // Fetch profile info for each order's user_id
-  const userIds = [...new Set((orders ?? []).map((o) => o.user_id))]
-  
+    const userIds = Array.from(new Set((orders ?? []).map((o) => o.user_id)))
   let profilesMap: Record<string, { full_name: string | null; email: string | null }> = {}
   
   if (userIds.length > 0) {
@@ -50,7 +49,7 @@ export default async function AdminOrdersPage() {
     .order('created_at', { ascending: false })
 
   // Get profile names for comment authors
-  const commentUserIds = [...new Set((allComments ?? []).map((c) => c.user_id))]
+  const commentUserIds = Array.from(new Set((allComments ?? []).map((c) => c.user_id)))
   let commentProfilesMap: Record<string, string> = {}
 
   if (commentUserIds.length > 0) {
