@@ -2,8 +2,9 @@
 
 'use client'
 
-import CheckoutForm from '@/app/components/checkout/CheckoutForm'
-import OrderSummary from '@/app/components/checkout/OrderSummary'
+
+import CheckoutForm from '@/app/components/Checkout/CheckoutForm'
+import OrderSummary from '@/app/components/Checkout/OrderSummary'
 import Navbar from '@/app/components/layout/Navbar'
 import { useCart } from '@/app/hooks/useCart'
 import { useRouter } from 'next/navigation'
