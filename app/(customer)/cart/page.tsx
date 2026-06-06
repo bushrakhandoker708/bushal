@@ -4,7 +4,7 @@
 
 
 import CartItem from '@/app/components/cart/CartItem'
-import CartSummary from '@/app/components/cart/CartSummery'
+import CartSummary from '@/app/components/cart/CartSummary'
 import Navbar from '@/app/components/layout/Navbar'
 import { useCart } from '@/app/hooks/useCart'
 

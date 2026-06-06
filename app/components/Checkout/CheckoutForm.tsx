@@ -28,7 +28,7 @@ export default function CheckoutForm({ onSubmit, loading }: Props) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    // Stripe handles billing/shipping collection on their side.
+    // BKash handles billing/shipping collection on their side.
     // This form is just for UX before redirect.
     onSubmit()
   }
@@ -99,7 +99,7 @@ export default function CheckoutForm({ onSubmit, loading }: Props) {
         </div>
 
         <p className="text-xs text-gray-400">
-          You will be redirected to Stripe for secure payment.
+          You will be redirected to bKash for secure payment.
         </p>
 
         <Button type="submit" loading={loading} size="lg" className="w-full">
