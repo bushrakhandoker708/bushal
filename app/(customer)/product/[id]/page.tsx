@@ -46,7 +46,6 @@ export default async function ProductPage({ params }: Props) {
   if (commentsError) console.error('Comments error:', commentsError)
 
   // Fetch profile names for comment authors
-  // FIXED: Changed [...new Set()] to Array.from(new Set())
   const userIds = Array.from(new Set((comments ?? []).map((c) => c.user_id)))
 
   let profilesMap: Record<string, string> = {}
