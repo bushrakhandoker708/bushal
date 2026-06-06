@@ -1,7 +1,7 @@
 // lib/supabase/server.ts
 // Server-side Supabase client — use in Server Components, Route Handlers, Server Actions
 
-import { createServerClient as _createServerClient } from '@supabase/ssr'
+import { createServerClient as _createServerClient, type CookieOptions } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 
 export function createServerClient() {
@@ -15,7 +15,7 @@ export function createServerClient() {
         get(name: string) {
           return cookieStore.get(name)?.value
         },
-        set(name: string, value: string, options) {
+        set(name: string, value: string, options: CookieOptions) {
           try {
             cookieStore.set({ name, value, ...options })
           } catch {
@@ -23,7 +23,7 @@ export function createServerClient() {
             // Can be safely ignored if middleware is refreshing sessions.
           }
         },
-        remove(name: string, options) {
+        remove(name: string, options: CookieOptions) {
           try {
             cookieStore.set({ name, value: '', ...options })
           } catch {
