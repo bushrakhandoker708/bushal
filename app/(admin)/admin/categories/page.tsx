@@ -12,3 +12,4 @@ export default async function AdminCategoriesPage() {
 
   return <AdminCategoriesClient initialCategories={categories ?? []} />
 }
+// admin can add catagory here and also edit and delete catagory from here.
