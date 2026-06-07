@@ -1,18 +1,17 @@
 // components/checkout/CheckoutForm.tsx
-
 'use client'
-
 
 import { useState } from 'react'
 import Input from '../ui/Input'
 import Button from '../ui/Button'
 
 interface Props {
-  onSubmit: () => Promise<void>
+  onBkash: () => Promise<void>
+  onCOD: () => Promise<void>
   loading: boolean
 }
 
-export default function CheckoutForm({ onSubmit, loading }: Props) {
+export default function CheckoutForm({ onBkash, onCOD, loading }: Props) {
   const [form, setForm] = useState({
     fullName: '',
     email: '',
@@ -28,16 +27,12 @@ export default function CheckoutForm({ onSubmit, loading }: Props) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    // BKash handles billing/shipping collection on their side.
-    // This form is just for UX before redirect.
-    onSubmit()
+    onBkash()
   }
 
   return (
     <div>
-      <h2 className="text-xl font-bold text-gray-900 mb-6">
-        Delivery Information
-      </h2>
+      <h2 className="text-xl font-bold text-gray-900 mb-6">Delivery Information</h2>
       <form onSubmit={handleSubmit} className="space-y-4">
         <Input
           id="fullName"
@@ -45,7 +40,7 @@ export default function CheckoutForm({ onSubmit, loading }: Props) {
           label="Full Name"
           value={form.fullName}
           onChange={handleChange}
-          placeholder="John Doe"
+          placeholder="Muhammad Alif"
           required
         />
         <Input
@@ -55,7 +50,7 @@ export default function CheckoutForm({ onSubmit, loading }: Props) {
           label="Email"
           value={form.email}
           onChange={handleChange}
-          placeholder="you@example.com"
+          placeholder="alif@gmail.com"
           required
         />
         <Input
@@ -65,7 +60,7 @@ export default function CheckoutForm({ onSubmit, loading }: Props) {
           label="Phone Number"
           value={form.phone}
           onChange={handleChange}
-          placeholder="+1 555 000 0000"
+          placeholder="+880 1700 000 000"
           required
         />
         <Input
@@ -74,37 +69,48 @@ export default function CheckoutForm({ onSubmit, loading }: Props) {
           label="Street Address"
           value={form.address}
           onChange={handleChange}
-          placeholder="123 Main St"
+          placeholder="House 12, Road 5, Dhanmondi"
           required
         />
         <div className="grid grid-cols-2 gap-4">
           <Input
             id="city"
             name="city"
-            label="City"
+            label="City / District"
             value={form.city}
             onChange={handleChange}
-            placeholder="New York"
+            placeholder="Dhaka"
             required
           />
           <Input
             id="zip"
             name="zip"
-            label="ZIP / Postal Code"
+            label="Postal Code"
             value={form.zip}
             onChange={handleChange}
-            placeholder="10001"
+            placeholder="1205"
             required
           />
         </div>
 
-        <p className="text-xs text-gray-400">
-          You will be redirected to bKash for secure payment.
+        <div className="flex flex-col gap-3 pt-4">
+          <Button type="submit" loading={loading} size="lg" className="w-full">
+            Pay with bKash
+          </Button>
+          <Button
+            type="button"
+            onClick={onCOD}
+            loading={loading}
+            size="lg"
+            variant="outline"
+            className="w-full"
+          >
+            Cash on Delivery (COD)
+          </Button>
+        </div>
+        <p className="text-xs text-gray-400 text-center mt-2">
+          Your information is secure and encrypted.
         </p>
-
-        <Button type="submit" loading={loading} size="lg" className="w-full">
-          Continue to Payment
-        </Button>
       </form>
     </div>
   )

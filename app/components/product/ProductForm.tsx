@@ -13,6 +13,8 @@ interface Props {
   product?: Product
 }
 
+const CATEGORIES = ['General', 'Clothing', 'Electronics', 'Food', 'Home', 'Other']
+
 export default function ProductForm({ mode, product }: Props) {
   const router = useRouter()
   const supabase = createBrowserClient()
@@ -29,6 +31,7 @@ export default function ProductForm({ mode, product }: Props) {
     in_stock: product?.in_stock ?? true,
     discount_percent: product?.discount_percent?.toString() ?? '',
     stock_quantity: product?.stock_quantity?.toString() ?? '',
+    category: product?.category ?? 'General',
   })
 
   const resolveImages = (p?: Product): string[] => {
@@ -47,7 +50,7 @@ export default function ProductForm({ mode, product }: Props) {
     setPreviews(resolved)
   }, [product?.id])
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target
     setForm((prev) => ({
       ...prev,
@@ -122,6 +125,7 @@ export default function ProductForm({ mode, product }: Props) {
       in_stock: qty > 0,
       stock_quantity: isNaN(qty) ? 0 : qty,
       discount_percent: form.discount_percent ? parseInt(form.discount_percent) : null,
+      category: form.category || 'General',
     }
 
     const url = mode === 'create' ? '/api/products' : `/api/products/${product?.id}`
@@ -167,6 +171,20 @@ export default function ProductForm({ mode, product }: Props) {
           className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-slate-900 placeholder-slate-400 text-sm transition-all duration-200 focus:outline-none focus:border-orange-500 focus:ring-3 focus:ring-orange-500/15 hover:border-slate-300 resize-none"
           placeholder="Product description..."
         />
+      </div>
+
+      <div>
+        <label className="block text-sm font-semibold text-slate-700 mb-1.5">Category</label>
+        <select
+          name="category"
+          value={form.category}
+          onChange={handleChange}
+          className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-slate-900 text-sm transition-all duration-200 focus:outline-none focus:border-orange-500 focus:ring-3 focus:ring-orange-500/15 hover:border-slate-300"
+        >
+          {CATEGORIES.map((cat) => (
+            <option key={cat} value={cat}>{cat}</option>
+          ))}
+        </select>
       </div>
 
       <div className="grid grid-cols-2 gap-4">

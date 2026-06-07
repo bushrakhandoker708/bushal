@@ -1,7 +1,7 @@
 // app/(customer)/dashboard/page.tsx
 
 import { createServerClient } from '@/lib/supabase/server'
-import ProductGrid from '@/app/components/product/ProductGrid'
+import CategoryFilter from '@/app/components/product/CatagoryFilter'
 import Navbar from '@/app/components/layout/Navbar'
 import Footer from '@/app/components/layout/Footer'
 import { formatPrice } from '@/app/lib/utils/formatPrice'
@@ -59,7 +59,7 @@ export default async function DashboardPage() {
                 <span className="relative">
                   <span className="text-orange-500">trust.</span>
                   <svg className="absolute -bottom-1 left-0 w-full" viewBox="0 0 200 8" fill="none">
-                    <path d="M2 6C50 2 100 2 198 6" stroke="#ea580c" strokeWidth="3" strokeLinecap="round" strokeOpacity="0.4"/>
+                    <path d="M2 6C50 2 100 2 198 6" stroke="#ea580c" strokeWidth="3" strokeLinecap="round" strokeOpacity="0.4" />
                   </svg>
                 </span>
               </h1>
@@ -70,7 +70,7 @@ export default async function DashboardPage() {
 
               <div className="flex flex-wrap gap-5">
                 {[
-                  { value: String(allProducts.filter(p => p.in_stock).length) + '+', label: 'Products in stock' },
+                  { value: String(allProducts.filter((p) => p.in_stock).length) + '+', label: 'Products in stock' },
                   { value: '64', label: 'Districts covered' },
                   { value: '24h', label: 'Delivery in Dhaka' },
                 ].map((s) => (
@@ -206,7 +206,7 @@ export default async function DashboardPage() {
           )}
           <div className="h-px flex-1 bg-slate-200" />
         </div>
-        <ProductGrid products={allProducts} />
+        <CategoryFilter products={allProducts} />
       </main>
 
       <Footer />

@@ -1,6 +1,6 @@
 // types/product.ts
 
-import { Comment } from "./comment"
+import { Comment } from './comment'
 
 export interface Product {
   id: string
@@ -12,6 +12,7 @@ export interface Product {
   in_stock: boolean
   stock_quantity: number
   discount_percent?: number | null
+  category?: string
   created_at: string
   updated_at?: string
   comments?: Comment[]

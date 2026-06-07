@@ -1,6 +1,7 @@
 // app/(customer)/checkout/page.tsx
 'use client'
 
+
 import CheckoutForm from '@/app/components/Checkout/CheckoutForm'
 import OrderSummary from '@/app/components/Checkout/OrderSummery'
 import Navbar from '@/app/components/layout/Navbar'
@@ -12,26 +13,54 @@ export default function CheckoutPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const handleCheckout = async () => {
+  const handleBkash = async () => {
     setLoading(true)
     setError('')
-
     try {
       const res = await fetch('/api/bkash/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ items }),
       })
-
       const data = await res.json()
-
       if (!res.ok) {
         setError(data.error ?? 'Payment initiation failed')
         return
       }
-
       clearCart()
       window.location.href = data.bkashURL
+    } catch {
+      setError('Something went wrong. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleCOD = async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const subtotal = items.reduce((sum, item) => {
+        const price = item.discount_percent
+          ? item.price * (1 - item.discount_percent / 100)
+          : item.price
+        return sum + price * item.quantity
+      }, 0)
+      const shipping = subtotal >= 1000 ? 0 : 120
+      const total = subtotal + shipping
+
+      const res = await fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items, total, payment_method: 'cod' }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setError(data.error ?? 'Order failed')
+        return
+      }
+      clearCart()
+      window.location.href = `/thank-you?orderId=${data.id}`
     } catch {
       setError('Something went wrong. Please try again.')
     } finally {
@@ -67,7 +96,7 @@ export default function CheckoutPage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
           <div className="lg:col-span-3">
-            <CheckoutForm onSubmit={handleCheckout} loading={loading} />
+            <CheckoutForm onBkash={handleBkash} onCOD={handleCOD} loading={loading} />
           </div>
           <div className="lg:col-span-2">
             <OrderSummary items={items} />

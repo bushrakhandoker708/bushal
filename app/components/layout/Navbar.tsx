@@ -263,7 +263,12 @@ export default function Navbar() {
                         <p className="text-sm font-semibold text-slate-900 group-hover:text-orange-600 transition-colors line-clamp-1">
                           {highlightMatch(product.name, query)}
                         </p>
-                        {product.matchType === 'exact' && (
+                        {!product.in_stock && (
+                          <span className="text-[9px] bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded-full font-bold">
+                            OUT OF STOCK
+                          </span>
+                        )}
+                        {product.matchType === 'exact' && product.in_stock && (
                           <span className="text-[9px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-bold">
                             BEST
                           </span>
