@@ -1,7 +1,4 @@
 // app/api/cart/route.ts
-// Note: Cart is managed client-side via Zustand (useCart hook).
-// This route exists for server-side cart validation before checkout.
-
 import { createServerClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
@@ -10,10 +7,8 @@ interface CartItem {
   quantity: number
 }
 
-// POST /api/cart/validate — validate stock availability before checkout
 export async function POST(request: Request) {
   const supabase = createServerClient()
-
   const body: { items: CartItem[] } = await request.json()
 
   if (!body.items || body.items.length === 0) {
@@ -24,29 +19,54 @@ export async function POST(request: Request) {
 
   const { data: products, error } = await supabase
     .from('products')
-    .select('id, name, price, in_stock, discount_percent')
+    .select('id, name, price, in_stock, stock_quantity, discount_percent')
     .in('id', productIds)
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  // Check all items are in stock
-  const outOfStock = products?.filter((p) => !p.in_stock) ?? []
-  if (outOfStock.length > 0) {
+  const missingIds = productIds.filter(
+    (id) => !(products ?? []).find((p) => p.id === id)
+  )
+  if (missingIds.length > 0) {
     return NextResponse.json(
-      {
-        error: 'Some items are out of stock',
-        outOfStock: outOfStock.map((p) => p.name),
-      },
+      { error: 'Some cart items no longer exist', missingIds },
       { status: 409 }
     )
   }
 
-  // Calculate total with discounts
+  const outOfStock = (products ?? []).filter((p) => !p.in_stock)
+  if (outOfStock.length > 0) {
+    return NextResponse.json(
+      { error: 'Some items are out of stock', outOfStock: outOfStock.map((p) => p.name) },
+      { status: 409 }
+    )
+  }
+
+  const insufficient = body.items.filter((cartItem) => {
+    const product = (products ?? []).find((p) => p.id === cartItem.id)
+    if (!product) return true
+    return cartItem.quantity > product.stock_quantity
+  })
+
+  if (insufficient.length > 0) {
+    const details = insufficient.map((cartItem) => {
+      const product = (products ?? []).find((p) => p.id === cartItem.id)
+      return {
+        name: product?.name ?? cartItem.id,
+        requested: cartItem.quantity,
+        available: product?.stock_quantity ?? 0,
+      }
+    })
+    return NextResponse.json(
+      { error: 'Requested quantity exceeds available stock', insufficient: details },
+      { status: 409 }
+    )
+  }
+
   const total = body.items.reduce((sum, cartItem) => {
-    const product = products?.find((p) => p.id === cartItem.id)
-    if (!product) return sum
+    const product = (products ?? []).find((p) => p.id === cartItem.id)!
     const discountedPrice =
       product.price * (1 - (product.discount_percent ?? 0) / 100)
     return sum + discountedPrice * cartItem.quantity
