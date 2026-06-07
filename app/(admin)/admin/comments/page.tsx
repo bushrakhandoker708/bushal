@@ -39,8 +39,8 @@ export default async function AdminCommentsPage() {
   return (
     <div className="animate-fade-in-up space-y-5">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">Customer Comments</h1>
-        <p className="text-sm text-slate-400 mt-0.5">
+        <h1 className="text-2xl font-bold text-bushal-forest">Customer Comments</h1>
+        <p className="text-sm text-bushal-inkSoft mt-0.5">
           {unreplied > 0 ? (
             <span className="text-amber-600 font-semibold">{unreplied} awaiting reply</span>
           ) : (
@@ -52,7 +52,7 @@ export default async function AdminCommentsPage() {
 
       {(!allComments || allComments.length === 0) ? (
         <div className="bg-white rounded-2xl border border-slate-200 p-16 text-center">
-          <p className="text-slate-400 text-sm">No comments yet.</p>
+          <p className="text-bushal-inkSoft text-sm">No comments yet.</p>
         </div>
       ) : (
         <div className="space-y-4">
@@ -66,7 +66,7 @@ export default async function AdminCommentsPage() {
               <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-3">
                 <div>
                   <div className="flex items-center gap-2">
-                    <p className="font-semibold text-slate-900 text-sm">
+                    <p className="font-semibold text-bushal-forest text-sm">
                       {commentProfilesMap[comment.user_id] ?? 'Anonymous'}
                     </p>
                     {!comment.admin_reply && (
@@ -75,7 +75,7 @@ export default async function AdminCommentsPage() {
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-slate-400 mt-0.5">
+                  <p className="text-xs text-bushal-inkSoft mt-0.5">
                     on{' '}
                     <span className="font-medium text-slate-600">
                       {(comment.products as any)?.name ?? 'Unknown product'}

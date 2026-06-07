@@ -13,61 +13,36 @@ interface Props {
   index?: number
 }
 
-function StarRating({ rating, count }: { rating: number; count: number }) {
-  return (
-    <div className="flex items-center gap-1">
-      {Array.from({ length: 5 }).map((_, i) => (
-        <svg
-          key={i}
-          className={cn('w-3 h-3 fill-current', i < Math.round(rating) ? 'text-amber-400' : 'text-slate-200')}
-          viewBox="0 0 20 20"
-        >
-          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-        </svg>
-      ))}
-      {count > 0 && <span className="text-[11px] text-slate-400 ml-0.5">({count})</span>}
-    </div>
-  )
-}
-
 export default function ProductCard({ product, index = 0 }: Props) {
   const { addItem } = useCart()
   const [added, setAdded] = useState(false)
   const [imgIndex, setImgIndex] = useState(0)
+  const [isWished, setIsWished] = useState(false)
 
   const discountedPrice = product.discount_percent
     ? product.price * (1 - product.discount_percent / 100)
     : null
 
-  const comments = product.comments || []
-  const validRatings = comments.map((c) => c.rating).filter((r) => r != null) as number[]
-  const averageRating = validRatings.length > 0
-    ? validRatings.reduce((sum, r) => sum + r, 0) / validRatings.length
-    : 0
+  const images = product.images?.length ? product.images : product.image_url ? [product.image_url] : []
 
-  const images = product.images && product.images.length > 0
-    ? product.images
-    : product.image_url
-    ? [product.image_url]
-    : []
-
-  const handleAddToCart = (e: React.MouseEvent) => {
+  const handleAdd = (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
     if (!product.in_stock) return
     addItem(product)
     setAdded(true)
-    setTimeout(() => setAdded(false), 1800)
+    setTimeout(() => setAdded(false), 2000)
   }
 
   return (
     <div
-      className="animate-fade-in-up group bg-white rounded-2xl border border-slate-200 overflow-hidden hover:shadow-xl hover:shadow-slate-200/60 hover:border-slate-300 hover:-translate-y-0.5 transition-all duration-300 flex flex-col"
+      className="group animate-fade-up flex flex-col"
       style={{ animationDelay: `${index * 60}ms` }}
     >
-      <Link href={`/product/${product.id}`} className="block relative">
-        <div
-          className="relative aspect-[4/3] bg-slate-100 overflow-hidden"
+      {/* Image Container */}
+      <Link href={`/product/${product.id}`} className="block relative overflow-hidden rounded-2xl bg-bushal-ivoryDeep aspect-[4/5]">
+        <div 
+          className="absolute inset-0"
           onMouseEnter={() => images.length > 1 && setImgIndex(1)}
           onMouseLeave={() => setImgIndex(0)}
         >
@@ -77,8 +52,8 @@ export default function ProductCard({ product, index = 0 }: Props) {
                 src={images[0]}
                 alt={product.name}
                 className={cn(
-                  'absolute inset-0 w-full h-full object-cover transition-all duration-500',
-                  imgIndex === 1 ? 'opacity-0' : 'opacity-100 group-hover:scale-105'
+                  'absolute inset-0 w-full h-full object-cover transition-all duration-700 ease-out',
+                  imgIndex === 1 ? 'opacity-0 scale-105' : 'opacity-100 group-hover:scale-105'
                 )}
               />
               {images.length > 1 && (
@@ -86,88 +61,104 @@ export default function ProductCard({ product, index = 0 }: Props) {
                   src={images[1]}
                   alt={product.name}
                   className={cn(
-                    'absolute inset-0 w-full h-full object-cover transition-opacity duration-500',
-                    imgIndex === 1 ? 'opacity-100' : 'opacity-0'
+                    'absolute inset-0 w-full h-full object-cover transition-all duration-700 ease-out',
+                    imgIndex === 1 ? 'opacity-100 scale-105' : 'opacity-0 scale-100'
                   )}
                 />
               )}
             </>
           ) : (
-            <div className="w-full h-full flex items-center justify-center text-slate-300">
-              <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1}
-                  d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-                />
-              </svg>
+            <div className="w-full h-full flex items-center justify-center text-bushal-borderMid">
+              <svg className="w-16 h-16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
             </div>
           )}
+        </div>
 
-          {product.discount_percent && (
-            <span className="absolute top-2.5 left-2.5 bg-rose-500 text-white text-[11px] font-bold px-2 py-0.5 rounded-full shadow-sm">
-              -{product.discount_percent}%
+        {/* Badges */}
+        <div className="absolute top-3 left-3 flex flex-col gap-2 z-10">
+          {product.discount_percent ? (
+            <span className="bg-bushal-copper text-white text-[10px] font-body font-bold tracking-wider uppercase px-2.5 py-1 rounded-full shadow-sm">
+              Save {product.discount_percent}%
             </span>
-          )}
-
-          {images.length > 1 && (
-            <span className="absolute bottom-2 right-2 bg-black/50 text-white text-[10px] font-medium px-1.5 py-0.5 rounded-md backdrop-blur-sm">
-              +{images.length - 1} more
-            </span>
-          )}
-
+          ) : null}
           {!product.in_stock && (
-            <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-[1px] flex items-center justify-center">
-              <span className="text-white font-bold text-sm bg-slate-900/70 px-4 py-1.5 rounded-full">
-                Out of Stock
-              </span>
-            </div>
+            <span className="bg-bushal-forest/90 backdrop-blur-md text-bushal-ivory text-[10px] font-body font-bold tracking-wider uppercase px-2.5 py-1 rounded-full">
+              Sold Out
+            </span>
           )}
+        </div>
+
+        {/* Wishlist Button */}
+        <button
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); setIsWished(!isWished) }}
+          className={cn(
+            "absolute top-3 right-3 w-9 h-9 rounded-full flex items-center justify-center transition-all duration-300 z-10",
+            isWished ? "bg-bushal-copper text-white scale-110" : "bg-white/80 backdrop-blur-md text-bushal-forest hover:bg-white hover:scale-110"
+          )}
+          aria-label="Add to wishlist"
+        >
+          <svg className="w-4 h-4" fill={isWished ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+          </svg>
+        </button>
+
+        {/* Quick Add Overlay (Desktop Only) */}
+        <div className="absolute inset-x-0 bottom-0 p-3 translate-y-full group-hover:translate-y-0 transition-transform duration-500 ease-out z-10 hidden md:block">
+          <button
+            onClick={handleAdd}
+            disabled={!product.in_stock}
+            className={cn(
+              "w-full py-3 rounded-xl font-body font-semibold text-sm tracking-wide transition-all duration-300 shadow-lg",
+              product.in_stock
+                ? added
+                  ? "bg-bushal-success text-white"
+                  : "bg-bushal-forest text-bushal-ivory hover:bg-bushal-forestMid active:scale-[0.98]"
+                : "bg-bushal-inkSoft/50 text-bushal-ivory cursor-not-allowed"
+            )}
+          >
+            {added ? "Added to Bag" : product.in_stock ? "Add to Bag" : "Sold Out"}
+          </button>
         </div>
       </Link>
 
-      <div className="p-3.5 flex flex-col flex-1">
-        <Link href={`/product/${product.id}`}>
-          <h3 className="font-semibold text-slate-900 group-hover:text-orange-600 transition-colors line-clamp-2 text-sm leading-snug mb-1.5">
+      {/* Content */}
+      <div className="pt-4 px-1 flex flex-col flex-1">
+        <Link href={`/product/${product.id}`} className="group/link">
+          <h3 className="font-heading text-lg text-bushal-forest leading-tight mb-1 group-hover/link:text-bushal-copper transition-colors duration-300 line-clamp-2">
             {product.name}
           </h3>
         </Link>
-
-        <StarRating rating={averageRating} count={validRatings.length} />
-
-        <div className="flex items-center gap-1.5 mt-1.5">
-          <span className="text-base font-bold text-slate-900">
-            {formatPrice(discountedPrice ?? product.price)}
-          </span>
-          {discountedPrice && (
-            <span className="text-xs text-slate-400 line-through">
-              {formatPrice(product.price)}
+        
+        <div className="flex items-center justify-between mt-auto pt-2">
+          <div className="flex items-baseline gap-2">
+            <span className="font-body font-semibold text-bushal-copper text-lg">
+              {formatPrice(discountedPrice ?? product.price)}
             </span>
-          )}
-        </div>
-
-        <div className="mt-auto pt-3">
+            {discountedPrice && (
+              <span className="text-xs text-bushal-inkSoft line-through">
+                {formatPrice(product.price)}
+              </span>
+            )}
+          </div>
+          
+          {/* Mobile Add Button */}
           <button
-            onClick={handleAddToCart}
+            onClick={handleAdd}
             disabled={!product.in_stock}
             className={cn(
-              'w-full py-2.5 rounded-xl text-sm font-semibold transition-all duration-150 active:scale-[0.97]',
+              "md:hidden w-9 h-9 rounded-full flex items-center justify-center transition-all duration-300 active:scale-90",
               product.in_stock
                 ? added
-                  ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/20'
-                  : 'bg-orange-600 text-white hover:bg-orange-700 shadow-md shadow-orange-600/15 hover:shadow-lg hover:shadow-orange-600/20 hover:-translate-y-0.5'
-                : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                  ? "bg-bushal-success text-white"
+                  : "bg-bushal-copper text-white hover:bg-bushal-copperLight shadow-md shadow-bushal-copper/20"
+                : "bg-bushal-border text-bushal-inkSoft cursor-not-allowed"
             )}
+            aria-label="Add to cart"
           >
             {added ? (
-              <span className="flex items-center justify-center gap-1.5">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                </svg>
-                Added!
-              </span>
-            ) : product.in_stock ? (
-              'Add to Cart'
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
             ) : (
-              'Out of Stock'
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
             )}
           </button>
         </div>

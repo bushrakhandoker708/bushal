@@ -1,4 +1,5 @@
 // app/api/notifications/route.ts
+
 import { NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 
@@ -7,13 +8,27 @@ export async function GET() {
   const { data: { session } } = await supabase.auth.getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { data, error } = await supabase
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', session.user.id)
+    .single()
+
+  const isAdmin = profile?.role === 'admin'
+
+  let query = supabase
     .from('notifications')
-    .select('id, type, title, body, read, created_at, order_id')
-    .eq('user_id', session.user.id)
+    .select('id, type, title, body, read, created_at, order_id, comment_id')
     .order('created_at', { ascending: false })
     .limit(30)
 
+  if (isAdmin) {
+    query = query.is('user_id', null)
+  } else {
+    query = query.eq('user_id', session.user.id)
+  }
+
+  const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data)
 }
@@ -23,12 +38,26 @@ export async function PATCH() {
   const { data: { session } } = await supabase.auth.getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { error } = await supabase
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', session.user.id)
+    .single()
+
+  const isAdmin = profile?.role === 'admin'
+
+  let query = supabase
     .from('notifications')
     .update({ read: true })
-    .eq('user_id', session.user.id)
     .eq('read', false)
 
+  if (isAdmin) {
+    query = query.is('user_id', null)
+  } else {
+    query = query.eq('user_id', session.user.id)
+  }
+
+  const { error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ success: true })
 }

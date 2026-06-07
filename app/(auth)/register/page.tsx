@@ -4,7 +4,7 @@ import Link from 'next/link'
 
 export default function RegisterPage() {
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4 py-12">
+    <div className="min-h-screen bg-bushal-ivory flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-md animate-fade-in-up">
         <div className="text-center mb-8">
           <Link
@@ -27,7 +27,7 @@ export default function RegisterPage() {
           </p>
         </div>
 
-        <p className="mt-5 text-center text-xs text-slate-400 px-4">
+        <p className="mt-5 text-center text-xs text-bushal-inkSoft px-4">
           By creating an account, you agree to our terms of service and privacy policy.
         </p>
       </div>

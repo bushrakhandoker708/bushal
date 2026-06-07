@@ -29,7 +29,7 @@ export default async function ProfilePage() {
   const deliveredOrders = (orders ?? []).filter((o) => o.delivery_status === 'delivered').length
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-bushal-ivory">
       <Navbar />
       <ProfileClient
         profile={profile}

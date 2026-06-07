@@ -104,8 +104,8 @@ export default function AdminProductsClient({ products, categories }: Props) {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Products</h1>
-          <p className="text-sm text-slate-400 mt-0.5">
+          <h1 className="text-2xl font-bold text-bushal-forest">Products</h1>
+          <p className="text-sm text-bushal-inkSoft mt-0.5">
             Showing {filtered.length} of {products.length}
           </p>
         </div>
@@ -139,7 +139,7 @@ export default function AdminProductsClient({ products, categories }: Props) {
       {/* Search + Category filter */}
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
-          <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-bushal-inkSoft" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
           <input
@@ -147,12 +147,12 @@ export default function AdminProductsClient({ products, categories }: Props) {
             placeholder="Search by name, category, description..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 transition-all"
+            className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-bushal-forest placeholder-slate-400 focus:outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 transition-all"
           />
           {search && (
             <button
               onClick={() => setSearch('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-bushal-inkSoft hover:text-slate-600"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -177,7 +177,7 @@ export default function AdminProductsClient({ products, categories }: Props) {
         <div className="overflow-x-auto">
           <table className="min-w-full">
             <thead>
-              <tr className="bg-slate-50 border-b border-slate-100">
+              <tr className="bg-bushal-ivory border-b border-slate-100">
                 {[
                   { label: 'Product', key: 'name' as SortKey },
                   { label: 'Category', key: 'category' as SortKey },
@@ -199,7 +199,7 @@ export default function AdminProductsClient({ products, categories }: Props) {
             <tbody className="divide-y divide-slate-50">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-16 text-center text-slate-400 text-sm">
+                  <td colSpan={6} className="py-16 text-center text-bushal-inkSoft text-sm">
                     No products match your filters
                   </td>
                 </tr>
@@ -211,10 +211,10 @@ export default function AdminProductsClient({ products, categories }: Props) {
                   const cover = (Array.isArray(product.images) && product.images[0]) || product.image_url
 
                   return (
-                    <tr key={product.id} className="hover:bg-slate-50/70 transition-colors">
+                    <tr key={product.id} className="hover:bg-bushal-ivory/70 transition-colors">
                       <td className="px-4 py-3.5">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-xl overflow-hidden bg-slate-100 border border-slate-100 flex-shrink-0">
+                          <div className="w-10 h-10 rounded-xl overflow-hidden bg-bushal-ivoryDeep border border-slate-100 flex-shrink-0">
                             {cover ? (
                               <img src={cover} alt="" className="w-full h-full object-cover" />
                             ) : (
@@ -232,12 +232,12 @@ export default function AdminProductsClient({ products, categories }: Props) {
                         </div>
                       </td>
                       <td className="px-4 py-3.5">
-                        <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">
+                        <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-semibold bg-bushal-ivoryDeep text-slate-700">
                           {product.category ?? 'General'}
                         </span>
                       </td>
                       <td className="px-4 py-3.5">
-                        <p className="text-sm font-bold text-slate-900">{formatPrice(product.price)}</p>
+                        <p className="text-sm font-bold text-bushal-forest">{formatPrice(product.price)}</p>
                       </td>
                       <td className="px-4 py-3.5">
                         <span className={cn(
@@ -253,14 +253,14 @@ export default function AdminProductsClient({ products, categories }: Props) {
                           {isOut ? 'Out of Stock' : `${qty} units`}
                         </span>
                       </td>
-                      <td className="px-4 py-3.5 text-xs text-slate-400">
+                      <td className="px-4 py-3.5 text-xs text-bushal-inkSoft">
                         {new Date(product.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
                       </td>
                       <td className="px-4 py-3.5">
                         <div className="flex items-center gap-2 justify-end">
                           <Link
                             href={`/admin/products/${product.id}/edit`}
-                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 text-xs font-semibold hover:bg-orange-50 hover:text-orange-700 transition-colors"
+                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-bushal-ivoryDeep text-slate-700 text-xs font-semibold hover:bg-orange-50 hover:text-orange-700 transition-colors"
                           >
                             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -298,7 +298,7 @@ export default function AdminProductsClient({ products, categories }: Props) {
       {/* Mobile card list */}
       <div className="md:hidden space-y-3">
         {filtered.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-slate-200 py-16 text-center text-slate-400 text-sm">
+          <div className="bg-white rounded-2xl border border-slate-200 py-16 text-center text-bushal-inkSoft text-sm">
             No products match your filters
           </div>
         ) : (
@@ -311,7 +311,7 @@ export default function AdminProductsClient({ products, categories }: Props) {
             return (
               <div key={product.id} className="bg-white rounded-2xl border border-slate-200 p-4">
                 <div className="flex items-start gap-3">
-                  <div className="w-12 h-12 rounded-xl overflow-hidden bg-slate-100 border border-slate-100 flex-shrink-0">
+                  <div className="w-12 h-12 rounded-xl overflow-hidden bg-bushal-ivoryDeep border border-slate-100 flex-shrink-0">
                     {cover ? (
                       <img src={cover} alt="" className="w-full h-full object-cover" />
                     ) : (
@@ -319,9 +319,9 @@ export default function AdminProductsClient({ products, categories }: Props) {
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-slate-900 text-sm truncate">{product.name}</p>
+                    <p className="font-semibold text-bushal-forest text-sm truncate">{product.name}</p>
                     <div className="flex items-center gap-2 mt-1 flex-wrap">
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-medium">
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-bushal-ivoryDeep text-slate-600 font-medium">
                         {product.category ?? 'General'}
                       </span>
                       <span className={cn(
@@ -333,13 +333,13 @@ export default function AdminProductsClient({ products, categories }: Props) {
                         {isOut ? 'Out of Stock' : `${qty} in stock`}
                       </span>
                     </div>
-                    <p className="font-bold text-slate-900 text-sm mt-1">{formatPrice(product.price)}</p>
+                    <p className="font-bold text-bushal-forest text-sm mt-1">{formatPrice(product.price)}</p>
                   </div>
                 </div>
                 <div className="flex gap-2 mt-3">
                   <Link
                     href={`/admin/products/${product.id}/edit`}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-slate-100 text-slate-700 text-xs font-semibold hover:bg-orange-50 hover:text-orange-700 transition-colors"
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-bushal-ivoryDeep text-slate-700 text-xs font-semibold hover:bg-orange-50 hover:text-orange-700 transition-colors"
                   >
                     Edit
                   </Link>

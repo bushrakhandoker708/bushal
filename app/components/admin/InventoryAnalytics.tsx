@@ -51,8 +51,8 @@ function Donut({
       </svg>
       {(centerLabel || centerSub) && (
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          {centerLabel && <p className="text-sm font-extrabold text-slate-900 leading-none">{centerLabel}</p>}
-          {centerSub   && <p className="text-[9px] text-slate-400 mt-0.5">{centerSub}</p>}
+          {centerLabel && <p className="text-sm font-extrabold text-bushal-forest leading-none">{centerLabel}</p>}
+          {centerSub   && <p className="text-[9px] text-bushal-inkSoft mt-0.5">{centerSub}</p>}
         </div>
       )}
     </div>
@@ -63,7 +63,7 @@ function Donut({
 function HBar({ value, max, color }: { value: number; max: number; color: string }) {
   const pct = max > 0 ? Math.max((value / max) * 100, 0) : 0
   return (
-    <div className="h-2 bg-slate-100 rounded-full overflow-hidden flex-1">
+    <div className="h-2 bg-bushal-ivoryDeep rounded-full overflow-hidden flex-1">
       <div
         className="h-full rounded-full transition-all duration-500"
         style={{ width: `${pct}%`, background: color }}
@@ -160,8 +160,8 @@ export default function InventoryAnalytics({ products }: Props) {
 
         {/* Category pie chart */}
         <div className="bg-white rounded-2xl border border-slate-200 p-5">
-          <h3 className="text-sm font-bold text-slate-900 mb-1">Category Distribution</h3>
-          <p className="text-[11px] text-slate-400 mb-4">{catEntries.length} categories</p>
+          <h3 className="text-sm font-bold text-bushal-forest mb-1">Category Distribution</h3>
+          <p className="text-[11px] text-bushal-inkSoft mb-4">{catEntries.length} categories</p>
           <div className="flex items-center gap-5">
             <Donut
               segments={catEntries}
@@ -178,7 +178,7 @@ export default function InventoryAnalytics({ products }: Props) {
                 </div>
               ))}
               {catEntries.length > 6 && (
-                <p className="text-[10px] text-slate-400 pl-3.5">+{catEntries.length - 6} more</p>
+                <p className="text-[10px] text-bushal-inkSoft pl-3.5">+{catEntries.length - 6} more</p>
               )}
             </div>
           </div>
@@ -186,8 +186,8 @@ export default function InventoryAnalytics({ products }: Props) {
 
         {/* Inventory health donut */}
         <div className="bg-white rounded-2xl border border-slate-200 p-5">
-          <h3 className="text-sm font-bold text-slate-900 mb-1">Stock Health</h3>
-          <p className="text-[11px] text-slate-400 mb-4">across all products</p>
+          <h3 className="text-sm font-bold text-bushal-forest mb-1">Stock Health</h3>
+          <p className="text-[11px] text-bushal-inkSoft mb-4">across all products</p>
           <div className="flex items-center gap-5">
             <Donut
               segments={inventorySegments}
@@ -206,7 +206,7 @@ export default function InventoryAnalytics({ products }: Props) {
                     <span className={cn('text-[11px] font-semibold', s.txtColor)}>{s.label}</span>
                     <span className={cn('text-[11px] font-bold', s.txtColor)}>{s.count}</span>
                   </div>
-                  <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                  <div className="h-1.5 bg-bushal-ivoryDeep rounded-full overflow-hidden">
                     <div className="h-full rounded-full" style={{ width: `${s.pct}%`, background: s.color }} />
                   </div>
                 </div>
@@ -217,8 +217,8 @@ export default function InventoryAnalytics({ products }: Props) {
 
         {/* Price range bar chart */}
         <div className="bg-white rounded-2xl border border-slate-200 p-5">
-          <h3 className="text-sm font-bold text-slate-900 mb-1">Price Range</h3>
-          <p className="text-[11px] text-slate-400 mb-4">products per price band (৳)</p>
+          <h3 className="text-sm font-bold text-bushal-forest mb-1">Price Range</h3>
+          <p className="text-[11px] text-bushal-inkSoft mb-4">products per price band (৳)</p>
           <div className="space-y-3">
             {priceData.map((d) => (
               <div key={d.label} className="flex items-center gap-3">
@@ -262,8 +262,8 @@ export default function InventoryAnalytics({ products }: Props) {
       {/* ── Inventory breakdown table ──────────────────────────────────────── */}
       <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
         <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-          <h3 className="text-sm font-bold text-slate-900">Full Inventory Breakdown</h3>
-          <span className="text-[11px] text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full font-semibold">{totalProducts} products</span>
+          <h3 className="text-sm font-bold text-bushal-forest">Full Inventory Breakdown</h3>
+          <span className="text-[11px] text-bushal-inkSoft bg-bushal-ivoryDeep px-2 py-0.5 rounded-full font-semibold">{totalProducts} products</span>
         </div>
         <div className="divide-y divide-slate-50">
           {sorted.map((product) => {
@@ -274,8 +274,8 @@ export default function InventoryAnalytics({ products }: Props) {
             const val   = product.price * qty
 
             return (
-              <div key={product.id} className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50 transition-colors">
-                <div className="w-9 h-9 rounded-xl overflow-hidden bg-slate-100 flex-shrink-0 border border-slate-100">
+              <div key={product.id} className="flex items-center gap-3 px-5 py-3 hover:bg-bushal-ivory transition-colors">
+                <div className="w-9 h-9 rounded-xl overflow-hidden bg-bushal-ivoryDeep flex-shrink-0 border border-slate-100">
                   {(product.images?.[0] || product.image_url) ? (
                     <img src={product.images?.[0] ?? product.image_url!} alt="" className="w-full h-full object-cover" />
                   ) : (
@@ -286,10 +286,10 @@ export default function InventoryAnalytics({ products }: Props) {
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-semibold text-slate-800 truncate">{product.name}</p>
                   {product.category && (
-                    <p className="text-[10px] text-slate-400 mt-0.5">{product.category}</p>
+                    <p className="text-[10px] text-bushal-inkSoft mt-0.5">{product.category}</p>
                   )}
                   <div className="flex items-center gap-2 mt-1.5">
-                    <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                    <div className="flex-1 h-1.5 bg-bushal-ivoryDeep rounded-full overflow-hidden">
                       <div
                         className={cn('h-full rounded-full transition-all duration-500', isOut ? 'bg-rose-400' : isLow ? 'bg-amber-400' : 'bg-emerald-400')}
                         style={{ width: `${pct}%` }}
@@ -305,7 +305,7 @@ export default function InventoryAnalytics({ products }: Props) {
                   )}>
                     {isOut ? 'Out' : `${qty} units`}
                   </span>
-                  <span className="text-[11px] text-slate-400 w-20 text-right font-medium">
+                  <span className="text-[11px] text-bushal-inkSoft w-20 text-right font-medium">
                     {formatPrice(val)}
                   </span>
                 </div>

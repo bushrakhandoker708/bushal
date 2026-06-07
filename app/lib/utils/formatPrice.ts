@@ -1,9 +1,4 @@
-// lib/utils/formatPrice.ts
-
-export function formatPrice(amount: number): string {
-  return new Intl.NumberFormat('bn-BD', {
-    style: 'currency',
-    currency: 'BDT',
-    minimumFractionDigits: 0,
-  }).format(amount)
+// app/lib/utils/formatPrice.ts
+export function formatPrice(amount: number, currency = '৳'): string {
+  return `${currency}${amount.toLocaleString('en-BD', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
 }

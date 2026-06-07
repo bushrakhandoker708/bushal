@@ -1,6 +1,4 @@
 // hooks/useCart.ts
-// Zustand store for cart state. Persists to localStorage so cart survives page refreshes.
-
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { CartItem } from '@/app/types/cart'
@@ -24,9 +22,7 @@ export const useCart = create<CartStore>()(
         if (existing) {
           set({
             items: get().items.map((i) =>
-              i.id === product.id
-                ? { ...i, quantity: i.quantity + 1 }
-                : i
+              i.id === product.id ? { ...i, quantity: i.quantity + 1 } : i
             ),
           })
         } else {
@@ -55,17 +51,11 @@ export const useCart = create<CartStore>()(
           set({ items: get().items.filter((i) => i.id !== id) })
           return
         }
-        set({
-          items: get().items.map((i) =>
-            i.id === id ? { ...i, quantity } : i
-          ),
-        })
+        set({ items: get().items.map((i) => (i.id === id ? { ...i, quantity } : i)) })
       },
 
       clearCart: () => set({ items: [] }),
     }),
-    {
-      name: 'Bushal-cart', // localStorage key
-    }
+    { name: 'bushal-cart' }
   )
 )

@@ -5,33 +5,33 @@ import { ButtonHTMLAttributes, ReactNode } from 'react'
 import { cn } from '@/app/lib/utils/cn'
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'ghost' | 'danger' | 'outline'
+  variant?: 'copper' | 'forest' | 'outline' | 'ghost' | 'danger'
   size?: 'sm' | 'md' | 'lg'
   loading?: boolean
   children: ReactNode
 }
 
 const variantStyles = {
-  primary:
-    'bg-orange-600 text-white shadow-lg shadow-orange-600/20 hover:bg-orange-700 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-orange-600/25 active:scale-[0.97] active:shadow-md disabled:bg-orange-300 disabled:shadow-none disabled:translate-y-0',
-  secondary:
-    'bg-slate-900 text-white hover:bg-slate-800 hover:-translate-y-0.5 active:scale-[0.97] disabled:bg-slate-400',
+  copper:
+    'btn-copper text-white font-semibold disabled:opacity-60 disabled:shadow-none disabled:translate-y-0',
+  forest:
+    'btn-forest text-white font-semibold disabled:opacity-60 disabled:shadow-none disabled:translate-y-0',
   outline:
-    'bg-white text-slate-800 border border-slate-200 hover:border-orange-300 hover:bg-orange-50 hover:text-orange-700 active:scale-[0.97]',
+    'bg-white text-bushal-forest border border-bushal-border hover:border-bushal-borderMid hover:bg-bushal-ivory active:scale-[0.97] transition-all duration-150',
   ghost:
-    'bg-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900 active:scale-[0.97]',
+    'bg-transparent text-bushal-inkSoft hover:bg-bushal-ivoryDeep hover:text-bushal-ink active:scale-[0.97] transition-all duration-150',
   danger:
-    'bg-rose-500 text-white hover:bg-rose-600 hover:-translate-y-0.5 active:scale-[0.97] shadow-lg shadow-rose-500/20',
+    'bg-bushal-danger text-white shadow-lg shadow-bushal-danger/20 hover:opacity-90 hover:-translate-y-0.5 active:scale-[0.97] transition-all duration-150',
 }
 
 const sizeStyles = {
-  sm: 'px-3.5 py-2 text-sm rounded-lg',
-  md: 'px-5 py-2.5 text-sm rounded-xl',
+  sm: 'px-3.5 py-2 text-sm rounded-md',
+  md: 'px-5 py-2.5 text-sm rounded-lg',
   lg: 'px-6 py-3.5 text-base rounded-xl',
 }
 
 export default function Button({
-  variant = 'primary',
+  variant = 'copper',
   size = 'md',
   loading = false,
   disabled,
@@ -43,8 +43,8 @@ export default function Button({
     <button
       disabled={disabled || loading}
       className={cn(
-        'inline-flex items-center justify-center font-semibold transition-all duration-150 cursor-pointer select-none',
-        'disabled:cursor-not-allowed disabled:opacity-60',
+        'inline-flex items-center justify-center transition-all duration-150 cursor-pointer select-none',
+        'disabled:cursor-not-allowed',
         variantStyles[variant],
         sizeStyles[size],
         className
@@ -53,26 +53,11 @@ export default function Button({
     >
       {loading ? (
         <span className="flex items-center gap-2">
-          <svg
-            className="w-4 h-4 animate-spin"
-            fill="none"
-            viewBox="0 0 24 24"
-          >
-            <circle
-              className="opacity-25"
-              cx="12"
-              cy="12"
-              r="10"
-              stroke="currentColor"
-              strokeWidth="4"
-            />
-            <path
-              className="opacity-75"
-              fill="currentColor"
-              d="M4 12a8 8 0 018-8v8z"
-            />
+          <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
           </svg>
-          Loading...
+          Loading…
         </span>
       ) : (
         children

@@ -30,8 +30,8 @@ export default async function EditProductPage({ params }: Props) {
   return (
     <div className="max-w-2xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-900">Edit Product</h1>
-        <p className="text-sm text-slate-400 mt-0.5 truncate">{product.name}</p>
+        <h1 className="text-2xl font-bold text-bushal-forest">Edit Product</h1>
+        <p className="text-sm text-bushal-inkSoft mt-0.5 truncate">{product.name}</p>
       </div>
       <div className="bg-white rounded-2xl border border-slate-200 p-6 sm:p-8">
         <ProductForm mode="edit" product={normalised} categories={categories ?? []} />

@@ -1,7 +1,4 @@
-// lib/utils/cn.ts
-// Merges Tailwind class names safely, resolving conflicts.
-// Uses clsx for conditional classes + tailwind-merge to deduplicate.
-
+// app/lib/utils/cn.ts
 import { clsx, type ClassValue } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 

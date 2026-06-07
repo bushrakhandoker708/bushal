@@ -4,7 +4,7 @@ import Link from 'next/link'
 
 export default function LoginPage() {
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4">
+    <div className="min-h-screen bg-bushal-ivory flex items-center justify-center px-4">
       <div className="w-full max-w-md animate-fade-in-up">
         <div className="text-center mb-8">
           <Link
@@ -27,7 +27,7 @@ export default function LoginPage() {
           </p>
         </div>
 
-        <div className="mt-6 flex items-center justify-center gap-5 text-xs text-slate-400">
+        <div className="mt-6 flex items-center justify-center gap-5 text-xs text-bushal-inkSoft">
           <span className="flex items-center gap-1.5">
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />

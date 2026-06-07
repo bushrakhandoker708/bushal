@@ -8,7 +8,7 @@ import { formatDate } from '@/app/lib/utils/formatDate'
 import { cn } from '@/app/lib/utils/cn'
 
 const DELIVERY_STEPS = [
-  { key: 'order_placed',     label: 'Order Placed',      icon: '📋', color: 'bg-slate-100 text-slate-700 border-slate-200' },
+  { key: 'order_placed',     label: 'Order Placed',      icon: '📋', color: 'bg-bushal-ivoryDeep text-slate-700 border-slate-200' },
   { key: 'confirmed',        label: 'Confirmed',          icon: '✅', color: 'bg-blue-50 text-blue-700 border-blue-200' },
   { key: 'processing',       label: 'Processing',         icon: '⚙️', color: 'bg-amber-50 text-amber-700 border-amber-200' },
   { key: 'shipped',          label: 'Shipped',            icon: '📦', color: 'bg-purple-50 text-purple-700 border-purple-200' },
@@ -40,7 +40,7 @@ interface Order {
 
 function StatusBadge({ status }: { status: string }) {
   const step = DELIVERY_STEPS.find((s) => s.key === status)
-  if (!step) return <span className="text-xs text-slate-400">{status}</span>
+  if (!step) return <span className="text-xs text-bushal-inkSoft">{status}</span>
   return (
     <span className={cn('inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold border', step.color)}>
       {step.icon} {step.label}
@@ -74,12 +74,12 @@ function OrderRow({ order, onUpdateStatus }: OrderRowProps) {
     <>
       {/* Main row */}
       <tr
-        className="hover:bg-slate-50 transition-colors cursor-pointer"
+        className="hover:bg-bushal-ivory transition-colors cursor-pointer"
         onClick={() => setExpanded((v) => !v)}
       >
         <td className="px-4 py-3.5">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg overflow-hidden bg-slate-100 border border-slate-100 flex-shrink-0">
+            <div className="w-9 h-9 rounded-lg overflow-hidden bg-bushal-ivoryDeep border border-slate-100 flex-shrink-0">
               {firstImg ? (
                 <img src={firstImg} alt="" className="w-full h-full object-cover" />
               ) : (
@@ -88,17 +88,17 @@ function OrderRow({ order, onUpdateStatus }: OrderRowProps) {
             </div>
             <div>
               <p className="text-xs font-mono font-bold text-slate-700">#{order.id.slice(0, 8).toUpperCase()}</p>
-              <p className="text-[11px] text-slate-400 mt-0.5">{formatDate(order.created_at)}</p>
+              <p className="text-[11px] text-bushal-inkSoft mt-0.5">{formatDate(order.created_at)}</p>
             </div>
           </div>
         </td>
         <td className="px-4 py-3.5 hidden sm:table-cell">
           <p className="text-sm font-semibold text-slate-800">{order.customer.full_name ?? '—'}</p>
-          <p className="text-xs text-slate-400 truncate max-w-[180px]">{order.customer.email ?? '—'}</p>
+          <p className="text-xs text-bushal-inkSoft truncate max-w-[180px]">{order.customer.email ?? '—'}</p>
         </td>
         <td className="px-4 py-3.5">
-          <p className="text-sm font-bold text-slate-900">{formatPrice(order.total)}</p>
-          <p className="text-[11px] text-slate-400">{items.length} item{items.length !== 1 ? 's' : ''}</p>
+          <p className="text-sm font-bold text-bushal-forest">{formatPrice(order.total)}</p>
+          <p className="text-[11px] text-bushal-inkSoft">{items.length} item{items.length !== 1 ? 's' : ''}</p>
         </td>
         <td className="px-4 py-3.5">
           <StatusBadge status={order.delivery_status ?? 'order_placed'} />
@@ -108,7 +108,7 @@ function OrderRow({ order, onUpdateStatus }: OrderRowProps) {
         </td>
         <td className="px-4 py-3.5">
           <svg
-            className={cn('w-4 h-4 text-slate-400 transition-transform', expanded && 'rotate-180')}
+            className={cn('w-4 h-4 text-bushal-inkSoft transition-transform', expanded && 'rotate-180')}
             fill="none" stroke="currentColor" viewBox="0 0 24 24"
           >
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -120,7 +120,7 @@ function OrderRow({ order, onUpdateStatus }: OrderRowProps) {
       {expanded && (
         <tr>
           <td colSpan={6} className="px-4 pb-5 pt-0">
-            <div className="bg-slate-50 rounded-xl border border-slate-200 p-4 space-y-4">
+            <div className="bg-bushal-ivory rounded-xl border border-slate-200 p-4 space-y-4">
               {/* Customer info */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
                 <div>
@@ -140,7 +140,7 @@ function OrderRow({ order, onUpdateStatus }: OrderRowProps) {
                 </div>
                 <div>
                   <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Order Total</p>
-                  <p className="text-lg font-bold text-slate-900">{formatPrice(order.total)}</p>
+                  <p className="text-lg font-bold text-bushal-forest">{formatPrice(order.total)}</p>
                 </div>
               </div>
 
@@ -150,17 +150,17 @@ function OrderRow({ order, onUpdateStatus }: OrderRowProps) {
                 <div className="space-y-2">
                   {items.map((item) => (
                     <div key={item.id} className="flex items-center gap-3 bg-white rounded-lg px-3 py-2 border border-slate-100">
-                      <div className="w-8 h-8 rounded-lg overflow-hidden bg-slate-100 flex-shrink-0">
+                      <div className="w-8 h-8 rounded-lg overflow-hidden bg-bushal-ivoryDeep flex-shrink-0">
                         {item.products && ((Array.isArray(item.products.images) && item.products.images[0]) || item.products.image_url) ? (
                           <img
                             src={(Array.isArray(item.products.images) && item.products.images[0]) || item.products.image_url!}
                             alt="" className="w-full h-full object-cover"
                           />
-                        ) : <div className="w-full h-full bg-slate-50" />}
+                        ) : <div className="w-full h-full bg-bushal-ivory" />}
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-slate-800 truncate">{item.products?.name ?? 'Product'}</p>
-                        <p className="text-xs text-slate-400">Qty: {item.quantity} × {formatPrice(item.unit_price)}</p>
+                        <p className="text-xs text-bushal-inkSoft">Qty: {item.quantity} × {formatPrice(item.unit_price)}</p>
                       </div>
                       <p className="text-sm font-bold text-slate-700 flex-shrink-0">
                         {formatPrice(item.quantity * item.unit_price)}
@@ -227,7 +227,7 @@ function OrderRow({ order, onUpdateStatus }: OrderRowProps) {
                           <span className="text-base">{s?.icon ?? '📦'}</span>
                           <div>
                             <p className="font-semibold text-slate-800">{s?.label ?? step.status}</p>
-                            <p className="text-xs text-slate-400">{formatDate(step.timestamp)}</p>
+                            <p className="text-xs text-bushal-inkSoft">{formatDate(step.timestamp)}</p>
                           </div>
                         </div>
                       )
@@ -302,8 +302,8 @@ export default function AdminOrdersClient({ orders }: Props) {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Orders</h1>
-          <p className="text-sm text-slate-400 mt-0.5">
+          <h1 className="text-2xl font-bold text-bushal-forest">Orders</h1>
+          <p className="text-sm text-bushal-inkSoft mt-0.5">
             {filtered.length} of {localOrders.length} total
           </p>
         </div>
@@ -344,7 +344,7 @@ export default function AdminOrdersClient({ orders }: Props) {
 
       {/* Search */}
       <div className="relative">
-        <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-bushal-inkSoft" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
         </svg>
         <input
@@ -352,7 +352,7 @@ export default function AdminOrdersClient({ orders }: Props) {
           placeholder="Search by order ID, customer name, email or bKash TxID..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 transition-all"
+          className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-bushal-forest placeholder-slate-400 focus:outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 transition-all"
         />
       </div>
 
@@ -361,7 +361,7 @@ export default function AdminOrdersClient({ orders }: Props) {
         <div className="overflow-x-auto">
           <table className="min-w-full">
             <thead>
-              <tr className="bg-slate-50 border-b border-slate-100">
+              <tr className="bg-bushal-ivory border-b border-slate-100">
                 <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wide">Order</th>
                 <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wide hidden sm:table-cell">Customer</th>
                 <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wide">Total</th>
@@ -373,7 +373,7 @@ export default function AdminOrdersClient({ orders }: Props) {
             <tbody className="divide-y divide-slate-50">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-16 text-center text-slate-400 text-sm">
+                  <td colSpan={6} className="py-16 text-center text-bushal-inkSoft text-sm">
                     No orders found
                   </td>
                 </tr>

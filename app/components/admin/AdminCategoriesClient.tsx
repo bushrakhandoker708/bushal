@@ -77,8 +77,8 @@ export default function AdminCategoriesClient({ initialCategories }: Props) {
     <div className="animate-fade-in-up space-y-5 max-w-2xl">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Categories</h1>
-          <p className="text-sm text-slate-400 mt-0.5">{categories.length} categories</p>
+          <h1 className="text-2xl font-bold text-bushal-forest">Categories</h1>
+          <p className="text-sm text-bushal-inkSoft mt-0.5">{categories.length} categories</p>
         </div>
         <button
           onClick={() => { setAdding(true); setError('') }}
@@ -94,7 +94,7 @@ export default function AdminCategoriesClient({ initialCategories }: Props) {
       {/* Add form */}
       {adding && (
         <div className="bg-white rounded-2xl border border-orange-200 p-5 space-y-4">
-          <h3 className="font-bold text-slate-900 text-sm">New Category</h3>
+          <h3 className="font-bold text-bushal-forest text-sm">New Category</h3>
           <div>
             <label className="block text-xs font-semibold text-slate-600 mb-1">Name *</label>
             <input
@@ -102,7 +102,7 @@ export default function AdminCategoriesClient({ initialCategories }: Props) {
               value={newName}
               onChange={(e) => { setNewName(e.target.value); setError('') }}
               placeholder="e.g. Accessories"
-              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 transition-all"
+              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-bushal-forest placeholder-slate-400 focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 transition-all"
               autoFocus
             />
           </div>
@@ -113,11 +113,11 @@ export default function AdminCategoriesClient({ initialCategories }: Props) {
               value={newDesc}
               onChange={(e) => setNewDesc(e.target.value)}
               placeholder="Short description..."
-              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 transition-all"
+              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-bushal-forest placeholder-slate-400 focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 transition-all"
             />
           </div>
           {newName && (
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-bushal-inkSoft">
               Slug: <span className="font-mono text-slate-600">{slugify(newName)}</span>
             </p>
           )}
@@ -134,7 +134,7 @@ export default function AdminCategoriesClient({ initialCategories }: Props) {
             </button>
             <button
               onClick={() => { setAdding(false); setNewName(''); setNewDesc(''); setError('') }}
-              className="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all"
+              className="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 bg-bushal-ivoryDeep hover:bg-slate-200 transition-all"
             >
               Cancel
             </button>
@@ -145,17 +145,17 @@ export default function AdminCategoriesClient({ initialCategories }: Props) {
       {/* Category list */}
       <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
         {categories.length === 0 ? (
-          <div className="py-16 text-center text-slate-400 text-sm">No categories yet</div>
+          <div className="py-16 text-center text-bushal-inkSoft text-sm">No categories yet</div>
         ) : (
           <div className="divide-y divide-slate-50">
             {categories.map((cat) => (
-              <div key={cat.id} className="flex items-center justify-between px-5 py-4 hover:bg-slate-50 transition-colors">
+              <div key={cat.id} className="flex items-center justify-between px-5 py-4 hover:bg-bushal-ivory transition-colors">
                 <div>
                   <p className="font-semibold text-slate-800 text-sm">{cat.name}</p>
                   <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-xs font-mono text-slate-400">{cat.slug}</span>
+                    <span className="text-xs font-mono text-bushal-inkSoft">{cat.slug}</span>
                     {cat.description && (
-                      <span className="text-xs text-slate-400">· {cat.description}</span>
+                      <span className="text-xs text-bushal-inkSoft">· {cat.description}</span>
                     )}
                   </div>
                 </div>

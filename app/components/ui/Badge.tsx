@@ -1,30 +1,47 @@
 // components/ui/Badge.tsx
-import type { Metadata } from 'next'
-import '../../globals.css'
+import { ReactNode } from 'react'
+import { cn } from '@/app/lib/utils/cn'
 
-export const metadata: Metadata = {
-  title: 'Bushal — Your Trusted Store',
-  description: 'Quality products, delivered fast across Bangladesh.',
+type Variant = 'success' | 'danger' | 'warning' | 'info' | 'neutral' | 'copper' | 'forest'
+
+interface Props {
+  children: ReactNode
+  variant?: Variant
+  size?: 'sm' | 'md'
+  dot?: boolean
+  className?: string
 }
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+const variants: Record<Variant, string> = {
+  success: 'bg-bushal-successBg text-bushal-success border-bushal-success/20',
+  danger:  'bg-bushal-dangerBg text-bushal-danger border-bushal-danger/20',
+  warning: 'bg-bushal-warningBg text-bushal-warning border-bushal-warning/20',
+  info:    'bg-bushal-forest/10 text-bushal-forest border-bushal-forest/20',
+  neutral: 'bg-bushal-ivory text-bushal-inkMid border-bushal-border',
+  copper:  'bg-bushal-copper/10 text-bushal-copper border-bushal-copper/20',
+  forest:  'bg-bushal-forest text-white border-transparent',
+}
+
+const dotColors: Record<Variant, string> = {
+  success: 'bg-bushal-success',
+  danger:  'bg-bushal-danger',
+  warning: 'bg-bushal-warning',
+  info:    'bg-bushal-forest',
+  neutral: 'bg-bushal-inkSoft',
+  copper:  'bg-bushal-copper',
+  forest:  'bg-white',
+}
+
+export default function Badge({ children, variant = 'neutral', size = 'md', dot, className }: Props) {
   return (
-    <html lang="en">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap"
-          rel="stylesheet"
-        />
-      </head>
-      <body>
-        {children}
-      </body>
-    </html>
+    <span className={cn(
+      'inline-flex items-center gap-1.5 font-semibold border rounded-full',
+      size === 'sm' ? 'text-[10px] px-2 py-0.5' : 'text-xs px-2.5 py-1',
+      variants[variant],
+      className
+    )}>
+      {dot && <span className={cn('w-1.5 h-1.5 rounded-full flex-shrink-0', dotColors[variant])} />}
+      {children}
+    </span>
   )
 }

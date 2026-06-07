@@ -1,4 +1,4 @@
-// app/components/layout/AdminSidebar.tsx
+// components/layout/AdminSidebar.tsx
 'use client'
 
 import Link from 'next/link'
@@ -61,22 +61,23 @@ const navItems = [
 
 function SidebarContent({ onClose }: { onClose?: () => void }) {
   const pathname = usePathname()
-
   const isActive = (href: string) =>
     href === '/admin' ? pathname === '/admin' : pathname.startsWith(href)
 
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between px-5 pt-6 pb-5 border-b border-white/10">
-        <div>
-          <p className="text-xl font-extrabold text-white tracking-tight">Bushal</p>
-          <p className="text-xs text-orange-300 font-medium mt-0.5">Admin Panel</p>
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-bushal-copper flex items-center justify-center shadow-copper">
+            <span className="text-white font-heading font-bold text-sm leading-none">B</span>
+          </div>
+          <div>
+            <p className="text-base font-semibold text-white" style={{ fontFamily: "'Cormorant Garamond', Georgia, serif" }}>Bushal</p>
+            <p className="text-[11px] text-bushal-copperGlow font-medium -mt-0.5">Admin Panel</p>
+          </div>
         </div>
         {onClose && (
-          <button
-            onClick={onClose}
-            className="lg:hidden p-1.5 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-colors"
-          >
+          <button onClick={onClose} className="lg:hidden p-1.5 rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition-colors">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -93,10 +94,10 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
               href={item.href}
               onClick={onClose}
               className={cn(
-                'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-150',
+                'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150',
                 active
-                  ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/30'
-                  : 'text-white/70 hover:bg-white/10 hover:text-white'
+                  ? 'bg-bushal-copper text-white shadow-lg shadow-bushal-copper/30'
+                  : 'text-white/60 hover:bg-white/10 hover:text-white'
               )}
             >
               {item.icon}
@@ -110,11 +111,10 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
         <Link
           href="/dashboard"
           onClick={onClose}
-          className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-white/60 hover:bg-white/10 hover:text-white transition-all duration-150"
+          className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-white/40 hover:bg-white/10 hover:text-white transition-all duration-150"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
           </svg>
           Back to Store
         </Link>
@@ -134,43 +134,30 @@ export default function AdminSidebar() {
 
   return (
     <>
-      {/* Mobile top bar */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4 h-14 bg-[#1a1f2e] border-b border-white/10">
-        <div>
-          <p className="text-base font-extrabold text-white">Bushal</p>
-          <p className="text-[10px] text-orange-300 font-medium -mt-0.5">Admin</p>
+      <div className="lg:hidden fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4 h-14 bg-bushal-forest border-b border-white/10">
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-lg bg-bushal-copper flex items-center justify-center">
+            <span className="text-white font-bold text-xs">B</span>
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-white" style={{ fontFamily: "'Cormorant Garamond', Georgia, serif" }}>Bushal</p>
+            <p className="text-[10px] text-bushal-copperGlow font-medium -mt-0.5">Admin</p>
+          </div>
         </div>
-        <button
-          onClick={() => setOpen(true)}
-          className="p-2 rounded-xl text-white/70 hover:text-white hover:bg-white/10 transition-colors"
-          aria-label="Open menu"
-        >
+        <button onClick={() => setOpen(true)} className="p-2 rounded-xl text-white/60 hover:text-white hover:bg-white/10 transition-colors" aria-label="Open menu">
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
       </div>
 
-      {/* Mobile overlay */}
-      {open && (
-        <div
-          className="lg:hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm"
-          onClick={() => setOpen(false)}
-        />
-      )}
+      {open && <div className="lg:hidden fixed inset-0 z-50 bg-bushal-ink/50 backdrop-blur-sm" onClick={() => setOpen(false)} />}
 
-      {/* Mobile drawer */}
-      <div
-        className={cn(
-          'lg:hidden fixed top-0 left-0 z-50 h-full w-64 bg-[#1a1f2e] transition-transform duration-300 ease-out',
-          open ? 'translate-x-0' : '-translate-x-full'
-        )}
-      >
+      <div className={cn('lg:hidden fixed top-0 left-0 z-50 h-full w-64 bg-bushal-forest transition-transform duration-300 ease-out', open ? 'translate-x-0' : '-translate-x-full')}>
         <SidebarContent onClose={() => setOpen(false)} />
       </div>
 
-      {/* Desktop sidebar */}
-      <aside className="hidden lg:flex flex-col w-56 min-h-screen bg-[#1a1f2e] flex-shrink-0">
+      <aside className="hidden lg:flex flex-col w-56 min-h-screen bg-bushal-forest flex-shrink-0">
         <SidebarContent />
       </aside>
     </>

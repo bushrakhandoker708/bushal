@@ -68,7 +68,7 @@ function BarChart({
                 {d.label}: {d.value}
               </div>
             </div>
-            <span className="text-[9px] text-slate-400 text-center leading-tight">{d.label}</span>
+            <span className="text-[9px] text-bushal-inkSoft text-center leading-tight">{d.label}</span>
           </div>
         )
       })}
@@ -227,8 +227,8 @@ export default async function AdminDashboardPage() {
       {/* ── Page header ──────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Analytics Overview</h1>
-          <p className="text-sm text-slate-400 mt-0.5">Real-time store performance · Bushal Admin</p>
+          <h1 className="text-2xl font-extrabold text-bushal-forest tracking-tight">Analytics Overview</h1>
+          <p className="text-sm text-bushal-inkSoft mt-0.5">Real-time store performance · Bushal Admin</p>
         </div>
         <Link
           href="/admin/products/new"
@@ -294,15 +294,15 @@ export default async function AdminDashboardPage() {
                 )}
               </div>
             </div>
-            <p className="text-2xl font-extrabold text-slate-900 tracking-tight">{stat.value}</p>
-            <p className="text-xs text-slate-400 font-medium mt-0.5">{stat.label}</p>
+            <p className="text-2xl font-extrabold text-bushal-forest tracking-tight">{stat.value}</p>
+            <p className="text-xs text-bushal-inkSoft font-medium mt-0.5">{stat.label}</p>
             {stat.trend && stat.trend.some((v) => v > 0) && (
               <div className="mt-3">
                 <SparkLine points={stat.trend} color={stat.trendColor} />
               </div>
             )}
             {stat.sub && (
-              <p className="text-[11px] text-slate-400 mt-1.5">{stat.sub}</p>
+              <p className="text-[11px] text-bushal-inkSoft mt-1.5">{stat.sub}</p>
             )}
           </div>
         ))}
@@ -315,8 +315,8 @@ export default async function AdminDashboardPage() {
         <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 p-6">
           <div className="flex items-center justify-between mb-1">
             <div>
-              <h2 className="text-sm font-bold text-slate-900">Revenue — Last 7 Days</h2>
-              <p className="text-xs text-slate-400 mt-0.5">Fulfilled orders only · in BDT</p>
+              <h2 className="text-sm font-bold text-bushal-forest">Revenue — Last 7 Days</h2>
+              <p className="text-xs text-bushal-inkSoft mt-0.5">Fulfilled orders only · in BDT</p>
             </div>
             <span className="text-xs font-bold text-violet-600 bg-violet-50 px-2.5 py-1 rounded-full">
               {formatPrice(totalRevenue)}
@@ -329,15 +329,15 @@ export default async function AdminDashboardPage() {
 
         {/* Order status donut */}
         <div className="bg-white rounded-2xl border border-slate-200 p-6">
-          <h2 className="text-sm font-bold text-slate-900 mb-1">Order Status</h2>
-          <p className="text-xs text-slate-400 mb-4">Last 200 orders</p>
+          <h2 className="text-sm font-bold text-bushal-forest mb-1">Order Status</h2>
+          <p className="text-xs text-bushal-inkSoft mb-4">Last 200 orders</p>
           <div className="flex items-center justify-center mb-4">
             <div className="relative">
               <MiniDonut segments={orderSegments} size={100} />
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="text-center">
-                  <p className="text-lg font-extrabold text-slate-900">{(orders ?? []).length}</p>
-                  <p className="text-[9px] text-slate-400">total</p>
+                  <p className="text-lg font-extrabold text-bushal-forest">{(orders ?? []).length}</p>
+                  <p className="text-[9px] text-bushal-inkSoft">total</p>
                 </div>
               </div>
             </div>
@@ -350,8 +350,8 @@ export default async function AdminDashboardPage() {
                   <span className="text-xs text-slate-600 font-medium">{s.label}</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-bold text-slate-900">{s.value}</span>
-                  <span className="text-[10px] text-slate-400">
+                  <span className="text-xs font-bold text-bushal-forest">{s.value}</span>
+                  <span className="text-[10px] text-bushal-inkSoft">
                     ({Math.round((s.value / ((orders ?? []).length || 1)) * 100)}%)
                   </span>
                 </div>
@@ -368,8 +368,8 @@ export default async function AdminDashboardPage() {
         <div className="bg-white rounded-2xl border border-slate-200 p-6">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="text-sm font-bold text-slate-900">Products by Category</h2>
-              <p className="text-xs text-slate-400">{productCount ?? 0} total products</p>
+              <h2 className="text-sm font-bold text-bushal-forest">Products by Category</h2>
+              <p className="text-xs text-bushal-inkSoft">{productCount ?? 0} total products</p>
             </div>
             <Link href="/admin/categories" className="text-xs font-semibold text-orange-600 hover:underline">
               Manage →
@@ -381,8 +381,8 @@ export default async function AdminDashboardPage() {
               <MiniDonut segments={catEntries} size={120} />
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="text-center">
-                  <p className="text-lg font-extrabold text-slate-900">{catEntries.length}</p>
-                  <p className="text-[9px] text-slate-400">categories</p>
+                  <p className="text-lg font-extrabold text-bushal-forest">{catEntries.length}</p>
+                  <p className="text-[9px] text-bushal-inkSoft">categories</p>
                 </div>
               </div>
             </div>
@@ -391,8 +391,8 @@ export default async function AdminDashboardPage() {
                 <div key={c.label} className="flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: c.color }} />
                   <span className="text-xs text-slate-600 truncate flex-1">{c.label}</span>
-                  <span className="text-xs font-bold text-slate-900 flex-shrink-0">{c.value}</span>
-                  <div className="w-12 h-1.5 bg-slate-100 rounded-full overflow-hidden flex-shrink-0">
+                  <span className="text-xs font-bold text-bushal-forest flex-shrink-0">{c.value}</span>
+                  <div className="w-12 h-1.5 bg-bushal-ivoryDeep rounded-full overflow-hidden flex-shrink-0">
                     <div
                       className="h-full rounded-full transition-all duration-500"
                       style={{ width: `${(c.value / (productCount || 1)) * 100}%`, background: c.color }}
@@ -408,8 +408,8 @@ export default async function AdminDashboardPage() {
         <div className="bg-white rounded-2xl border border-slate-200 p-6">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="text-sm font-bold text-slate-900">Inventory Health</h2>
-              <p className="text-xs text-slate-400">Stock status across all products</p>
+              <h2 className="text-sm font-bold text-bushal-forest">Inventory Health</h2>
+              <p className="text-xs text-bushal-inkSoft">Stock status across all products</p>
             </div>
             <Link href="/admin/products" className="text-xs font-semibold text-orange-600 hover:underline">
               View all →
@@ -422,7 +422,7 @@ export default async function AdminDashboardPage() {
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="text-center">
                   <p className="text-lg font-extrabold text-emerald-600">{healthyStock}</p>
-                  <p className="text-[9px] text-slate-400">healthy</p>
+                  <p className="text-[9px] text-bushal-inkSoft">healthy</p>
                 </div>
               </div>
             </div>
@@ -437,7 +437,7 @@ export default async function AdminDashboardPage() {
                     <span className={`text-xs font-semibold ${s.textColor}`}>{s.label}</span>
                     <span className={`text-xs font-bold ${s.textColor}`}>{s.count}</span>
                   </div>
-                  <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                  <div className="h-2 bg-bushal-ivoryDeep rounded-full overflow-hidden">
                     <div className={`h-full ${s.color} rounded-full transition-all duration-700`} style={{ width: `${s.pct}%` }} />
                   </div>
                 </div>
@@ -465,8 +465,8 @@ export default async function AdminDashboardPage() {
         <div className="lg:col-span-3 bg-white rounded-2xl border border-slate-200 p-6">
           <div className="flex items-center justify-between mb-5">
             <div>
-              <h2 className="text-sm font-bold text-slate-900">Top Products — Inventory Value</h2>
-              <p className="text-xs text-slate-400">price × stock quantity</p>
+              <h2 className="text-sm font-bold text-bushal-forest">Top Products — Inventory Value</h2>
+              <p className="text-xs text-bushal-inkSoft">price × stock quantity</p>
             </div>
             <Link href="/admin/products" className="text-xs font-semibold text-orange-600 hover:underline">
               Manage →
@@ -483,10 +483,10 @@ export default async function AdminDashboardPage() {
 
               return (
                 <div key={p.id} className="flex items-center gap-3">
-                  <span className="w-5 text-[11px] font-bold text-slate-400 text-center flex-shrink-0">
+                  <span className="w-5 text-[11px] font-bold text-bushal-inkSoft text-center flex-shrink-0">
                     {i + 1}
                   </span>
-                  <div className="w-9 h-9 rounded-xl overflow-hidden bg-slate-100 flex-shrink-0 border border-slate-100">
+                  <div className="w-9 h-9 rounded-xl overflow-hidden bg-bushal-ivoryDeep flex-shrink-0 border border-slate-100">
                     {cover ? (
                       <img src={cover} alt="" className="w-full h-full object-cover" />
                     ) : (
@@ -496,9 +496,9 @@ export default async function AdminDashboardPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-xs font-semibold text-slate-800 truncate pr-2">{p.name}</span>
-                      <span className="text-xs font-bold text-slate-900 flex-shrink-0">{formatPrice(val)}</span>
+                      <span className="text-xs font-bold text-bushal-forest flex-shrink-0">{formatPrice(val)}</span>
                     </div>
-                    <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                    <div className="h-2 bg-bushal-ivoryDeep rounded-full overflow-hidden">
                       <div
                         className={`h-full rounded-full transition-all duration-500 ${isOut ? 'bg-rose-400' : isLow ? 'bg-amber-400' : 'bg-orange-500'}`}
                         style={{ width: `${pct}%` }}
@@ -508,7 +508,7 @@ export default async function AdminDashboardPage() {
                       <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${isOut ? 'bg-rose-100 text-rose-600' : isLow ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
                         {isOut ? 'Out of stock' : `${p.stock_quantity} units`}
                       </span>
-                      <span className="text-[10px] text-slate-400">{formatPrice(p.price)} each</span>
+                      <span className="text-[10px] text-bushal-inkSoft">{formatPrice(p.price)} each</span>
                     </div>
                   </div>
                 </div>
@@ -523,21 +523,21 @@ export default async function AdminDashboardPage() {
           {/* Recent orders */}
           <div className="bg-white rounded-2xl border border-slate-200 p-6 flex-1">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-bold text-slate-900">Recent Orders</h2>
+              <h2 className="text-sm font-bold text-bushal-forest">Recent Orders</h2>
               <Link href="/admin/orders" className="text-xs font-semibold text-orange-600 hover:underline">
                 All orders →
               </Link>
             </div>
             <div className="space-y-3">
               {(recentOrdersRaw ?? []).length === 0 ? (
-                <p className="text-xs text-slate-400 text-center py-4">No orders yet.</p>
+                <p className="text-xs text-bushal-inkSoft text-center py-4">No orders yet.</p>
               ) : (
                 (recentOrdersRaw ?? []).map((o: any) => {
                   const statusColors: Record<string, string> = {
                     fulfilled: 'bg-emerald-100 text-emerald-700',
                     pending:   'bg-amber-100 text-amber-700',
                     cancelled: 'bg-rose-100 text-rose-600',
-                    refunded:  'bg-slate-100 text-slate-600',
+                    refunded:  'bg-bushal-ivoryDeep text-slate-600',
                   }
                   const label = o.status.charAt(0).toUpperCase() + o.status.slice(1)
                   return (
@@ -546,14 +546,14 @@ export default async function AdminDashboardPage() {
                         <p className="text-xs font-semibold text-slate-800 font-mono truncate">
                           #{o.id.slice(0, 8).toUpperCase()}
                         </p>
-                        <p className="text-[10px] text-slate-400">
+                        <p className="text-[10px] text-bushal-inkSoft">
                           {new Date(o.created_at).toLocaleDateString('en-BD', { month: 'short', day: 'numeric' })}
                         </p>
                       </div>
-                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0 ${statusColors[o.status] ?? 'bg-slate-100 text-slate-600'}`}>
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0 ${statusColors[o.status] ?? 'bg-bushal-ivoryDeep text-slate-600'}`}>
                         {label}
                       </span>
-                      <span className="text-xs font-bold text-slate-900 flex-shrink-0">{formatPrice(o.total)}</span>
+                      <span className="text-xs font-bold text-bushal-forest flex-shrink-0">{formatPrice(o.total)}</span>
                     </div>
                   )
                 })
@@ -563,7 +563,7 @@ export default async function AdminDashboardPage() {
 
           {/* Quick actions */}
           <div className="bg-white rounded-2xl border border-slate-200 p-6">
-            <h2 className="text-sm font-bold text-slate-900 mb-4">Quick Actions</h2>
+            <h2 className="text-sm font-bold text-bushal-forest mb-4">Quick Actions</h2>
             <div className="grid grid-cols-2 gap-2">
               {[
                 { label: 'Add Product', href: '/admin/products/new', icon: '＋', color: 'bg-orange-500 text-white hover:bg-orange-600' },
