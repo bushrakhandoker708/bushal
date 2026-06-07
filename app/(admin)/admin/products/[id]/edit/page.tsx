@@ -1,41 +1,27 @@
-// app/(admin)/admin/products/[id]/edit/page.tsx
-import ProductForm from '@/app/components/product/ProductForm'
+// app/(admin)/admin/products/page.tsx
 import { createServerClient } from '@/lib/supabase/server'
-import { notFound } from 'next/navigation'
+import AdminProductsClient from '@/app/components/admin/AdminProductsClient'
+import InventoryAnalytics from '@/app/components/admin/InventoryAnalytics'
 
-interface Props {
-  params: { id: string }
-}
-
-export default async function EditProductPage({ params }: Props) {
+export default async function AdminProductsPage() {
   const supabase = createServerClient()
-
-  const [{ data: product }, { data: categories }] = await Promise.all([
-    supabase.from('products').select('*').eq('id', params.id).single(),
-    supabase.from('categories').select('id, name, slug').order('sort_order', { ascending: true }),
+  const [{ data: products }, { data: categories }] = await Promise.all([
+    supabase.from('products').select('*').order('created_at', { ascending: false }),
+    supabase.from('categories').select('name').order('name'),
   ])
-
-  if (!product) notFound()
-
-  const normalised = {
-    ...product,
-    images:
-      Array.isArray(product.images) && product.images.length > 0
-        ? product.images
-        : product.image_url
-        ? [product.image_url]
-        : [],
-  }
-
+  
   return (
-    <div className="max-w-2xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-bushal-forest">Edit Product</h1>
-        <p className="text-sm text-bushal-inkSoft mt-0.5 truncate">{product.name}</p>
-      </div>
-      <div className="bg-white rounded-2xl border border-slate-200 p-6 sm:p-8">
-        <ProductForm mode="edit" product={normalised} categories={categories ?? []} />
-      </div>
+    <div className="space-y-6">
+      {/* Render the analytics dashboard header if products exist */}
+      {products && products.length > 0 && (
+        <InventoryAnalytics products={products} />
+      )}
+      
+      {/* Render the main management table below it */}
+      <AdminProductsClient
+        products={products ?? []}
+        categories={(categories ?? []).map((c) => c.name)}
+      />
     </div>
   )
 }

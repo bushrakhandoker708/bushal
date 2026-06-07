@@ -7,6 +7,7 @@ import { formatPrice } from '@/app/lib/utils/formatPrice'
 import { Product } from '@/app/types/product'
 import { useCart } from '@/app/hooks/useCart'
 import { cn } from '@/app/lib/utils/cn'
+import ProductQuickView from './ProductQuickView'
 
 interface Props {
   product: Product
@@ -18,6 +19,7 @@ export default function ProductCard({ product, index = 0 }: Props) {
   const [added, setAdded] = useState(false)
   const [imgIndex, setImgIndex] = useState(0)
   const [isWished, setIsWished] = useState(false)
+  const [quickViewOpen, setQuickViewOpen] = useState(false) 
 
   const discountedPrice = product.discount_percent
     ? product.price * (1 - product.discount_percent / 100)
@@ -102,6 +104,18 @@ export default function ProductCard({ product, index = 0 }: Props) {
           </svg>
         </button>
 
+        {/* Quick View Button */}
+        <button
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); setQuickViewOpen(true) }}
+          className="absolute bottom-3 left-3 w-9 h-9 rounded-full flex items-center justify-center bg-white/80 backdrop-blur-md text-bushal-forest hover:bg-white hover:scale-110 transition-all duration-300 z-10 opacity-0 group-hover:opacity-100 shadow-sm"
+          aria-label="Quick view"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+          </svg>
+        </button>
+
         {/* Quick Add Overlay (Desktop Only) */}
         <div className="absolute inset-x-0 bottom-0 p-3 translate-y-full group-hover:translate-y-0 transition-transform duration-500 ease-out z-10 hidden md:block">
           <button
@@ -141,6 +155,11 @@ export default function ProductCard({ product, index = 0 }: Props) {
             )}
           </div>
           
+      <ProductQuickView 
+        product={quickViewOpen ? product : null} 
+        onClose={() => setQuickViewOpen(false)} 
+      />
+
           {/* Mobile Add Button */}
           <button
             onClick={handleAdd}

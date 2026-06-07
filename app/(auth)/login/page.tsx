@@ -1,6 +1,14 @@
 // app/(auth)/login/page.tsx
 import LoginForm from '@/app/components/auth/LoginForm'
 import Link from 'next/link'
+import { Metadata } from 'next'
+
+
+export const metadata: Metadata = {
+  title: 'Sign In',
+  robots: { index: false, follow: true }, // Tells Google: "Don't show this in search results"
+}
+
 
 export default function LoginPage() {
   return (

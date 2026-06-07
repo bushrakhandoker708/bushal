@@ -9,6 +9,18 @@ import TrustBar from '@/app/components/home/TrustBar'
 import SectionHeader from '@/app/components/ui/SectionHeader'
 import { formatPrice } from '@/app/lib/utils/formatPrice'
 import Link from 'next/link'
+import { Metadata } from 'next'
+
+export const metadata: Metadata = {
+  title: 'Home — Premium Curated Products',
+  description: 'Shop heritage-quality, handpicked products at Bushal. Fast delivery across Bangladesh, secure bKash payments, and transparent pricing. Explore our collection today.',
+  openGraph: {
+    title: 'Bushal — Shop Premium Curated Products',
+    description: 'Heritage-quality goods delivered across Bangladesh. Transparent pricing & secure bKash payments.',
+    url: 'https://bushal.vercel.app/dashboard',
+  },
+}
+
 
 export default async function DashboardPage() {
   const supabase = createServerClient()

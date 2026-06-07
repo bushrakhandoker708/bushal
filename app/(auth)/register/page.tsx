@@ -1,6 +1,13 @@
 // app/(auth)/register/page.tsx
 import RegisterForm from '@/app/components/auth/RegisterForm'
+import { Metadata } from 'next'
 import Link from 'next/link'
+
+
+export const metadata: Metadata = {
+  title: 'Register',
+  robots: { index: false, follow: true },
+}
 
 export default function RegisterPage() {
   return (
