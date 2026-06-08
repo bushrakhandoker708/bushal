@@ -1,14 +1,14 @@
 // app/(customer)/checkout/page.tsx
 'use client'
 
-import CheckoutForm from '@/app/components/Checkout/CheckoutForm'
-import OrderSummary from '@/app/components/Checkout/OrderSummery'
 import BottomNav from '@/app/components/layout/BottomNav'
 import Navbar from '@/app/components/layout/Navbar'
 import { useCart } from '@/app/hooks/useCart'
 import { useAuth } from '@/app/hooks/useAuth'
 import { useState } from 'react'
 import Link from 'next/link'
+import CheckoutForm from '@/app/components/Checkout/CheckoutForm'
+import OrderSummary from '@/app/components/Checkout/OrderSummery'
 
 export default function CheckoutPage() {
   const { items, clearCart } = useCart()
@@ -26,10 +26,12 @@ export default function CheckoutPage() {
         body: JSON.stringify({ items }),
       })
       const data = await res.json()
+      
       if (!res.ok) {
         setError(data.error ?? 'Payment initiation failed')
         return
       }
+      
       clearCart()
       window.location.href = data.bkashURL
     } catch {
@@ -49,6 +51,7 @@ export default function CheckoutPage() {
           : item.price
         return sum + price * item.quantity
       }, 0)
+      
       const shipping = subtotal >= 1000 ? 0 : 120
       const total = subtotal + shipping
 
@@ -58,10 +61,12 @@ export default function CheckoutPage() {
         body: JSON.stringify({ items, total, payment_method: 'cod' }),
       })
       const data = await res.json()
+      
       if (!res.ok) {
         setError(data.error ?? 'Order failed')
         return
       }
+      
       clearCart()
       window.location.href = `/thank-you?orderId=${data.id}`
     } catch {
@@ -74,7 +79,6 @@ export default function CheckoutPage() {
   return (
     <div className="min-h-screen bg-bushal-ivory">
       <Navbar />
-
       <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-bushal-forest">Checkout</h1>
@@ -93,14 +97,14 @@ export default function CheckoutPage() {
               <p className="text-sm text-bushal-inkSoft mt-1">You need to be logged in to place an order.</p>
             </div>
             <div className="flex items-center gap-3">
-              <Link
-                href={`/login?redirect=/checkout`}
+              <Link 
+                href={`/login?redirect=/checkout`} 
                 className="px-6 py-2.5 bg-gradient-to-r from-bushal-copper to-bushal-copperLight text-white text-sm font-semibold rounded-xl hover:shadow-lg hover:shadow-bushal-copper/30 hover:-translate-y-0.5 transition-all duration-300 active:scale-95"
               >
                 Sign in
               </Link>
-              <Link
-                href="/register"
+              <Link 
+                href="/register" 
                 className="px-6 py-2.5 border border-bushal-border text-bushal-ink text-sm font-semibold rounded-xl hover:bg-bushal-ivoryDeep transition-all duration-200"
               >
                 Register

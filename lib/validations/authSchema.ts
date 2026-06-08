@@ -1,4 +1,5 @@
 // lib/validations/authSchema.ts
+//Defines Zod validation schemas for user login and registration. This ensures type safety, consistent error messages, and reliable client/server-side validation across all authentication forms.
 
 import { z } from 'zod'
 
@@ -12,7 +13,7 @@ export const registerSchema = z
     fullName: z
       .string()
       .min(2, 'Full name must be at least 2 characters')
-      .max(100),
+      .max(100, 'Full name must be under 100 characters'),
     email: z.string().email('Enter a valid email address'),
     password: z.string().min(6, 'Password must be at least 6 characters'),
     confirmPassword: z.string(),

@@ -1,42 +1,50 @@
 // hooks/useAuth.ts
-// Provides current Supabase user session and a signOut helper.
-// Uses createBrowserClient so it's safe in 'use client' components.
-
 'use client'
 
 import { useEffect, useState } from 'react'
-import { User } from '@supabase/supabase-js'
 import { createBrowserClient } from '@/lib/supabase/client'
-import { useRouter } from 'next/navigation'
+import type { User, Session } from '@supabase/supabase-js'
 
 export function useAuth() {
-  const supabase = createBrowserClient()
-  const router = useRouter()
   const [user, setUser] = useState<User | null>(null)
+  const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
+  
+  // Initialize client inside the hook to ensure it's only created on the client
+  const supabase = createBrowserClient()
 
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getUser().then(({ data }) => {
-      setUser(data.user)
-      setLoading(false)
-    })
-
-    // Subscribe to auth state changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    // 1. Get initial session on mount
+    const getSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      setSession(session)
       setUser(session?.user ?? null)
-    })
+      setLoading(false)
+    }
+
+    getSession()
+
+    // 2. Listen for auth state changes (login, logout, token refresh)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        setSession(session)
+        setUser(session?.user ?? null)
+        setLoading(false)
+        
+        // Optional: Force a page reload on sign out to clear any server-cached data
+        if (_event === 'SIGNED_OUT') {
+          window.location.href = '/login'
+        }
+      }
+    )
 
     return () => subscription.unsubscribe()
-  }, [])
+  }, [supabase.auth])
 
   const signOut = async () => {
     await supabase.auth.signOut()
-    router.push('/login')
-    router.refresh()
+    // The onAuthStateChange listener above will handle the redirect
   }
 
-  return { user, loading, signOut }
+  return { user, session, loading, signOut }
 }

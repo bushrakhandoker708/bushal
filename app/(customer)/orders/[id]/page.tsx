@@ -5,12 +5,22 @@ import Link from 'next/link'
 import Navbar from '@/app/components/layout/Navbar'
 import BottomNav from '@/app/components/layout/BottomNav'
 import OrderTracking from '@/app/components/order/OrderTracking'
-import Badge from '@/app/components/ui/Badge'
 import { formatPrice } from '@/app/lib/utils/formatPrice'
+import PageWrapper from '@/app/components/layout/PageWrapper'
+import { Metadata } from 'next'
+
+export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
+  return {
+    title: `Order #${params.id.slice(0, 8).toUpperCase()}`,
+    description: 'View your order details, tracking status, and receipt on Bushal.',
+    robots: { index: false, follow: true }, // Privacy: do not index individual order pages
+  }
+}
 
 export default async function OrderDetailPage({ params }: { params: { id: string } }) {
   const supabase = createServerClient()
   const { data: { session } } = await supabase.auth.getSession()
+  
   if (!session) redirect('/login')
 
   const { data: order } = await supabase
@@ -31,7 +41,8 @@ export default async function OrderDetailPage({ params }: { params: { id: string
   return (
     <div className="min-h-screen bg-bushal-ivory">
       <Navbar />
-      <main className="max-w-2xl mx-auto px-4 sm:px-6 py-8 pb-28 md:pb-12 space-y-5">
+      
+      <PageWrapper maxWidth="2xl" className="pb-28 md:pb-12 space-y-5">
         <div className="flex items-center gap-3">
           <Link href="/orders" className="p-2 rounded-lg text-bushal-inkSoft hover:text-bushal-ink hover:bg-bushal-surface border border-bushal-border transition-colors">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -101,7 +112,8 @@ export default async function OrderDetailPage({ params }: { params: { id: string
             <p className="text-sm text-bushal-inkMid leading-relaxed">{order.delivery_address}</p>
           </div>
         )}
-      </main>
+      </PageWrapper>
+
       <BottomNav />
     </div>
   )

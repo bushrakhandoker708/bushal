@@ -98,7 +98,6 @@ function ProgressRing({ progress, size = 80, strokeWidth = 8, color = "stroke-bu
   const radius = (size - strokeWidth) / 2
   const circumference = radius * 2 * Math.PI
   const offset = circumference - (progress / 100) * circumference
-
   return (
     <div className="relative" style={{ width: size, height: size }}>
       <svg className="transform -rotate-90 w-full h-full">
@@ -114,36 +113,35 @@ function ProgressRing({ progress, size = 80, strokeWidth = 8, color = "stroke-bu
 
 function KPICard({ label, value, sub, trend, trendUp, accent, icon, delay = 0 }: { label: string; value: string | number; sub?: string; trend?: string; trendUp?: boolean; accent: string; icon: ReactNode; delay?: number }) {
   const styles: Record<string, string> = {
-    green: 'from-emerald-50 to-emerald-100/60 border-emerald-200',
-    orange: 'from-orange-50 to-orange-100/60 border-orange-200',
-    rose: 'from-rose-50 to-rose-100/60 border-rose-200',
-    blue: 'from-blue-50 to-blue-100/60 border-blue-200',
-    violet: 'from-violet-50 to-violet-100/60 border-violet-200',
-    amber: 'from-amber-50 to-amber-100/60 border-amber-200',
-    cyan: 'from-cyan-50 to-cyan-100/60 border-cyan-200',
+    green: 'from-bushal-successBg to-bushal-successBg/50 border-bushal-success/20',
+    copper: 'from-bushal-copper/10 to-bushal-copper/5 border-bushal-copper/20',
+    danger: 'from-bushal-dangerBg to-bushal-dangerBg/50 border-bushal-danger/20',
+    blue: 'from-blue-50 to-blue-50/50 border-blue-200',
+    violet: 'from-violet-50 to-violet-50/50 border-violet-200',
+    warning: 'from-bushal-warningBg to-bushal-warningBg/50 border-bushal-warning/20',
+    cyan: 'from-cyan-50 to-cyan-50/50 border-cyan-200',
     forest: 'from-bushal-forest/5 to-bushal-forest/10 border-bushal-border',
   }
   const textStyles: Record<string, string> = {
-    green: 'text-emerald-700',
-    orange: 'text-orange-700',
-    rose: 'text-rose-600',
+    green: 'text-bushal-success',
+    copper: 'text-bushal-copper',
+    danger: 'text-bushal-danger',
     blue: 'text-blue-700',
     violet: 'text-violet-700',
-    amber: 'text-amber-700',
+    warning: 'text-bushal-warning',
     cyan: 'text-cyan-700',
     forest: 'text-bushal-forest',
   }
   const iconBgStyles: Record<string, string> = {
-    green: 'bg-emerald-100 text-emerald-600',
-    orange: 'bg-orange-100 text-orange-600',
-    rose: 'bg-rose-100 text-rose-600',
+    green: 'bg-bushal-successBg text-bushal-success',
+    copper: 'bg-bushal-copper/10 text-bushal-copper',
+    danger: 'bg-bushal-dangerBg text-bushal-danger',
     blue: 'bg-blue-100 text-blue-600',
     violet: 'bg-violet-100 text-violet-600',
-    amber: 'bg-amber-100 text-amber-600',
+    warning: 'bg-bushal-warningBg text-bushal-warning',
     cyan: 'bg-cyan-100 text-cyan-600',
     forest: 'bg-bushal-forest/10 text-bushal-forest',
   }
-
   return (
     <div className={cn('bg-gradient-to-br rounded-2xl border p-5 hover:shadow-lg transition-all duration-300 hover:-translate-y-1 animate-fade-in-up', styles[accent] || styles.forest)} style={{ animationDelay: `${delay}ms` }}>
       <div className="flex items-start justify-between mb-3">
@@ -151,7 +149,7 @@ function KPICard({ label, value, sub, trend, trendUp, accent, icon, delay = 0 }:
           {icon}
         </div>
         {trend && (
-          <span className={cn('text-xs font-bold px-2 py-1 rounded-full', trendUp ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-600')}>
+          <span className={cn('text-xs font-bold px-2 py-1 rounded-full', trendUp ? 'bg-bushal-successBg text-bushal-success' : 'bg-bushal-dangerBg text-bushal-danger')}>
             {trendUp ? '↑' : '↓'} {trend}
           </span>
         )}
@@ -176,9 +174,8 @@ function AreaChart({ data }: { data: DailyRevenue[] }) {
     return `${x},${y}`
   }).join(' ')
   const areaPoints = `0,100 ${points} 100,100`
-
   return (
-    <div className="bg-white rounded-2xl border border-bushal-border p-6 animate-fade-in-up">
+    <div className="bg-bushal-surface rounded-2xl border border-bushal-border p-6 animate-fade-in-up">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h3 className="text-sm font-bold text-bushal-forest">Revenue Trend</h3>
@@ -227,9 +224,8 @@ function DonutChart({ data, size = 160 }: { data: { label: string; value: number
   const total = data.reduce((s, d) => s + d.value, 0) || 1
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
   let cumulativePercent = 0
-
   return (
-    <div className="bg-white rounded-2xl border border-bushal-border p-6 animate-fade-in-up">
+    <div className="bg-bushal-surface rounded-2xl border border-bushal-border p-6 animate-fade-in-up">
       <h3 className="text-sm font-bold text-bushal-forest mb-4">Category Performance</h3>
       <div className="flex items-center gap-6">
         <div className="relative" style={{ width: size, height: size }}>
@@ -254,7 +250,7 @@ function DonutChart({ data, size = 160 }: { data: { label: string; value: number
         </div>
         <div className="flex-1 space-y-2">
           {data.map((d, i) => (
-            <div key={i} className={cn('flex items-center justify-between p-2 rounded-lg transition-all duration-200', hoveredIndex === i ? 'bg-bushal-ivory scale-105' : '')} onMouseEnter={() => setHoveredIndex(i)} onMouseLeave={() => setHoveredIndex(null)}>
+            <div key={i} className={cn('flex items-center justify-between p-2 rounded-lg transition-all duration-200', hoveredIndex === i ? 'bg-bushal-ivoryDeep scale-105' : '')} onMouseEnter={() => setHoveredIndex(i)} onMouseLeave={() => setHoveredIndex(null)}>
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full" style={{ backgroundColor: d.color }} />
                 <span className="text-xs font-medium text-bushal-forest">{d.label}</span>
@@ -271,22 +267,21 @@ function DonutChart({ data, size = 160 }: { data: { label: string; value: number
 function ActivityFeed({ activities }: { activities: RecentActivity[] }) {
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'fulfilled': return 'bg-emerald-100 text-emerald-700'
-      case 'pending': return 'bg-amber-100 text-amber-700'
-      case 'cancelled': return 'bg-rose-100 text-rose-600'
-      default: return 'bg-slate-100 text-slate-600'
+      case 'fulfilled': return 'bg-bushal-successBg text-bushal-success'
+      case 'pending': return 'bg-bushal-warningBg text-bushal-warning'
+      case 'cancelled': return 'bg-bushal-dangerBg text-bushal-danger'
+      default: return 'bg-bushal-ivoryDeep text-bushal-inkSoft'
     }
   }
-
   return (
-    <div className="bg-white rounded-2xl border border-bushal-border p-6 animate-fade-in-up">
+    <div className="bg-bushal-surface rounded-2xl border border-bushal-border p-6 animate-fade-in-up">
       <div className="flex items-center justify-between mb-6">
         <h3 className="text-sm font-bold text-bushal-forest">Recent Activity</h3>
-        <span className="text-[11px] text-bushal-inkSoft bg-bushal-ivory px-2 py-1 rounded-full">Last 10 orders</span>
+        <span className="text-[11px] text-bushal-inkSoft bg-bushal-ivoryDeep px-2 py-1 rounded-full">Last 10 orders</span>
       </div>
-      <div className="space-y-3 max-h-96 overflow-y-auto">
+      <div className="space-y-3 max-h-96 overflow-y-auto no-scrollbar">
         {activities.map((activity, i) => (
-          <div key={activity.id} className="flex items-center gap-3 p-3 rounded-xl hover:bg-bushal-ivory transition-all duration-200 group animate-fade-in" style={{ animationDelay: `${i * 50}ms` }}>
+          <div key={activity.id} className="flex items-center gap-3 p-3 rounded-xl hover:bg-bushal-ivoryDeep transition-all duration-200 group animate-fade-in" style={{ animationDelay: `${i * 50}ms` }}>
             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-bushal-copper/20 to-bushal-copper/10 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
               <span className="text-sm font-bold text-bushal-copper">{activity.itemCount}</span>
             </div>
@@ -309,15 +304,15 @@ function ActivityFeed({ activities }: { activities: RecentActivity[] }) {
 
 function TopProductsList({ products }: { products: TopProduct[] }) {
   return (
-    <div className="bg-white rounded-2xl border border-bushal-border p-6 animate-fade-in-up">
+    <div className="bg-bushal-surface rounded-2xl border border-bushal-border p-6 animate-fade-in-up">
       <h3 className="text-sm font-bold text-bushal-forest mb-4">Top Performing Products</h3>
       <div className="space-y-3">
         {products.map((product, i) => {
           const cover = (Array.isArray(product.images) && product.images[0]) || product.image_url
           return (
-            <div key={product.id} className="flex items-center gap-3 p-3 rounded-xl hover:bg-bushal-ivory transition-all duration-200 group" style={{ animationDelay: `${i * 100}ms` }}>
+            <div key={product.id} className="flex items-center gap-3 p-3 rounded-xl hover:bg-bushal-ivoryDeep transition-all duration-200 group" style={{ animationDelay: `${i * 100}ms` }}>
               <div className="text-xs font-bold text-bushal-inkSoft w-5">#{i + 1}</div>
-              <div className="w-12 h-12 rounded-lg overflow-hidden bg-bushal-ivoryDeep flex-shrink-0 group-hover:scale-110 transition-transform">
+              <div className="w-12 h-12 rounded-lg overflow-hidden bg-bushal-ivoryDeep flex-shrink-0 group-hover:scale-110 transition-transform border border-bushal-border">
                 {cover ? (
                   <img src={cover} alt={product.name} className="w-full h-full object-cover" />
                 ) : (
@@ -343,24 +338,23 @@ function TopProductsList({ products }: { products: TopProduct[] }) {
 
 function StockAlert({ summary }: { summary: Summary }) {
   const alerts = [
-    { label: 'Out of Stock', count: summary.outOfStock, color: 'bg-rose-500', bgColor: 'bg-rose-50', textColor: 'text-rose-700', borderColor: 'border-rose-200', icon: '⚠️' },
-    { label: 'Low Stock (≤5)', count: summary.lowStock, color: 'bg-amber-500', bgColor: 'bg-amber-50', textColor: 'text-amber-700', borderColor: 'border-amber-200', icon: '⚡' },
+    { label: 'Out of Stock', count: summary.outOfStock, color: 'bg-bushal-danger', bgColor: 'bg-bushal-dangerBg', textColor: 'text-bushal-danger', borderColor: 'border-bushal-danger/20', icon: '⚠️' },
+    { label: 'Low Stock (≤5)', count: summary.lowStock, color: 'bg-bushal-warning', bgColor: 'bg-bushal-warningBg', textColor: 'text-bushal-warning', borderColor: 'border-bushal-warning/20', icon: '⚡' },
   ].filter(a => a.count > 0)
-
+  
   if (alerts.length === 0) {
     return (
-      <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-6 animate-fade-in-up">
+      <div className="bg-bushal-successBg border border-bushal-success/20 rounded-2xl p-6 animate-fade-in-up">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center"><span className="text-xl">✓</span></div>
+          <div className="w-10 h-10 rounded-full bg-bushal-success/20 flex items-center justify-center"><span className="text-xl text-bushal-success">✓</span></div>
           <div>
-            <p className="text-sm font-bold text-emerald-700">Inventory Healthy</p>
-            <p className="text-xs text-emerald-600">All products are well stocked</p>
+            <p className="text-sm font-bold text-bushal-success">Inventory Healthy</p>
+            <p className="text-xs text-bushal-success/80">All products are well stocked</p>
           </div>
         </div>
       </div>
     )
   }
-
   return (
     <div className="space-y-3 animate-fade-in-up">
       {alerts.map((alert, i) => (
@@ -384,7 +378,7 @@ function AddExpenseModal({ products, onClose, onSaved }: { products: Product[]; 
   const [form, setForm] = useState({ label: '', amount: '', product_id: '' })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-
+  
   const handleSave = async () => {
     if (!form.label.trim() || !form.amount) { setError('Label and amount are required'); return }
     setSaving(true)
@@ -394,11 +388,11 @@ function AddExpenseModal({ products, onClose, onSaved }: { products: Product[]; 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ label: form.label.trim(), amount: parseFloat(form.amount), product_id: form.product_id || null }),
       })
-      if (!res.ok) { 
-        const d = await res.json(); 
-        setError(d.error ?? 'Failed'); 
+      if (!res.ok) {
+        const d = await res.json();
+        setError(d.error ?? 'Failed');
         toast(d.error ?? 'Failed to add expense', 'error')
-        return 
+        return
       }
       toast('Expense added successfully!', 'success')
       onSaved()
@@ -409,36 +403,36 @@ function AddExpenseModal({ products, onClose, onSaved }: { products: Product[]; 
       setSaving(false)
     }
   }
-
+  
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center px-4 bg-slate-900/50 backdrop-blur-sm animate-fade-in">
-      <div className="bg-white rounded-2xl border border-bushal-border shadow-2xl w-full max-w-md p-6 animate-scale-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4 bg-bushal-ink/50 backdrop-blur-sm animate-fade-in">
+      <div className="bg-bushal-surface rounded-2xl border border-bushal-border shadow-2xl w-full max-w-md p-6 animate-scale-in">
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-lg font-bold text-bushal-forest">Add Expense</h2>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg text-bushal-inkSoft hover:text-bushal-forest hover:bg-bushal-ivory transition-colors">
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg text-bushal-inkSoft hover:text-bushal-forest hover:bg-bushal-ivoryDeep transition-colors">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
-        {error && <p className="text-sm text-rose-600 bg-rose-50 border border-rose-200 px-3 py-2 rounded-lg mb-4">{error}</p>}
+        {error && <p className="text-sm text-bushal-danger bg-bushal-dangerBg border border-bushal-danger/20 px-3 py-2 rounded-lg mb-4">{error}</p>}
         <div className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-bushal-ink mb-1.5">Expense Label *</label>
-            <input type="text" placeholder="e.g. Packaging cost, Marketing" value={form.label} onChange={(e) => setForm((f) => ({ ...f, label: e.target.value }))} className="w-full rounded-xl border border-bushal-border px-4 py-2.5 text-sm focus:outline-none focus:border-bushal-copper focus:ring-2 focus:ring-bushal-copper/20 transition-all" />
+            <label className="block text-xs font-semibold text-bushal-inkMid mb-1.5">Expense Label *</label>
+            <input type="text" placeholder="e.g. Packaging cost, Marketing" value={form.label} onChange={(e) => setForm((f) => ({ ...f, label: e.target.value }))} className="w-full rounded-xl border border-bushal-border px-4 py-2.5 text-sm focus:outline-none focus:border-bushal-copper focus:ring-2 focus:ring-bushal-copper/20 transition-all bg-bushal-surface text-bushal-ink placeholder-bushal-inkSoft/60" />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-bushal-ink mb-1.5">Amount (৳) *</label>
-            <input type="number" min="0" step="0.01" placeholder="0.00" value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} className="w-full rounded-xl border border-bushal-border px-4 py-2.5 text-sm focus:outline-none focus:border-bushal-copper focus:ring-2 focus:ring-bushal-copper/20 transition-all" />
+            <label className="block text-xs font-semibold text-bushal-inkMid mb-1.5">Amount (৳) *</label>
+            <input type="number" min="0" step="0.01" placeholder="0.00" value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} className="w-full rounded-xl border border-bushal-border px-4 py-2.5 text-sm focus:outline-none focus:border-bushal-copper focus:ring-2 focus:ring-bushal-copper/20 transition-all bg-bushal-surface text-bushal-ink placeholder-bushal-inkSoft/60" />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-bushal-ink mb-1.5">Related Product (optional)</label>
-            <select value={form.product_id} onChange={(e) => setForm((f) => ({ ...f, product_id: e.target.value }))} className="w-full rounded-xl border border-bushal-border px-4 py-2.5 text-sm focus:outline-none focus:border-bushal-copper focus:ring-2 focus:ring-bushal-copper/20 transition-all">
+            <label className="block text-xs font-semibold text-bushal-inkMid mb-1.5">Related Product (optional)</label>
+            <select value={form.product_id} onChange={(e) => setForm((f) => ({ ...f, product_id: e.target.value }))} className="w-full rounded-xl border border-bushal-border px-4 py-2.5 text-sm focus:outline-none focus:border-bushal-copper focus:ring-2 focus:ring-bushal-copper/20 transition-all bg-bushal-surface text-bushal-ink cursor-pointer">
               <option value="">General expense (all products)</option>
               {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </div>
         </div>
         <div className="flex gap-3 mt-6">
-          <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl border border-bushal-border text-sm font-semibold text-bushal-ink hover:bg-bushal-ivory transition-colors">Cancel</button>
+          <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl border border-bushal-border text-sm font-semibold text-bushal-inkMid hover:bg-bushal-ivoryDeep transition-colors">Cancel</button>
           <button onClick={handleSave} disabled={saving} className="flex-1 px-4 py-2.5 rounded-xl bg-bushal-copper text-white text-sm font-semibold hover:bg-bushal-copperLight disabled:opacity-50 transition-all shadow-lg shadow-bushal-copper/20">
             {saving ? 'Saving...' : 'Add Expense'}
           </button>
@@ -453,7 +447,7 @@ export default function AdminAnalyticsClient({ summary, dailyRevenue, monthlyDat
   const { toast } = useToast()
   const [showExpenseModal, setShowExpenseModal] = useState(false)
   const [deletingExpense, setDeletingExpense] = useState<string | null>(null)
-
+  
   const handleDeleteExpense = async (id: string) => {
     if (!confirm('Delete this expense?')) return
     setDeletingExpense(id)
@@ -471,9 +465,9 @@ export default function AdminAnalyticsClient({ summary, dailyRevenue, monthlyDat
       setDeletingExpense(null)
     }
   }
-
+  
   const profitMargin = summary.totalRevenue > 0 ? ((summary.totalProfit / summary.totalRevenue) * 100).toFixed(1) : '0'
-
+  
   return (
     <div className="space-y-6 pb-10">
       <div className="flex items-center justify-between animate-fade-in-up">
@@ -486,49 +480,49 @@ export default function AdminAnalyticsClient({ summary, dailyRevenue, monthlyDat
           Add Expense
         </button>
       </div>
-
+      
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KPICard label="Total Revenue" value={formatPrice(summary.totalRevenue)} sub={`${summary.fulfilledOrdersCount} fulfilled orders`} trend="12.5%" trendUp={true} accent="blue" icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>} delay={0} />
-        <KPICard label="Net Profit" value={formatPrice(summary.totalProfit)} sub={`${profitMargin}% margin`} trend="8.2%" trendUp={summary.totalProfit > 0} accent={summary.totalProfit >= 0 ? 'green' : 'rose'} icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>} delay={100} />
-        <KPICard label="Total Orders" value={summary.fulfilledOrdersCount + summary.pendingOrders} sub={`${summary.pendingOrders} pending`} trend="5.3%" trendUp={true} accent="orange" icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>} delay={200} />
+        <KPICard label="Net Profit" value={formatPrice(summary.totalProfit)} sub={`${profitMargin}% margin`} trend="8.2%" trendUp={summary.totalProfit > 0} accent={summary.totalProfit >= 0 ? 'green' : 'danger'} icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>} delay={100} />
+        <KPICard label="Total Orders" value={summary.fulfilledOrdersCount + summary.pendingOrders} sub={`${summary.pendingOrders} pending`} trend="5.3%" trendUp={true} accent="copper" icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>} delay={200} />
         <KPICard label="Customers" value={summary.totalCustomers} sub={`${summary.conversionRate}% conversion`} trend="15.7%" trendUp={true} accent="violet" icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>} delay={300} />
       </div>
-
+      
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KPICard label="Avg Order Value" value={formatPrice(summary.avgOrderValue)} sub="per order" accent="cyan" icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>} delay={400} />
-        <KPICard label="Inventory Value" value={formatPrice(summary.totalInventoryValue)} sub="total stock" accent="amber" icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>} delay={500} />
+        <KPICard label="Inventory Value" value={formatPrice(summary.totalInventoryValue)} sub="total stock" accent="warning" icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>} delay={500} />
         <KPICard label="Products (30d)" value={summary.productsAdded30d} sub="new additions" accent="forest" icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>} delay={600} />
         <KPICard label="Units Sold (30d)" value={summary.soldIn30d} sub="from fulfilled orders" accent="green" icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" /></svg>} delay={700} />
       </div>
-
+      
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2"><AreaChart data={dailyRevenue} /></div>
         <div><StockAlert summary={summary} /></div>
       </div>
-
+      
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <DonutChart data={categoryPerformance.map((cat, i) => ({ label: cat.name, value: cat.revenue, color: ['#B87333', '#1B3A2D', '#2D5A42', '#3D7A5A', '#D4954A'][i % 5] }))} />
         <TopProductsList products={topProducts} />
         <ActivityFeed activities={recentActivity} />
       </div>
-
-      <div className="bg-white rounded-2xl border border-bushal-border p-6 animate-fade-in-up">
+      
+      <div className="bg-bushal-surface rounded-2xl border border-bushal-border p-6 animate-fade-in-up">
         <h3 className="text-sm font-bold text-bushal-forest mb-6">Financial Breakdown</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <div className="flex items-center gap-4"><ProgressRing progress={100} color="stroke-blue-500" /><div><p className="text-xs text-bushal-inkSoft">Revenue</p><p className="text-lg font-bold text-bushal-forest">{formatPrice(summary.totalRevenue)}</p></div></div>
-          <div className="flex items-center gap-4"><ProgressRing progress={summary.totalRevenue > 0 ? (summary.totalCOGS / summary.totalRevenue) * 100 : 0} color="stroke-rose-500" /><div><p className="text-xs text-bushal-inkSoft">Product Costs</p><p className="text-lg font-bold text-bushal-forest">{formatPrice(summary.totalCOGS)}</p></div></div>
-          <div className="flex items-center gap-4"><ProgressRing progress={summary.totalRevenue > 0 ? (summary.totalDeliveryCharges / summary.totalRevenue) * 100 : 0} color="stroke-amber-500" /><div><p className="text-xs text-bushal-inkSoft">Delivery</p><p className="text-lg font-bold text-bushal-forest">{formatPrice(summary.totalDeliveryCharges)}</p></div></div>
-          <div className="flex items-center gap-4"><ProgressRing progress={summary.totalRevenue > 0 ? Math.abs(summary.totalProfit / summary.totalRevenue) * 100 : 0} color={summary.totalProfit >= 0 ? "stroke-emerald-500" : "stroke-rose-500"} /><div><p className="text-xs text-bushal-inkSoft">Net Profit</p><p className={cn('text-lg font-bold', summary.totalProfit >= 0 ? 'text-emerald-600' : 'text-rose-600')}>{formatPrice(summary.totalProfit)}</p></div></div>
+          <div className="flex items-center gap-4"><ProgressRing progress={summary.totalRevenue > 0 ? (summary.totalCOGS / summary.totalRevenue) * 100 : 0} color="stroke-bushal-danger" /><div><p className="text-xs text-bushal-inkSoft">Product Costs</p><p className="text-lg font-bold text-bushal-forest">{formatPrice(summary.totalCOGS)}</p></div></div>
+          <div className="flex items-center gap-4"><ProgressRing progress={summary.totalRevenue > 0 ? (summary.totalDeliveryCharges / summary.totalRevenue) * 100 : 0} color="stroke-bushal-warning" /><div><p className="text-xs text-bushal-inkSoft">Delivery</p><p className="text-lg font-bold text-bushal-forest">{formatPrice(summary.totalDeliveryCharges)}</p></div></div>
+          <div className="flex items-center gap-4"><ProgressRing progress={summary.totalRevenue > 0 ? Math.abs(summary.totalProfit / summary.totalRevenue) * 100 : 0} color={summary.totalProfit >= 0 ? "stroke-bushal-success" : "stroke-bushal-danger"} /><div><p className="text-xs text-bushal-inkSoft">Net Profit</p><p className={cn('text-lg font-bold', summary.totalProfit >= 0 ? 'text-bushal-success' : 'text-bushal-danger')}>{formatPrice(summary.totalProfit)}</p></div></div>
         </div>
       </div>
-
-      <div className="bg-white rounded-2xl border border-bushal-border p-6 animate-fade-in-up">
+      
+      <div className="bg-bushal-surface rounded-2xl border border-bushal-border p-6 animate-fade-in-up">
         <div className="flex items-center justify-between mb-6">
           <div><h3 className="text-sm font-bold text-bushal-forest">Monthly Performance</h3><p className="text-[11px] text-bushal-inkSoft mt-0.5">Revenue, costs, and profit trends</p></div>
           <div className="flex items-center gap-4 text-[11px]">
             <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-blue-500" />Revenue</span>
-            <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-emerald-500" />Profit</span>
-            <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-rose-400" />Cost</span>
+            <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-bushal-success" />Profit</span>
+            <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-bushal-danger/60" />Cost</span>
           </div>
         </div>
         <div className="flex items-end gap-3 h-48">
@@ -543,8 +537,8 @@ export default function AdminAnalyticsClient({ summary, dailyRevenue, monthlyDat
                   <div className="flex-1 bg-blue-400 rounded-t-md transition-all duration-500 hover:bg-blue-500 relative" style={{ height: `${revH}%` }}>
                     <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-bushal-forest text-white text-[10px] px-1.5 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">{formatPrice(d.revenue)}</div>
                   </div>
-                  <div className="flex-1 bg-rose-400 rounded-t-md transition-all duration-500 hover:bg-rose-500 relative" style={{ height: `${costH}%` }} />
-                  <div className={cn('flex-1 rounded-t-md transition-all duration-500 relative', d.profit >= 0 ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-rose-500 hover:bg-rose-600')} style={{ height: `${profH}%` }}>
+                  <div className="flex-1 bg-bushal-danger/60 rounded-t-md transition-all duration-500 hover:bg-bushal-danger/80 relative" style={{ height: `${costH}%` }} />
+                  <div className={cn('flex-1 rounded-t-md transition-all duration-500 relative', d.profit >= 0 ? 'bg-bushal-success hover:bg-bushal-success/90' : 'bg-bushal-danger hover:bg-bushal-danger/90')} style={{ height: `${profH}%` }}>
                     <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-bushal-forest text-white text-[10px] px-1.5 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">{formatPrice(d.profit)}</div>
                   </div>
                 </div>
@@ -554,8 +548,8 @@ export default function AdminAnalyticsClient({ summary, dailyRevenue, monthlyDat
           })}
         </div>
       </div>
-
-      <div className="bg-white rounded-2xl border border-bushal-border overflow-hidden animate-fade-in-up">
+      
+      <div className="bg-bushal-surface rounded-2xl border border-bushal-border overflow-hidden animate-fade-in-up">
         <div className="flex items-center justify-between px-6 py-4 border-b border-bushal-border">
           <div><h3 className="text-sm font-bold text-bushal-forest">Extra Expenses</h3><p className="text-[11px] text-bushal-inkSoft mt-0.5">Additional costs beyond product and delivery</p></div>
           <button onClick={() => setShowExpenseModal(true)} className="text-xs font-semibold text-bushal-copper hover:text-bushal-copperLight flex items-center gap-1 transition-colors">
@@ -571,9 +565,9 @@ export default function AdminAnalyticsClient({ summary, dailyRevenue, monthlyDat
             <button onClick={() => setShowExpenseModal(true)} className="mt-3 text-xs font-semibold text-bushal-copper hover:text-bushal-copperLight transition-colors">Add your first expense →</button>
           </div>
         ) : (
-          <div className="divide-y divide-bushal-ivory">
+          <div className="divide-y divide-bushal-ivoryDeep">
             {expenses.map((exp, i) => (
-              <div key={exp.id} className="flex items-center gap-4 px-6 py-4 hover:bg-bushal-ivory transition-all duration-200 group" style={{ animationDelay: `${i * 50}ms` }}>
+              <div key={exp.id} className="flex items-center gap-4 px-6 py-4 hover:bg-bushal-ivoryDeep transition-all duration-200 group" style={{ animationDelay: `${i * 50}ms` }}>
                 <div className="w-10 h-10 rounded-xl bg-violet-100 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
                   <svg className="w-5 h-5 text-violet-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
                 </div>
@@ -582,7 +576,7 @@ export default function AdminAnalyticsClient({ summary, dailyRevenue, monthlyDat
                   <p className="text-[11px] text-bushal-inkSoft mt-0.5">{new Date(exp.created_at).toLocaleDateString('en-BD', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
                 </div>
                 <p className="text-sm font-bold text-bushal-forest">{formatPrice(exp.amount)}</p>
-                <button onClick={() => handleDeleteExpense(exp.id)} disabled={deletingExpense === exp.id} className="w-8 h-8 rounded-lg flex items-center justify-center text-bushal-borderMid hover:text-rose-500 hover:bg-rose-50 transition-all opacity-0 group-hover:opacity-100">
+                <button onClick={() => handleDeleteExpense(exp.id)} disabled={deletingExpense === exp.id} className="w-8 h-8 rounded-lg flex items-center justify-center text-bushal-borderMid hover:text-bushal-danger hover:bg-bushal-dangerBg transition-all opacity-0 group-hover:opacity-100">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                 </button>
               </div>
@@ -590,7 +584,7 @@ export default function AdminAnalyticsClient({ summary, dailyRevenue, monthlyDat
           </div>
         )}
       </div>
-
+      
       {showExpenseModal && <AddExpenseModal products={products} onClose={() => setShowExpenseModal(false)} onSaved={() => router.refresh()} />}
     </div>
   )

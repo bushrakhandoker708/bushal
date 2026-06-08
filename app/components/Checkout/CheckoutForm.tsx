@@ -2,8 +2,8 @@
 'use client'
 
 import { useState } from 'react'
-import Input from '../ui/Input'
-import Button from '../ui/Button'
+import Input from '@/app/components/ui/Input'
+import Button from '@/app/components/ui/Button'
 
 interface Props {
   onBkash: () => Promise<void>
@@ -31,9 +31,12 @@ export default function CheckoutForm({ onBkash, onCOD, loading }: Props) {
   }
 
   return (
-    <div>
-      <h2 className="text-xl font-bold text-gray-900 mb-6">Delivery Information</h2>
-      <form onSubmit={handleSubmit} className="space-y-4">
+    <div className="bg-bushal-surface rounded-2xl border border-bushal-border p-6 shadow-card">
+      <h2 className="text-xl font-heading font-bold text-bushal-forest mb-6">
+        Delivery Information
+      </h2>
+      
+      <form onSubmit={handleSubmit} className="space-y-5">
         <Input
           id="fullName"
           name="fullName"
@@ -43,16 +46,19 @@ export default function CheckoutForm({ onBkash, onCOD, loading }: Props) {
           placeholder="Muhammad Alif"
           required
         />
+        
         <Input
           id="email"
           name="email"
           type="email"
-          label="Email"
+          label="Email Address"
           value={form.email}
           onChange={handleChange}
-          placeholder="alif@gmail.com"
+          placeholder="alif@example.com"
           required
+          autoComplete="email"
         />
+        
         <Input
           id="phone"
           name="phone"
@@ -63,6 +69,7 @@ export default function CheckoutForm({ onBkash, onCOD, loading }: Props) {
           placeholder="+880 1700 000 000"
           required
         />
+        
         <Input
           id="address"
           name="address"
@@ -72,7 +79,8 @@ export default function CheckoutForm({ onBkash, onCOD, loading }: Props) {
           placeholder="House 12, Road 5, Dhanmondi"
           required
         />
-        <div className="grid grid-cols-2 gap-4">
+        
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
           <Input
             id="city"
             name="city"
@@ -94,9 +102,15 @@ export default function CheckoutForm({ onBkash, onCOD, loading }: Props) {
         </div>
 
         <div className="flex flex-col gap-3 pt-4">
-          <Button type="submit" loading={loading} size="lg" className="w-full">
-            Pay with bKash
+          <Button 
+            type="submit" 
+            loading={loading} 
+            size="lg" 
+            className="w-full"
+          >
+            Pay securely with bKash
           </Button>
+          
           <Button
             type="button"
             onClick={onCOD}
@@ -108,9 +122,13 @@ export default function CheckoutForm({ onBkash, onCOD, loading }: Props) {
             Cash on Delivery (COD)
           </Button>
         </div>
-        <p className="text-xs text-gray-400 text-center mt-2">
-          Your information is secure and encrypted.
-        </p>
+        
+        <div className="flex items-center justify-center gap-2 pt-2 text-xs text-bushal-inkSoft">
+          <svg className="w-3.5 h-3.5 text-bushal-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+          </svg>
+          <span>Your information is encrypted and securely processed.</span>
+        </div>
       </form>
     </div>
   )

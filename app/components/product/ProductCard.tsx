@@ -19,12 +19,12 @@ export default function ProductCard({ product, index = 0 }: Props) {
   const [added, setAdded] = useState(false)
   const [imgIndex, setImgIndex] = useState(0)
   const [isWished, setIsWished] = useState(false)
-  const [quickViewOpen, setQuickViewOpen] = useState(false) 
-
+  const [quickViewOpen, setQuickViewOpen] = useState(false)
+  
   const discountedPrice = product.discount_percent
     ? product.price * (1 - product.discount_percent / 100)
     : null
-
+    
   const images = product.images?.length ? product.images : product.image_url ? [product.image_url] : []
 
   const handleAdd = (e: React.MouseEvent) => {
@@ -43,7 +43,7 @@ export default function ProductCard({ product, index = 0 }: Props) {
     >
       {/* Image Container */}
       <Link href={`/product/${product.id}`} className="block relative overflow-hidden rounded-2xl bg-bushal-ivoryDeep aspect-[4/5]">
-        <div 
+        <div
           className="absolute inset-0"
           onMouseEnter={() => images.length > 1 && setImgIndex(1)}
           onMouseLeave={() => setImgIndex(0)}
@@ -71,7 +71,9 @@ export default function ProductCard({ product, index = 0 }: Props) {
             </>
           ) : (
             <div className="w-full h-full flex items-center justify-center text-bushal-borderMid">
-              <svg className="w-16 h-16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+              <svg className="w-16 h-16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
             </div>
           )}
         </div>
@@ -79,12 +81,12 @@ export default function ProductCard({ product, index = 0 }: Props) {
         {/* Badges */}
         <div className="absolute top-3 left-3 flex flex-col gap-2 z-10">
           {product.discount_percent ? (
-            <span className="bg-bushal-copper text-white text-[10px] font-body font-bold tracking-wider uppercase px-2.5 py-1 rounded-full shadow-sm">
+            <span className="bg-bushal-copper text-white text-[10px] font-semibold tracking-wider uppercase px-2.5 py-1 rounded-full shadow-sm">
               Save {product.discount_percent}%
             </span>
           ) : null}
           {!product.in_stock && (
-            <span className="bg-bushal-forest/90 backdrop-blur-md text-bushal-ivory text-[10px] font-body font-bold tracking-wider uppercase px-2.5 py-1 rounded-full">
+            <span className="bg-bushal-forest/90 backdrop-blur-md text-bushal-ivory text-[10px] font-semibold tracking-wider uppercase px-2.5 py-1 rounded-full">
               Sold Out
             </span>
           )}
@@ -95,7 +97,9 @@ export default function ProductCard({ product, index = 0 }: Props) {
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); setIsWished(!isWished) }}
           className={cn(
             "absolute top-3 right-3 w-9 h-9 rounded-full flex items-center justify-center transition-all duration-300 z-10",
-            isWished ? "bg-bushal-copper text-white scale-110" : "bg-white/80 backdrop-blur-md text-bushal-forest hover:bg-white hover:scale-110"
+            isWished 
+              ? "bg-bushal-copper text-white scale-110" 
+              : "bg-bushal-surface/80 backdrop-blur-md text-bushal-forest hover:bg-bushal-surface hover:scale-110"
           )}
           aria-label="Add to wishlist"
         >
@@ -107,7 +111,7 @@ export default function ProductCard({ product, index = 0 }: Props) {
         {/* Quick View Button */}
         <button
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); setQuickViewOpen(true) }}
-          className="absolute bottom-3 left-3 w-9 h-9 rounded-full flex items-center justify-center bg-white/80 backdrop-blur-md text-bushal-forest hover:bg-white hover:scale-110 transition-all duration-300 z-10 opacity-0 group-hover:opacity-100 shadow-sm"
+          className="absolute bottom-3 left-3 w-9 h-9 rounded-full flex items-center justify-center bg-bushal-surface/80 backdrop-blur-md text-bushal-forest hover:bg-bushal-surface hover:scale-110 transition-all duration-300 z-10 opacity-0 group-hover:opacity-100 shadow-sm"
           aria-label="Quick view"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -122,12 +126,12 @@ export default function ProductCard({ product, index = 0 }: Props) {
             onClick={handleAdd}
             disabled={!product.in_stock}
             className={cn(
-              "w-full py-3 rounded-xl font-body font-semibold text-sm tracking-wide transition-all duration-300 shadow-lg",
+              "w-full py-3 rounded-xl font-semibold text-sm tracking-wide transition-all duration-300 shadow-lg",
               product.in_stock
                 ? added
                   ? "bg-bushal-success text-white"
-                  : "bg-bushal-forest text-bushal-ivory hover:bg-bushal-forestMid active:scale-[0.98]"
-                : "bg-bushal-inkSoft/50 text-bushal-ivory cursor-not-allowed"
+                  : "btn-forest active:scale-[0.98]"
+                : "bg-bushal-border text-bushal-inkSoft cursor-not-allowed"
             )}
           >
             {added ? "Added to Bag" : product.in_stock ? "Add to Bag" : "Sold Out"}
@@ -145,7 +149,7 @@ export default function ProductCard({ product, index = 0 }: Props) {
         
         <div className="flex items-center justify-between mt-auto pt-2">
           <div className="flex items-baseline gap-2">
-            <span className="font-body font-semibold text-bushal-copper text-lg">
+            <span className="font-semibold text-bushal-copper text-lg">
               {formatPrice(discountedPrice ?? product.price)}
             </span>
             {discountedPrice && (
@@ -155,11 +159,6 @@ export default function ProductCard({ product, index = 0 }: Props) {
             )}
           </div>
           
-      <ProductQuickView 
-        product={quickViewOpen ? product : null} 
-        onClose={() => setQuickViewOpen(false)} 
-      />
-
           {/* Mobile Add Button */}
           <button
             onClick={handleAdd}
@@ -175,13 +174,22 @@ export default function ProductCard({ product, index = 0 }: Props) {
             aria-label="Add to cart"
           >
             {added ? (
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+              </svg>
             ) : (
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
             )}
           </button>
         </div>
       </div>
+
+      <ProductQuickView
+        product={quickViewOpen ? product : null}
+        onClose={() => setQuickViewOpen(false)}
+      />
     </div>
   )
 }

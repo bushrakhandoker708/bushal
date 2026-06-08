@@ -28,7 +28,6 @@ export default function AdminProductsClient({ products, categories }: Props) {
 
   const filtered = useMemo(() => {
     let list = [...products]
-
     if (search.trim()) {
       const q = search.trim().toLowerCase()
       list = list.filter(
@@ -38,13 +37,11 @@ export default function AdminProductsClient({ products, categories }: Props) {
           (p.description ?? '').toLowerCase().includes(q)
       )
     }
-
-    if (stockFilter === 'in_stock')     list = list.filter((p) => p.in_stock && (p.stock_quantity ?? 0) > 5)
+    if (stockFilter === 'in_stock') list = list.filter((p) => p.in_stock && (p.stock_quantity ?? 0) > 5)
     if (stockFilter === 'out_of_stock') list = list.filter((p) => !p.in_stock)
-    if (stockFilter === 'low_stock')    list = list.filter((p) => p.in_stock && (p.stock_quantity ?? 0) > 0 && (p.stock_quantity ?? 0) <= 5)
-
+    if (stockFilter === 'low_stock') list = list.filter((p) => p.in_stock && (p.stock_quantity ?? 0) > 0 && (p.stock_quantity ?? 0) <= 5)
     if (categoryFilter !== 'all') list = list.filter((p) => p.category === categoryFilter)
-
+    
     list.sort((a, b) => {
       let va: any = a[sortKey as keyof Product]
       let vb: any = b[sortKey as keyof Product]
@@ -56,7 +53,6 @@ export default function AdminProductsClient({ products, categories }: Props) {
       if (va > vb) return sortDir === 'asc' ? 1 : -1
       return 0
     })
-
     return list
   }, [products, search, stockFilter, categoryFilter, sortKey, sortDir])
 
@@ -93,10 +89,10 @@ export default function AdminProductsClient({ products, categories }: Props) {
   }
 
   const stockFilterOptions: { value: StockFilter; label: string; color: string; activeColor: string }[] = [
-    { value: 'all',          label: `All (${stockCounts.all})`,                   color: 'bg-white text-slate-600 border-slate-200',         activeColor: 'bg-slate-900 text-white border-slate-900' },
-    { value: 'in_stock',     label: `In Stock (${stockCounts.in_stock})`,         color: 'bg-emerald-50 text-emerald-700 border-emerald-200', activeColor: 'bg-emerald-600 text-white border-emerald-600' },
-    { value: 'low_stock',    label: `Low Stock (${stockCounts.low_stock})`,       color: 'bg-amber-50 text-amber-700 border-amber-200',       activeColor: 'bg-amber-500 text-white border-amber-500' },
-    { value: 'out_of_stock', label: `Out of Stock (${stockCounts.out_of_stock})`, color: 'bg-rose-50 text-rose-600 border-rose-200',         activeColor: 'bg-rose-500 text-white border-rose-500' },
+    { value: 'all',          label: `All (${stockCounts.all})`,                   color: 'bg-bushal-surface text-bushal-inkMid border-bushal-border',         activeColor: 'bg-bushal-forest text-white border-bushal-forest' },
+    { value: 'in_stock',     label: `In Stock (${stockCounts.in_stock})`,         color: 'bg-bushal-successBg text-bushal-success border-bushal-success/20', activeColor: 'bg-bushal-success text-white border-bushal-success' },
+    { value: 'low_stock',    label: `Low Stock (${stockCounts.low_stock})`,       color: 'bg-bushal-warningBg text-bushal-warning border-bushal-warning/20', activeColor: 'bg-bushal-warning text-white border-bushal-warning' },
+    { value: 'out_of_stock', label: `Out of Stock (${stockCounts.out_of_stock})`, color: 'bg-bushal-dangerBg text-bushal-danger border-bushal-danger/20',   activeColor: 'bg-bushal-danger text-white border-bushal-danger' },
   ]
 
   return (
@@ -111,7 +107,7 @@ export default function AdminProductsClient({ products, categories }: Props) {
         </div>
         <Link
           href="/admin/products/new"
-          className="inline-flex items-center gap-2 bg-orange-600 text-white px-4 py-2.5 rounded-xl font-semibold text-sm hover:bg-orange-700 transition-all shadow-lg shadow-orange-600/20 hover:-translate-y-0.5 active:scale-[0.97] self-start sm:self-auto"
+          className="inline-flex items-center gap-2 bg-bushal-copper text-white px-4 py-2.5 rounded-xl font-semibold text-sm hover:bg-bushal-copperLight transition-all shadow-lg shadow-bushal-copper/20 hover:-translate-y-0.5 active:scale-[0.97] self-start sm:self-auto"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -147,12 +143,12 @@ export default function AdminProductsClient({ products, categories }: Props) {
             placeholder="Search by name, category, description..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-bushal-forest placeholder-slate-400 focus:outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 transition-all"
+            className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-bushal-border bg-bushal-surface text-sm text-bushal-ink placeholder-bushal-inkSoft/60 focus:outline-none focus:border-bushal-copper focus:ring-2 focus:ring-bushal-copper/20 transition-all"
           />
           {search && (
             <button
               onClick={() => setSearch('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-bushal-inkSoft hover:text-slate-600"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-bushal-inkSoft hover:text-bushal-ink"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -163,7 +159,7 @@ export default function AdminProductsClient({ products, categories }: Props) {
         <select
           value={categoryFilter}
           onChange={(e) => setCategoryFilter(e.target.value)}
-          className="px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-700 focus:outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 transition-all cursor-pointer"
+          className="px-3 py-2.5 rounded-xl border border-bushal-border bg-bushal-surface text-sm text-bushal-ink focus:outline-none focus:border-bushal-copper focus:ring-2 focus:ring-bushal-copper/20 transition-all cursor-pointer"
         >
           <option value="all">All Categories</option>
           {categories.map((c) => (
@@ -173,11 +169,11 @@ export default function AdminProductsClient({ products, categories }: Props) {
       </div>
 
       {/* Desktop Table */}
-      <div className="hidden md:block bg-white rounded-2xl border border-slate-200 overflow-hidden">
+      <div className="hidden md:block bg-bushal-surface rounded-2xl border border-bushal-border overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full">
             <thead>
-              <tr className="bg-bushal-ivory border-b border-slate-100">
+              <tr className="bg-bushal-ivoryDeep border-b border-bushal-border">
                 {[
                   { label: 'Product', key: 'name' as SortKey },
                   { label: 'Category', key: 'category' as SortKey },
@@ -188,15 +184,15 @@ export default function AdminProductsClient({ products, categories }: Props) {
                   <th
                     key={key}
                     onClick={() => toggleSort(key)}
-                    className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wide cursor-pointer hover:text-slate-700 select-none"
+                    className="px-4 py-3 text-left text-xs font-bold text-bushal-inkSoft uppercase tracking-wide cursor-pointer hover:text-bushal-ink select-none"
                   >
                     {label}<SortIcon k={key} />
                   </th>
                 ))}
-                <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase tracking-wide">Actions</th>
+                <th className="px-4 py-3 text-right text-xs font-bold text-bushal-inkSoft uppercase tracking-wide">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-50">
+            <tbody className="divide-y divide-bushal-ivory">
               {filtered.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="py-16 text-center text-bushal-inkSoft text-sm">
@@ -209,22 +205,21 @@ export default function AdminProductsClient({ products, categories }: Props) {
                   const isOut = qty === 0
                   const isLow = qty > 0 && qty <= 5
                   const cover = (Array.isArray(product.images) && product.images[0]) || product.image_url
-
                   return (
-                    <tr key={product.id} className="hover:bg-bushal-ivory/70 transition-colors">
+                    <tr key={product.id} className="hover:bg-bushal-ivoryDeep/50 transition-colors">
                       <td className="px-4 py-3.5">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-xl overflow-hidden bg-bushal-ivoryDeep border border-slate-100 flex-shrink-0">
+                          <div className="w-10 h-10 rounded-xl overflow-hidden bg-bushal-ivoryDeep border border-bushal-border flex-shrink-0">
                             {cover ? (
                               <img src={cover} alt="" className="w-full h-full object-cover" />
                             ) : (
-                              <div className="w-full h-full flex items-center justify-center text-slate-300 text-xs">📦</div>
+                              <div className="w-full h-full flex items-center justify-center text-bushal-borderMid text-xs">📦</div>
                             )}
                           </div>
                           <div className="min-w-0">
-                            <p className="text-sm font-semibold text-slate-800 truncate max-w-[200px]">{product.name}</p>
+                            <p className="text-sm font-semibold text-bushal-ink truncate max-w-[200px]">{product.name}</p>
                             {product.discount_percent ? (
-                              <span className="text-[11px] font-bold text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded-md">
+                              <span className="text-[11px] font-bold text-bushal-copper bg-bushal-copper/10 px-1.5 py-0.5 rounded-md">
                                 {product.discount_percent}% OFF
                               </span>
                             ) : null}
@@ -232,7 +227,7 @@ export default function AdminProductsClient({ products, categories }: Props) {
                         </div>
                       </td>
                       <td className="px-4 py-3.5">
-                        <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-semibold bg-bushal-ivoryDeep text-slate-700">
+                        <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-semibold bg-bushal-ivoryDeep text-bushal-inkMid">
                           {product.category ?? 'General'}
                         </span>
                       </td>
@@ -242,13 +237,13 @@ export default function AdminProductsClient({ products, categories }: Props) {
                       <td className="px-4 py-3.5">
                         <span className={cn(
                           'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold',
-                          isOut ? 'bg-rose-100 text-rose-600' :
-                          isLow ? 'bg-amber-100 text-amber-700' :
-                                  'bg-emerald-100 text-emerald-700'
+                          isOut ? 'bg-bushal-dangerBg text-bushal-danger' :
+                          isLow ? 'bg-bushal-warningBg text-bushal-warning' :
+                          'bg-bushal-successBg text-bushal-success'
                         )}>
                           <span className={cn(
                             'w-1.5 h-1.5 rounded-full',
-                            isOut ? 'bg-rose-500' : isLow ? 'bg-amber-500' : 'bg-emerald-500'
+                            isOut ? 'bg-bushal-danger' : isLow ? 'bg-bushal-warning' : 'bg-bushal-success'
                           )} />
                           {isOut ? 'Out of Stock' : `${qty} units`}
                         </span>
@@ -260,7 +255,7 @@ export default function AdminProductsClient({ products, categories }: Props) {
                         <div className="flex items-center gap-2 justify-end">
                           <Link
                             href={`/admin/products/${product.id}/edit`}
-                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-bushal-ivoryDeep text-slate-700 text-xs font-semibold hover:bg-orange-50 hover:text-orange-700 transition-colors"
+                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-bushal-ivoryDeep text-bushal-inkMid text-xs font-semibold hover:bg-bushal-copper/10 hover:text-bushal-copper transition-colors"
                           >
                             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -270,7 +265,7 @@ export default function AdminProductsClient({ products, categories }: Props) {
                           <button
                             onClick={() => handleDelete(product.id)}
                             disabled={deleting === product.id}
-                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-rose-50 text-rose-600 text-xs font-semibold hover:bg-rose-100 transition-colors disabled:opacity-50"
+                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-bushal-dangerBg text-bushal-danger text-xs font-semibold hover:bg-bushal-danger/20 transition-colors disabled:opacity-50"
                           >
                             {deleting === product.id ? (
                               <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -298,7 +293,7 @@ export default function AdminProductsClient({ products, categories }: Props) {
       {/* Mobile card list */}
       <div className="md:hidden space-y-3">
         {filtered.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-slate-200 py-16 text-center text-bushal-inkSoft text-sm">
+          <div className="bg-bushal-surface rounded-2xl border border-bushal-border py-16 text-center text-bushal-inkSoft text-sm">
             No products match your filters
           </div>
         ) : (
@@ -307,28 +302,27 @@ export default function AdminProductsClient({ products, categories }: Props) {
             const isOut = qty === 0
             const isLow = qty > 0 && qty <= 5
             const cover = (Array.isArray(product.images) && product.images[0]) || product.image_url
-
             return (
-              <div key={product.id} className="bg-white rounded-2xl border border-slate-200 p-4">
+              <div key={product.id} className="bg-bushal-surface rounded-2xl border border-bushal-border p-4">
                 <div className="flex items-start gap-3">
-                  <div className="w-12 h-12 rounded-xl overflow-hidden bg-bushal-ivoryDeep border border-slate-100 flex-shrink-0">
+                  <div className="w-12 h-12 rounded-xl overflow-hidden bg-bushal-ivoryDeep border border-bushal-border flex-shrink-0">
                     {cover ? (
                       <img src={cover} alt="" className="w-full h-full object-cover" />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center text-slate-300 text-sm">📦</div>
+                      <div className="w-full h-full flex items-center justify-center text-bushal-borderMid text-sm">📦</div>
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-bushal-forest text-sm truncate">{product.name}</p>
                     <div className="flex items-center gap-2 mt-1 flex-wrap">
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-bushal-ivoryDeep text-slate-600 font-medium">
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-bushal-ivoryDeep text-bushal-inkMid font-medium">
                         {product.category ?? 'General'}
                       </span>
                       <span className={cn(
                         'text-xs px-2 py-0.5 rounded-full font-semibold',
-                        isOut ? 'bg-rose-100 text-rose-600' :
-                        isLow ? 'bg-amber-100 text-amber-700' :
-                                'bg-emerald-100 text-emerald-700'
+                        isOut ? 'bg-bushal-dangerBg text-bushal-danger' :
+                        isLow ? 'bg-bushal-warningBg text-bushal-warning' :
+                        'bg-bushal-successBg text-bushal-success'
                       )}>
                         {isOut ? 'Out of Stock' : `${qty} in stock`}
                       </span>
@@ -339,14 +333,14 @@ export default function AdminProductsClient({ products, categories }: Props) {
                 <div className="flex gap-2 mt-3">
                   <Link
                     href={`/admin/products/${product.id}/edit`}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-bushal-ivoryDeep text-slate-700 text-xs font-semibold hover:bg-orange-50 hover:text-orange-700 transition-colors"
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-bushal-ivoryDeep text-bushal-inkMid text-xs font-semibold hover:bg-bushal-copper/10 hover:text-bushal-copper transition-colors"
                   >
                     Edit
                   </Link>
                   <button
                     onClick={() => handleDelete(product.id)}
                     disabled={deleting === product.id}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-rose-50 text-rose-600 text-xs font-semibold hover:bg-rose-100 transition-colors disabled:opacity-50"
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-bushal-dangerBg text-bushal-danger text-xs font-semibold hover:bg-bushal-danger/20 transition-colors disabled:opacity-50"
                   >
                     {deleting === product.id ? 'Deleting...' : 'Delete'}
                   </button>

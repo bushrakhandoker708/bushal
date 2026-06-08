@@ -1,15 +1,16 @@
 // app/(customer)/dashboard/page.tsx
 import { createServerClient } from '@/lib/supabase/server'
-import CategoryFilter from '@/app/components/product/CatagoryFilter'
 import Navbar from '@/app/components/layout/Navbar'
 import Footer from '@/app/components/layout/Footer'
 import BottomNav from '@/app/components/layout/BottomNav'
 import HeroBanner from '@/app/components/home/HeroBanner'
 import TrustBar from '@/app/components/home/TrustBar'
 import SectionHeader from '@/app/components/ui/SectionHeader'
+import PageWrapper from '@/app/components/layout/PageWrapper'
 import { formatPrice } from '@/app/lib/utils/formatPrice'
 import Link from 'next/link'
 import { Metadata } from 'next'
+import CategoryFilter from '@/app/components/product/CatagoryFilter'
 
 export const metadata: Metadata = {
   title: 'Home — Premium Curated Products',
@@ -21,10 +22,8 @@ export const metadata: Metadata = {
   },
 }
 
-
 export default async function DashboardPage() {
   const supabase = createServerClient()
-
   const { data: products, error } = await supabase
     .from('products')
     .select(`*, comments ( rating )`)
@@ -33,7 +32,6 @@ export default async function DashboardPage() {
   if (error) console.error('Error fetching products:', error)
 
   const allProducts = products ?? []
-
   const discounted = allProducts
     .filter((p) => p.discount_percent && p.discount_percent > 0 && p.in_stock)
     .sort((a, b) => (b.discount_percent ?? 0) - (a.discount_percent ?? 0))
@@ -42,8 +40,8 @@ export default async function DashboardPage() {
   return (
     <div className="min-h-screen bg-bushal-ivory">
       <Navbar />
-
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-28 md:pb-12">
+      
+      <PageWrapper maxWidth="7xl" className="pb-28 md:pb-12">
         <HeroBanner />
         <TrustBar />
 
@@ -63,6 +61,7 @@ export default async function DashboardPage() {
                 const cover = (Array.isArray(p.images) && p.images[0]) || p.image_url
                 const discountedPrice = p.price * (1 - (p.discount_percent ?? 0) / 100)
                 const saved = p.price - discountedPrice
+
                 return (
                   <a
                     key={p.id}
@@ -105,7 +104,7 @@ export default async function DashboardPage() {
           />
           <CategoryFilter products={allProducts} />
         </section>
-      </main>
+      </PageWrapper>
 
       <Footer />
       <BottomNav />

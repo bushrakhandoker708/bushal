@@ -7,4 +7,5 @@ export interface CartItem {
   image_url?: string | null
   discount_percent?: number | null
   quantity: number
+  in_stock: boolean 
 }

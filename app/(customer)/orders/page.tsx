@@ -6,11 +6,20 @@ import BottomNav from '@/app/components/layout/BottomNav'
 import OrderCard from '@/app/components/order/OrderCard'
 import EmptyState from '@/app/components/ui/EmptyState'
 import SectionHeader from '@/app/components/ui/SectionHeader'
+import PageWrapper from '@/app/components/layout/PageWrapper'
 import Link from 'next/link'
+import { Metadata } from 'next'
+
+export const metadata: Metadata = {
+  title: 'My Orders',
+  description: 'View and track your order history, delivery status, and receipts on Bushal.',
+  robots: { index: false, follow: true }, // Keep order pages out of public search results for privacy
+}
 
 export default async function CustomerOrdersPage() {
   const supabase = createServerClient()
   const { data: { session } } = await supabase.auth.getSession()
+  
   if (!session) redirect('/login')
 
   const { data: orders } = await supabase
@@ -36,7 +45,8 @@ export default async function CustomerOrdersPage() {
   return (
     <div className="min-h-screen bg-bushal-ivory">
       <Navbar />
-      <main className="max-w-2xl mx-auto px-4 sm:px-6 py-8 pb-28 md:pb-12">
+      
+      <PageWrapper maxWidth="2xl" className="pb-28 md:pb-12">
         <SectionHeader
           title="My Orders"
           subtitle={`${mapped.length} order${mapped.length !== 1 ? 's' : ''} placed`}
@@ -64,7 +74,8 @@ export default async function CustomerOrdersPage() {
             ))}
           </div>
         )}
-      </main>
+      </PageWrapper>
+
       <BottomNav />
     </div>
   )

@@ -1,5 +1,4 @@
 // app/(customer)/components/navbar/Navbar.tsx
-
 'use client'
 
 import { useAuth } from '@/app/hooks/useAuth'
@@ -7,7 +6,7 @@ import { useCart } from '@/app/hooks/useCart'
 import Link from 'next/link'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { cn } from '@/app/lib/utils/cn'
-import CartDrawer from '../cart/CardDrawer'
+import CartDrawer from '@/app/components/cart/CardDrawer'
 import { formatPrice } from '@/app/lib/utils/formatPrice'
 import { createBrowserClient } from '@/lib/supabase/client'
 
@@ -49,7 +48,7 @@ function highlightMatch(text: string, query: string) {
   const parts = text.split(regex)
   return parts.map((part, i) =>
     regex.test(part) ? (
-      <mark key={i} className="bg-bushal-copperGlow/60 text-bushal-ink rounded px-0.5">
+      <mark key={i} className="bg-bushal-copper/20 text-bushal-forest rounded px-0.5 font-semibold">
         {part}
       </mark>
     ) : part
@@ -60,49 +59,53 @@ export default function Navbar() {
   const { items } = useCart()
   const { user, signOut } = useAuth()
   const supabase = createBrowserClient()
-
+  
   const [cartOpen, setCartOpen] = useState(false)
   const [prevCount, setPrevCount] = useState(0)
   const [cartBump, setCartBump] = useState(false)
   const cartCount = items.reduce((sum, item) => sum + item.quantity, 0)
-
+  
   const [scrolled, setScrolled] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-
+  
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<SearchResult[]>([])
   const [searching, setSearching] = useState(false)
   const [showResults, setShowResults] = useState(false)
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false)
-
+  
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [notifOpen, setNotifOpen] = useState(false)
   const [userRole, setUserRole] = useState<string | null>(null)
   const [notifLoading, setNotifLoading] = useState(true)
+  
   const notifRef = useRef<HTMLDivElement>(null)
-
   const debouncedQuery = useDebounce(query, 280)
   const searchRef = useRef<HTMLDivElement>(null)
   const mobileSearchRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const mobileInputRef = useRef<HTMLInputElement>(null)
-
+  
   const unreadCount = notifications.filter((n) => !n.read).length
+  const isAdmin = userRole === 'admin'
 
+  // Scroll listener for navbar background
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 10)
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => window.removeEventListener('scroll', onScroll)
   }, [])
 
+  // Cart bump animation
   useEffect(() => {
     if (cartCount > prevCount && prevCount !== 0) {
       setCartBump(true)
       setTimeout(() => setCartBump(false), 400)
     }
     setPrevCount(cartCount)
-  }, [cartCount])
+  }, [cartCount, prevCount])
 
+  // Fetch user role
   useEffect(() => {
     if (!user) return
     supabase
@@ -111,10 +114,9 @@ export default function Navbar() {
       .eq('id', user.id)
       .single()
       .then(({ data }) => setUserRole(data?.role ?? null))
-  }, [user])
+  }, [user, supabase])
 
-  const isAdmin = userRole === 'admin'
-
+  // Fetch notifications
   const fetchNotifications = useCallback(async () => {
     if (!user) {
       setNotifLoading(false)
@@ -122,27 +124,25 @@ export default function Navbar() {
     }
     try {
       setNotifLoading(true)
-
       const { data: profile } = await supabase
         .from('profiles')
         .select('role')
         .eq('id', user.id)
         .single()
-
+      
       const admin = profile?.role === 'admin'
-
       let q = supabase
         .from('notifications')
         .select('id, type, title, body, read, created_at, order_id, comment_id')
         .order('created_at', { ascending: false })
         .limit(20)
-
+      
       if (admin) {
         q = q.is('user_id', null)
       } else {
         q = q.eq('user_id', user.id)
       }
-
+      
       const { data, error } = await q
       if (error) {
         console.error('Error fetching notifications:', error)
@@ -162,70 +162,49 @@ export default function Navbar() {
     fetchNotifications()
   }, [fetchNotifications])
 
+  // Real-time notification subscriptions
   useEffect(() => {
     if (!user || isAdmin) return
-
     const channel = supabase
       .channel('customer-notifications:' + user.id)
       .on(
         'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'notifications',
-          filter: `user_id=eq.${user.id}`,
-        },
+        { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` },
         (payload) => {
           const incoming = payload.new as Notification
-          setNotifications((prev) =>
-            prev.some((n) => n.id === incoming.id) ? prev : [incoming, ...prev]
-          )
+          setNotifications((prev) => (prev.some((n) => n.id === incoming.id) ? prev : [incoming, ...prev]))
         }
       )
       .subscribe()
-
     return () => { supabase.removeChannel(channel) }
   }, [user, isAdmin, supabase])
 
   useEffect(() => {
     if (!user || !isAdmin) return
-
     const channel = supabase
       .channel('admin-notifications')
       .on(
         'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'notifications',
-        },
+        { event: 'INSERT', schema: 'public', table: 'notifications' },
         (payload) => {
           const incoming = payload.new as Notification & { user_id: string | null }
           if (incoming.user_id !== null) return
-          setNotifications((prev) =>
-            prev.some((n) => n.id === incoming.id) ? prev : [incoming, ...prev]
-          )
+          setNotifications((prev) => (prev.some((n) => n.id === incoming.id) ? prev : [incoming, ...prev]))
         }
       )
       .subscribe()
-
     return () => { supabase.removeChannel(channel) }
   }, [user, isAdmin, supabase])
 
   const markAllRead = useCallback(async () => {
     if (!user || unreadCount === 0) return
     try {
-      let q = supabase
-        .from('notifications')
-        .update({ read: true })
-        .eq('read', false)
-
+      let q = supabase.from('notifications').update({ read: true }).eq('read', false)
       if (isAdmin) {
         q = q.is('user_id', null)
       } else {
         q = q.eq('user_id', user.id)
       }
-
       const { error } = await q
       if (error) { console.error('Error marking notifications as read:', error); return }
       setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
@@ -242,6 +221,7 @@ export default function Navbar() {
     }
   }, [notifOpen, unreadCount, markAllRead])
 
+  // Search logic
   useEffect(() => {
     if (debouncedQuery.length < 2) {
       setResults([])
@@ -249,10 +229,8 @@ export default function Navbar() {
       setSearching(false)
       return
     }
-
     let cancelled = false
     setSearching(true)
-
     fetch(`/api/products/search?q=${encodeURIComponent(debouncedQuery)}`)
       .then((r) => { if (!r.ok) throw new Error(); return r.json() })
       .then((data: SearchResult[]) => {
@@ -264,10 +242,10 @@ export default function Navbar() {
       .catch(() => {
         if (!cancelled) { setResults([]); setShowResults(false); setSearching(false) }
       })
-
     return () => { cancelled = true }
   }, [debouncedQuery])
 
+  // Click outside handlers
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
@@ -315,15 +293,21 @@ export default function Navbar() {
                 {results.length} result{results.length !== 1 ? 's' : ''}
               </p>
             </div>
-            <div className="divide-y divide-bushal-ivory max-h-[400px] overflow-y-auto">
+            <div className="divide-y divide-bushal-ivory max-h-[400px] overflow-y-auto no-scrollbar">
               {results.map((product) => {
                 const cover = (Array.isArray(product.images) && product.images[0]) || product.image_url
                 const dp = product.discount_percent ? product.price * (1 - product.discount_percent / 100) : null
                 return (
-                  <Link key={product.id} href={`/product/${product.id}`} onClick={handleResultClick}
-                    className="flex items-center gap-3 px-3 py-2.5 hover:bg-bushal-ivory transition-colors group">
+                  <Link 
+                    key={product.id} 
+                    href={`/product/${product.id}`} 
+                    onClick={handleResultClick}
+                    className="flex items-center gap-3 px-3 py-2.5 hover:bg-bushal-ivoryDeep transition-colors group"
+                  >
                     <div className="w-10 h-10 rounded-lg overflow-hidden bg-bushal-ivoryDeep border border-bushal-border flex-shrink-0">
-                      {cover ? <img src={cover} alt="" className="w-full h-full object-cover" /> : (
+                      {cover ? (
+                        <img src={cover} alt="" className="w-full h-full object-cover" />
+                      ) : (
                         <div className="w-full h-full flex items-center justify-center text-bushal-borderMid">
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -347,8 +331,11 @@ export default function Navbar() {
                 )
               })}
             </div>
-            <Link href={`/dashboard?q=${encodeURIComponent(query)}`} onClick={handleResultClick}
-              className="flex items-center justify-center gap-1.5 px-3 py-2.5 text-xs font-semibold text-bushal-copper hover:bg-bushal-ivory transition-colors border-t border-bushal-border">
+            <Link 
+              href={`/dashboard?q=${encodeURIComponent(query)}`} 
+              onClick={handleResultClick}
+              className="flex items-center justify-center gap-1.5 px-3 py-2.5 text-xs font-semibold text-bushal-copper hover:bg-bushal-ivoryDeep transition-colors border-t border-bushal-border"
+            >
               See all results →
             </Link>
           </>
@@ -387,11 +374,11 @@ export default function Navbar() {
           <p className="text-sm text-bushal-inkSoft">No notifications yet</p>
         </div>
       ) : (
-        <div className="max-h-80 overflow-y-auto divide-y divide-bushal-ivory">
+        <div className="max-h-80 overflow-y-auto divide-y divide-bushal-ivory no-scrollbar">
           {notifications.map((n) => (
             <div
               key={n.id}
-              className={cn('px-4 py-3 transition-colors', !n.read ? 'bg-bushal-ivory' : 'hover:bg-bushal-ivory')}
+              className={cn('px-4 py-3 transition-colors', !n.read ? 'bg-bushal-ivoryDeep' : 'hover:bg-bushal-ivoryDeep')}
             >
               <div className="flex items-start gap-2.5">
                 <div className={cn('w-2 h-2 rounded-full mt-1.5 flex-shrink-0', !n.read ? 'bg-bushal-copper' : 'bg-transparent')} />
@@ -416,10 +403,7 @@ export default function Navbar() {
                   )}
                   <p className="text-[10px] text-bushal-inkSoft mt-1">
                     {new Date(n.created_at).toLocaleDateString('en-BD', {
-                      month: 'short',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit',
+                      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
                     })}
                   </p>
                 </div>
@@ -441,10 +425,9 @@ export default function Navbar() {
             : 'bg-bushal-forest/95 backdrop-blur-md'
         )}>
           <div className="h-0.5 bg-gradient-to-r from-transparent via-bushal-copper to-transparent opacity-60" />
-
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex items-center justify-between h-16 lg:h-20">
-
+              {/* Logo */}
               <Link href="/dashboard" className="flex items-center gap-3 flex-shrink-0 group relative">
                 <div className="relative">
                   <div className="w-10 h-10 rounded-xl flex items-center justify-center shadow-lg transition-all duration-300 group-hover:scale-110 bg-gradient-to-br from-bushal-copper to-bushal-copperLight shadow-bushal-copper/30 group-hover:shadow-bushal-copper/50">
@@ -454,7 +437,7 @@ export default function Navbar() {
                 </div>
                 <div className="flex flex-col">
                   <span
-                    className="text-2xl font-heading font-bold tracking-wide text-white group-hover:text-bushal-copperGlow transition-colors duration-300"
+                    className="text-2xl font-heading font-bold tracking-wide text-white group-hover:text-bushal-copperLight transition-colors duration-300"
                     style={{ fontFamily: "'Cormorant Garamond', Georgia, serif" }}
                   >
                     Bushal
@@ -463,6 +446,7 @@ export default function Navbar() {
                 </div>
               </Link>
 
+              {/* Desktop Search */}
               <div className="flex-1 mx-8 hidden lg:block" ref={searchRef}>
                 <div className="relative max-w-xl">
                   <div className="absolute inset-0 bg-white/5 rounded-xl blur-sm" />
@@ -498,17 +482,18 @@ export default function Navbar() {
                 </div>
               </div>
 
+              {/* Right Actions */}
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => { setMobileSearchOpen((v) => !v); setTimeout(() => mobileInputRef.current?.focus(), 50) }}
-                  className="hidden md:flex p-2.5 rounded-xl transition-all duration-200 hover:scale-110 text-white/70 hover:text-white hover:bg-white/10"
+                  className="lg:hidden p-2.5 rounded-xl transition-all duration-200 hover:scale-110 text-white/70 hover:text-white hover:bg-white/10"
                   aria-label="Search"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                   </svg>
                 </button>
-
+                
                 <button
                   onClick={() => setCartOpen(true)}
                   className="relative p-2.5 rounded-xl transition-all duration-200 hover:scale-110 text-white/70 hover:text-white hover:bg-white/10"
@@ -518,7 +503,10 @@ export default function Navbar() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13l-1.5 6h13M7 13L5.4 5M10 21a1 1 0 100-2 1 1 0 000 2zm7 0a1 1 0 100-2 1 1 0 000 2z" />
                   </svg>
                   {cartCount > 0 && (
-                    <span className={cn('absolute -top-1 -right-1 min-w-[20px] h-5 bg-gradient-to-r from-bushal-copper to-bushal-copperLight text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1.5 leading-none shadow-lg shadow-bushal-copper/40', cartBump && 'animate-bounce-pop')}>
+                    <span className={cn(
+                      'absolute -top-1 -right-1 min-w-[20px] h-5 bg-gradient-to-r from-bushal-copper to-bushal-copperLight text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1.5 leading-none shadow-lg shadow-bushal-copper/40',
+                      cartBump && 'animate-bounce-pop'
+                    )}>
                       {cartCount > 99 ? '99+' : cartCount}
                     </span>
                   )}
@@ -544,6 +532,7 @@ export default function Navbar() {
                   </div>
                 )}
 
+                {/* Desktop Auth Links */}
                 <div className="hidden md:flex items-center gap-2 ml-2">
                   {user ? (
                     <>
@@ -583,6 +572,7 @@ export default function Navbar() {
                   )}
                 </div>
 
+                {/* Mobile Menu Toggle */}
                 <button
                   onClick={() => setMobileMenuOpen((v) => !v)}
                   className="md:hidden p-2.5 rounded-xl transition-all duration-200 hover:scale-110 text-white/70 hover:text-white hover:bg-white/10"
@@ -598,6 +588,7 @@ export default function Navbar() {
             </div>
           </div>
 
+          {/* Mobile Search Dropdown */}
           {mobileSearchOpen && (
             <div ref={mobileSearchRef} className="lg:hidden border-t border-white/10 py-4 px-4 animate-fade-up bg-bushal-forest backdrop-blur-xl">
               <div className="relative">
@@ -622,6 +613,7 @@ export default function Navbar() {
             </div>
           )}
 
+          {/* Mobile Menu Dropdown */}
           {mobileMenuOpen && (
             <div className="lg:hidden border-t border-white/10 py-4 space-y-2 animate-fade-up px-4 bg-bushal-forest backdrop-blur-xl">
               {user ? (
@@ -655,8 +647,10 @@ export default function Navbar() {
           )}
         </nav>
       </div>
-
-      <div className="h-20 lg:h-24" />
+      
+      {/* Spacer to prevent content from hiding behind fixed navbar */}
+      <div className="h-16 lg:h-20" />
+      
       <CartDrawer isOpen={cartOpen} onClose={() => setCartOpen(false)} />
     </>
   )

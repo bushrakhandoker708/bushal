@@ -13,15 +13,15 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variantStyles = {
   copper:
-    'btn-copper text-white font-semibold disabled:opacity-60 disabled:shadow-none disabled:translate-y-0',
+    'btn-copper text-white font-semibold disabled:opacity-60 disabled:shadow-none disabled:translate-y-0 focus:ring-2 focus:ring-bushal-copper/40 focus:ring-offset-2 focus:ring-offset-bushal-surface',
   forest:
-    'btn-forest text-white font-semibold disabled:opacity-60 disabled:shadow-none disabled:translate-y-0',
+    'btn-forest text-white font-semibold disabled:opacity-60 disabled:shadow-none disabled:translate-y-0 focus:ring-2 focus:ring-bushal-forest/40 focus:ring-offset-2 focus:ring-offset-bushal-surface',
   outline:
-    'bg-white text-bushal-forest border border-bushal-border hover:border-bushal-borderMid hover:bg-bushal-ivory active:scale-[0.97] transition-all duration-150',
+    'bg-bushal-surface text-bushal-forest border border-bushal-border hover:border-bushal-borderMid hover:bg-bushal-ivoryDeep active:scale-[0.97] transition-all duration-150 focus:ring-2 focus:ring-bushal-forest/20 focus:ring-offset-2 focus:ring-offset-bushal-surface',
   ghost:
-    'bg-transparent text-bushal-inkSoft hover:bg-bushal-ivoryDeep hover:text-bushal-ink active:scale-[0.97] transition-all duration-150',
+    'bg-transparent text-bushal-inkSoft hover:bg-bushal-ivoryDeep hover:text-bushal-ink active:scale-[0.97] transition-all duration-150 focus:ring-2 focus:ring-bushal-inkSoft/20 focus:ring-offset-2 focus:ring-offset-bushal-surface',
   danger:
-    'bg-bushal-danger text-white shadow-lg shadow-bushal-danger/20 hover:opacity-90 hover:-translate-y-0.5 active:scale-[0.97] transition-all duration-150',
+    'bg-bushal-danger text-white shadow-lg shadow-bushal-danger/20 hover:opacity-90 hover:-translate-y-0.5 active:scale-[0.97] transition-all duration-150 focus:ring-2 focus:ring-bushal-danger/40 focus:ring-offset-2 focus:ring-offset-bushal-surface',
 }
 
 const sizeStyles = {

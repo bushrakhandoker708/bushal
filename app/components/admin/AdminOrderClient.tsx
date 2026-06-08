@@ -8,13 +8,13 @@ import { formatDate } from '@/app/lib/utils/formatDate'
 import { cn } from '@/app/lib/utils/cn'
 
 const DELIVERY_STEPS = [
-  { key: 'order_placed',     label: 'Order Placed',      icon: '📋', color: 'bg-bushal-ivoryDeep text-slate-700 border-slate-200' },
-  { key: 'confirmed',        label: 'Confirmed',          icon: '✅', color: 'bg-blue-50 text-blue-700 border-blue-200' },
-  { key: 'processing',       label: 'Processing',         icon: '⚙️', color: 'bg-amber-50 text-amber-700 border-amber-200' },
-  { key: 'shipped',          label: 'Shipped',            icon: '📦', color: 'bg-purple-50 text-purple-700 border-purple-200' },
-  { key: 'out_for_delivery', label: 'Out for Delivery',   icon: '🚚', color: 'bg-orange-50 text-orange-700 border-orange-200' },
-  { key: 'delivered',        label: 'Delivered',          icon: '🎉', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-  { key: 'cancelled',        label: 'Cancelled',          icon: '❌', color: 'bg-rose-50 text-rose-600 border-rose-200' },
+  { key: 'order_placed',     label: 'Order Placed',      icon: '📋', color: 'bg-bushal-ivoryDeep text-bushal-inkMid border-bushal-border' },
+  { key: 'confirmed',        label: 'Confirmed',         icon: '✅', color: 'bg-bushal-copper/10 text-bushal-copper border-bushal-copper/20' },
+  { key: 'processing',       label: 'Processing',        icon: '⚙️', color: 'bg-bushal-warningBg text-bushal-warning border-bushal-warning/20' },
+  { key: 'shipped',          label: 'Shipped',           icon: '📦', color: 'bg-bushal-forest/10 text-bushal-forest border-bushal-forest/20' },
+  { key: 'out_for_delivery', label: 'Out for Delivery',  icon: '🚚', color: 'bg-bushal-warningBg text-bushal-warning border-bushal-warning/20' },
+  { key: 'delivered',        label: 'Delivered',         icon: '🎉', color: 'bg-bushal-successBg text-bushal-success border-bushal-success/20' },
+  { key: 'cancelled',        label: 'Cancelled',         icon: '❌', color: 'bg-bushal-dangerBg text-bushal-danger border-bushal-danger/20' },
 ]
 
 interface OrderItem {
@@ -57,8 +57,7 @@ function OrderRow({ order, onUpdateStatus }: OrderRowProps) {
   const [expanded, setExpanded] = useState(false)
   const [updating, setUpdating] = useState(false)
   const [selectedStatus, setSelectedStatus] = useState(order.delivery_status ?? 'order_placed')
-
-  const ds = DELIVERY_STEPS.find((s) => s.key === order.delivery_status) ?? DELIVERY_STEPS[0]
+  
   const items = order.order_items ?? []
   const firstImg = items[0]?.products
     ? (Array.isArray(items[0].products.images) && items[0].products.images[0]) || items[0].products.image_url
@@ -74,26 +73,26 @@ function OrderRow({ order, onUpdateStatus }: OrderRowProps) {
     <>
       {/* Main row */}
       <tr
-        className="hover:bg-bushal-ivory transition-colors cursor-pointer"
+        className="hover:bg-bushal-ivoryDeep/50 transition-colors cursor-pointer"
         onClick={() => setExpanded((v) => !v)}
       >
         <td className="px-4 py-3.5">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg overflow-hidden bg-bushal-ivoryDeep border border-slate-100 flex-shrink-0">
+            <div className="w-9 h-9 rounded-lg overflow-hidden bg-bushal-ivoryDeep border border-bushal-border flex-shrink-0">
               {firstImg ? (
                 <img src={firstImg} alt="" className="w-full h-full object-cover" />
               ) : (
-                <div className="w-full h-full flex items-center justify-center text-slate-300 text-xs">📦</div>
+                <div className="w-full h-full flex items-center justify-center text-bushal-borderMid text-xs">📦</div>
               )}
             </div>
             <div>
-              <p className="text-xs font-mono font-bold text-slate-700">#{order.id.slice(0, 8).toUpperCase()}</p>
+              <p className="text-xs font-mono font-bold text-bushal-ink">#{order.id.slice(0, 8).toUpperCase()}</p>
               <p className="text-[11px] text-bushal-inkSoft mt-0.5">{formatDate(order.created_at)}</p>
             </div>
           </div>
         </td>
         <td className="px-4 py-3.5 hidden sm:table-cell">
-          <p className="text-sm font-semibold text-slate-800">{order.customer.full_name ?? '—'}</p>
+          <p className="text-sm font-semibold text-bushal-ink">{order.customer.full_name ?? '—'}</p>
           <p className="text-xs text-bushal-inkSoft truncate max-w-[180px]">{order.customer.email ?? '—'}</p>
         </td>
         <td className="px-4 py-3.5">
@@ -104,65 +103,65 @@ function OrderRow({ order, onUpdateStatus }: OrderRowProps) {
           <StatusBadge status={order.delivery_status ?? 'order_placed'} />
         </td>
         <td className="px-4 py-3.5 hidden lg:table-cell">
-          <span className="text-xs font-mono text-slate-500">{order.bkash_trx_id ?? '—'}</span>
+          <span className="text-xs font-mono text-bushal-inkSoft">{order.bkash_trx_id ?? '—'}</span>
         </td>
         <td className="px-4 py-3.5">
           <svg
-            className={cn('w-4 h-4 text-bushal-inkSoft transition-transform', expanded && 'rotate-180')}
+            className={cn('w-4 h-4 text-bushal-inkSoft transition-transform duration-200', expanded && 'rotate-180')}
             fill="none" stroke="currentColor" viewBox="0 0 24 24"
           >
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
           </svg>
         </td>
       </tr>
-
+      
       {/* Expanded panel */}
       {expanded && (
         <tr>
           <td colSpan={6} className="px-4 pb-5 pt-0">
-            <div className="bg-bushal-ivory rounded-xl border border-slate-200 p-4 space-y-4">
+            <div className="bg-bushal-ivoryDeep rounded-xl border border-bushal-border p-4 space-y-4">
               {/* Customer info */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
                 <div>
-                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Customer</p>
-                  <p className="font-semibold text-slate-800">{order.customer.full_name ?? 'Unknown'}</p>
-                  <p className="text-slate-500 text-xs">{order.customer.email ?? '—'}</p>
-                  {order.customer.phone && <p className="text-slate-500 text-xs">{order.customer.phone}</p>}
+                  <p className="text-xs font-semibold text-bushal-inkSoft uppercase tracking-wide mb-1">Customer</p>
+                  <p className="font-semibold text-bushal-ink">{order.customer.full_name ?? 'Unknown'}</p>
+                  <p className="text-bushal-inkSoft text-xs">{order.customer.email ?? '—'}</p>
+                  {order.customer.phone && <p className="text-bushal-inkSoft text-xs">{order.customer.phone}</p>}
                 </div>
                 <div>
-                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Payment</p>
-                  <p className="text-xs text-slate-700">
+                  <p className="text-xs font-semibold text-bushal-inkSoft uppercase tracking-wide mb-1">Payment</p>
+                  <p className="text-xs text-bushal-ink">
                     bKash TxID: <span className="font-mono">{order.bkash_trx_id ?? '—'}</span>
                   </p>
-                  <p className="text-xs text-slate-700">
+                  <p className="text-xs text-bushal-ink">
                     Invoice: <span className="font-mono">{order.bkash_invoice ?? '—'}</span>
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Order Total</p>
+                  <p className="text-xs font-semibold text-bushal-inkSoft uppercase tracking-wide mb-1">Order Total</p>
                   <p className="text-lg font-bold text-bushal-forest">{formatPrice(order.total)}</p>
                 </div>
               </div>
 
               {/* Order items */}
               <div>
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Items</p>
+                <p className="text-xs font-semibold text-bushal-inkSoft uppercase tracking-wide mb-2">Items</p>
                 <div className="space-y-2">
                   {items.map((item) => (
-                    <div key={item.id} className="flex items-center gap-3 bg-white rounded-lg px-3 py-2 border border-slate-100">
+                    <div key={item.id} className="flex items-center gap-3 bg-bushal-surface rounded-lg px-3 py-2 border border-bushal-border">
                       <div className="w-8 h-8 rounded-lg overflow-hidden bg-bushal-ivoryDeep flex-shrink-0">
                         {item.products && ((Array.isArray(item.products.images) && item.products.images[0]) || item.products.image_url) ? (
                           <img
                             src={(Array.isArray(item.products.images) && item.products.images[0]) || item.products.image_url!}
                             alt="" className="w-full h-full object-cover"
                           />
-                        ) : <div className="w-full h-full bg-bushal-ivory" />}
+                        ) : <div className="w-full h-full bg-bushal-ivoryDeep flex items-center justify-center text-bushal-borderMid text-[10px]">📦</div>}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-slate-800 truncate">{item.products?.name ?? 'Product'}</p>
+                        <p className="text-sm font-medium text-bushal-ink truncate">{item.products?.name ?? 'Product'}</p>
                         <p className="text-xs text-bushal-inkSoft">Qty: {item.quantity} × {formatPrice(item.unit_price)}</p>
                       </div>
-                      <p className="text-sm font-bold text-slate-700 flex-shrink-0">
+                      <p className="text-sm font-bold text-bushal-forest flex-shrink-0">
                         {formatPrice(item.quantity * item.unit_price)}
                       </p>
                     </div>
@@ -172,7 +171,7 @@ function OrderRow({ order, onUpdateStatus }: OrderRowProps) {
 
               {/* Delivery status updater */}
               <div>
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Update Delivery Status</p>
+                <p className="text-xs font-semibold text-bushal-inkSoft uppercase tracking-wide mb-2">Update Delivery Status</p>
                 <div className="flex flex-wrap gap-2 mb-3">
                   {DELIVERY_STEPS.map((step) => (
                     <button
@@ -182,7 +181,7 @@ function OrderRow({ order, onUpdateStatus }: OrderRowProps) {
                       className={cn(
                         'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all',
                         selectedStatus === step.key
-                          ? 'bg-orange-500 text-white border-orange-500 shadow-md'
+                          ? 'bg-bushal-copper text-white border-bushal-copper shadow-md shadow-bushal-copper/20'
                           : step.color + ' opacity-70 hover:opacity-100'
                       )}
                     >
@@ -194,7 +193,7 @@ function OrderRow({ order, onUpdateStatus }: OrderRowProps) {
                   type="button"
                   onClick={(e) => { e.stopPropagation(); handleUpdate() }}
                   disabled={updating || selectedStatus === (order.delivery_status ?? 'order_placed')}
-                  className="inline-flex items-center gap-2 bg-orange-600 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md shadow-orange-600/20"
+                  className="inline-flex items-center gap-2 bg-bushal-copper text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-bushal-copperLight disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md shadow-bushal-copper/20"
                 >
                   {updating ? (
                     <>
@@ -218,7 +217,7 @@ function OrderRow({ order, onUpdateStatus }: OrderRowProps) {
               {/* Delivery timeline */}
               {Array.isArray(order.delivery_steps) && order.delivery_steps.length > 0 && (
                 <div>
-                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Timeline</p>
+                  <p className="text-xs font-semibold text-bushal-inkSoft uppercase tracking-wide mb-2">Timeline</p>
                   <div className="space-y-2">
                     {[...order.delivery_steps].reverse().map((step: any, i: number) => {
                       const s = DELIVERY_STEPS.find((ds) => ds.key === step.status)
@@ -226,7 +225,7 @@ function OrderRow({ order, onUpdateStatus }: OrderRowProps) {
                         <div key={i} className="flex items-center gap-3 text-sm">
                           <span className="text-base">{s?.icon ?? '📦'}</span>
                           <div>
-                            <p className="font-semibold text-slate-800">{s?.label ?? step.status}</p>
+                            <p className="font-semibold text-bushal-ink">{s?.label ?? step.status}</p>
                             <p className="text-xs text-bushal-inkSoft">{formatDate(step.timestamp)}</p>
                           </div>
                         </div>
@@ -316,8 +315,8 @@ export default function AdminOrdersClient({ orders }: Props) {
           className={cn(
             'px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all',
             statusFilter === 'all'
-              ? 'bg-slate-900 text-white border-slate-900'
-              : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
+              ? 'bg-bushal-forest text-white border-bushal-forest'
+              : 'bg-bushal-surface text-bushal-inkMid border-bushal-border hover:border-bushal-borderMid'
           )}
         >
           All ({localOrders.length})
@@ -332,7 +331,7 @@ export default function AdminOrdersClient({ orders }: Props) {
               className={cn(
                 'px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all',
                 statusFilter === step.key
-                  ? 'bg-orange-500 text-white border-orange-500'
+                  ? 'bg-bushal-copper text-white border-bushal-copper'
                   : step.color + ' hover:opacity-100 opacity-80'
               )}
             >
@@ -352,25 +351,25 @@ export default function AdminOrdersClient({ orders }: Props) {
           placeholder="Search by order ID, customer name, email or bKash TxID..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-bushal-forest placeholder-slate-400 focus:outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 transition-all"
+          className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-bushal-border bg-bushal-surface text-sm text-bushal-ink placeholder-bushal-inkSoft/60 focus:outline-none focus:border-bushal-copper focus:ring-2 focus:ring-bushal-copper/20 transition-all"
         />
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+      <div className="bg-bushal-surface rounded-2xl border border-bushal-border overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full">
             <thead>
-              <tr className="bg-bushal-ivory border-b border-slate-100">
-                <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wide">Order</th>
-                <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wide hidden sm:table-cell">Customer</th>
-                <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wide">Total</th>
-                <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wide">Status</th>
-                <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wide hidden lg:table-cell">bKash</th>
+              <tr className="bg-bushal-ivoryDeep border-b border-bushal-border">
+                <th className="px-4 py-3 text-left text-xs font-bold text-bushal-inkSoft uppercase tracking-wide">Order</th>
+                <th className="px-4 py-3 text-left text-xs font-bold text-bushal-inkSoft uppercase tracking-wide hidden sm:table-cell">Customer</th>
+                <th className="px-4 py-3 text-left text-xs font-bold text-bushal-inkSoft uppercase tracking-wide">Total</th>
+                <th className="px-4 py-3 text-left text-xs font-bold text-bushal-inkSoft uppercase tracking-wide">Status</th>
+                <th className="px-4 py-3 text-left text-xs font-bold text-bushal-inkSoft uppercase tracking-wide hidden lg:table-cell">bKash</th>
                 <th className="px-4 py-3 w-8" />
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-50">
+            <tbody className="divide-y divide-bushal-ivoryDeep">
               {filtered.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="py-16 text-center text-bushal-inkSoft text-sm">

@@ -54,12 +54,12 @@ export default function BottomNav() {
   const pathname = usePathname()
   const { items } = useCart()
   const cartCount = items.reduce((s, i) => s + i.quantity, 0)
-
+  
   const isActive = (href: string) =>
     href === '/dashboard' ? pathname === '/dashboard' : pathname.startsWith(href)
 
   return (
-    <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-bushal-surface border-t border-bushal-border safe-bottom shadow-lg shadow-bushal-ink/10">
+    <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-bushal-surface border-t border-bushal-border safe-bottom shadow-[0_-4px_20px_rgba(27,58,45,0.08)]">
       <div className="flex items-center justify-around px-2 pt-2 pb-1">
         {NAV_ITEMS.map((item) => {
           const active = isActive(item.href)
@@ -68,22 +68,24 @@ export default function BottomNav() {
               key={item.href}
               href={item.href}
               className={cn(
-                'flex flex-col items-center gap-1 min-w-[56px] py-1.5 px-3 rounded-xl transition-all duration-150 relative',
-                active ? 'text-bushal-forest' : 'text-bushal-inkSoft'
+                'flex flex-col items-center gap-1 min-w-[64px] py-1.5 px-2 rounded-xl transition-all duration-200 relative',
+                active ? 'text-bushal-forest' : 'text-bushal-inkSoft hover:text-bushal-ink'
               )}
             >
               <span className="relative">
                 {item.icon(active)}
                 {item.showBadge && cartCount > 0 && (
-                  <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 bg-bushal-copper text-white text-[9px] font-bold rounded-full flex items-center justify-center px-1 leading-none">
+                  <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-4.5 bg-gradient-to-r from-bushal-copper to-bushal-copperLight text-white text-[9px] font-bold rounded-full flex items-center justify-center px-1 leading-none shadow-md shadow-bushal-copper/30 animate-bounce-pop">
                     {cartCount > 9 ? '9+' : cartCount}
                   </span>
                 )}
               </span>
-              <span className={cn('text-[10px] font-semibold', active ? 'text-bushal-forest' : 'text-bushal-inkSoft')}>
+              <span className={cn('text-[10px] font-semibold tracking-wide', active ? 'text-bushal-forest' : 'text-bushal-inkSoft')}>
                 {item.label}
               </span>
-              {active && <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-4 h-0.5 rounded-full bg-bushal-copper" />}
+              {active && (
+                <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-1 rounded-full bg-bushal-copper" />
+              )}
             </Link>
           )
         })}

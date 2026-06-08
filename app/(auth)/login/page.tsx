@@ -3,38 +3,37 @@ import LoginForm from '@/app/components/auth/LoginForm'
 import Link from 'next/link'
 import { Metadata } from 'next'
 
-
 export const metadata: Metadata = {
   title: 'Sign In',
-  robots: { index: false, follow: true }, // Tells Google: "Don't show this in search results"
+  description: 'Sign in to your Bushal account to access your orders, saved addresses, and a personalized shopping experience.',
+  robots: { index: false, follow: true }, // Prevents indexing of the login page for security and SEO best practices
 }
-
 
 export default function LoginPage() {
   return (
-    <div className="min-h-screen bg-bushal-ivory flex items-center justify-center px-4">
+    <div className="min-h-screen bg-bushal-ivory flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-md animate-fade-in-up">
         <div className="text-center mb-8">
           <Link
             href="/dashboard"
-            className="text-4xl font-extrabold text-orange-600 tracking-tight hover:text-orange-700 transition-colors"
-            style={{ fontFamily: 'Plus Jakarta Sans, sans-serif' }}
+            className="text-4xl font-extrabold text-bushal-copper tracking-tight hover:text-bushal-copperLight transition-colors"
+            style={{ fontFamily: "'Cormorant Garamond', Georgia, serif" }}
           >
             Bushal
           </Link>
-          <p className="mt-2 text-slate-500 text-sm">Sign in to continue shopping</p>
+          <p className="mt-2 text-bushal-inkSoft text-sm">Sign in to continue shopping</p>
         </div>
-
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8">
+        
+        <div className="bg-bushal-surface rounded-2xl border border-bushal-border shadow-card p-8">
           <LoginForm />
-          <p className="mt-6 text-center text-sm text-slate-500">
+          <p className="mt-6 text-center text-sm text-bushal-inkSoft">
             Don&apos;t have an account?{' '}
-            <Link href="/register" className="text-orange-600 font-semibold hover:underline">
+            <Link href="/register" className="text-bushal-copper font-semibold hover:text-bushal-copperLight transition-colors">
               Register here
             </Link>
           </p>
         </div>
-
+        
         <div className="mt-6 flex items-center justify-center gap-5 text-xs text-bushal-inkSoft">
           <span className="flex items-center gap-1.5">
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

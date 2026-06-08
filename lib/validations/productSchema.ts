@@ -1,4 +1,5 @@
 // lib/validations/productSchema.ts
+//Defines the Zod validation schema for product creation and updates. This ensures type safety, enforces valid pricing rules, and guarantees a consistent data structure across your admin product forms and API route handlers.
 
 import { z } from 'zod'
 
