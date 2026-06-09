@@ -27,7 +27,7 @@ export default function AdminReplyForm({ commentId }: Props) {
     const res = await fetch('/api/comments', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ comment_id: commentId, reply }),
+      body: JSON.stringify({ comment_id: commentId,type: 'reply', reply }),
     })
 
     setLoading(false)
