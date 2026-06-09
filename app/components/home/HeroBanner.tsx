@@ -5,6 +5,19 @@ import Link from 'next/link'
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { createBrowserClient } from '@/lib/supabase/client'
 
+interface Product {
+  id: string
+  name: string
+  image_url: string | null
+  images: string[]
+}
+
+interface OrderItem {
+  product_id: string
+  quantity: number
+  products: Product | null
+}
+
 interface TopProduct {
   id: string
   name: string
@@ -40,6 +53,7 @@ export default function HeroBanner() {
   const [prevHeadlineIndex, setPrevHeadlineIndex] = useState<number | null>(null)
   const [isTouchDevice, setIsTouchDevice] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const [imageError, setImageError] = useState(false)
   const rafRef = useRef<number>()
   const targetPos = useRef({ x: 0.5, y: 0.5 })
   const currentPos = useRef({ x: 0.5, y: 0.5 })
@@ -64,35 +78,58 @@ export default function HeroBanner() {
   useEffect(() => {
     if (isTouchDevice) return
     rafRef.current = requestAnimationFrame(animateMouse)
-    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current) }
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current)
+    }
   }, [isTouchDevice, animateMouse])
 
   useEffect(() => {
     const fetchTopProduct = async () => {
       const supabase = createBrowserClient()
       try {
+        // Try RPC first (if it exists)
         const { data, error } = await supabase.rpc('get_top_selling_product')
-        if (error) {
-          const { data: ordersData } = await supabase
+        
+        if (error || !data || data.length === 0) {
+          // Fallback: query order_items directly
+          const { data: ordersData, error: ordersError } = await supabase
             .from('order_items')
             .select(`product_id, quantity, products (id, name, image_url, images)`)
-          if (ordersData) {
-            const productSales: Record<string, { sold: number; product: any }> = {}
-            ordersData.forEach((item: any) => {
+            .order('created_at', { ascending: false })
+            .limit(500)
+          
+          if (ordersError) {
+            console.error('Failed to fetch order items:', ordersError)
+            setLoading(false)
+            return
+          }
+
+          if (ordersData && ordersData.length > 0) {
+            const productSales: Record<string, { sold: number; product: Product }> = {}
+            
+            ordersData.forEach((item) => {
               const productId = item.product_id
-              if (!productSales[productId]) {
-                productSales[productId] = { sold: 0, product: item.products }
+              if (!productSales[productId] && item.products) {
+                productSales[productId] = { 
+                  sold: 0, 
+                  product: item.products[0] 
+                }
               }
-              productSales[productId].sold += item.quantity || 0
+              if (productSales[productId]) {
+                productSales[productId].sold += (item.quantity ?? 0)
+              }
             })
+            
             const sorted = Object.values(productSales).sort((a, b) => b.sold - a.sold)
+            
             if (sorted.length > 0) {
+              const top = sorted[0]
               setTopProduct({
-                id: sorted[0].product.id,
-                name: sorted[0].product.name,
-                image_url: sorted[0].product.image_url,
-                images: sorted[0].product.images || [],
-                total_sold: sorted[0].sold,
+                id: top.product.id,
+                name: top.product.name,
+                image_url: top.product.image_url,
+                images: top.product.images || [],
+                total_sold: top.sold,
               })
             }
           }
@@ -105,6 +142,7 @@ export default function HeroBanner() {
         setLoading(false)
       }
     }
+    
     fetchTopProduct()
   }, [])
 
@@ -118,8 +156,10 @@ export default function HeroBanner() {
 
   useEffect(() => {
     if (isTouchDevice) return
+    
     const el = containerRef.current
     if (!el) return
+    
     const handleMove = (e: MouseEvent) => {
       const rect = el.getBoundingClientRect()
       targetPos.current = {
@@ -128,12 +168,15 @@ export default function HeroBanner() {
       }
       setIsHovering(true)
     }
+    
     const handleLeave = () => {
       targetPos.current = { x: 0.5, y: 0.5 }
       setIsHovering(false)
     }
+    
     el.addEventListener('mousemove', handleMove)
     el.addEventListener('mouseleave', handleLeave)
+    
     return () => {
       el.removeEventListener('mousemove', handleMove)
       el.removeEventListener('mouseleave', handleLeave)
@@ -144,7 +187,10 @@ export default function HeroBanner() {
   const rotateY = (mousePos.x - 0.5) * 8
   const tx = (mousePos.x - 0.5) * 24
   const ty = (mousePos.y - 0.5) * 24
-  const productImage = topProduct ? (topProduct.images?.[0] || topProduct.image_url) : null
+  
+  const productImage = topProduct && !imageError 
+    ? (topProduct.images?.[0] || topProduct.image_url) 
+    : null
 
   return (
     <div
@@ -238,16 +284,19 @@ export default function HeroBanner() {
           {/* Eyebrow Tag */}
           <div
             className="inline-flex items-center gap-2.5 mb-6 md:mb-8"
-            style={{ animation: mounted ? 'heroFadeUp 0.7s ease both' : 'none', animationDelay: '0ms' }}
+            style={{ 
+              animation: mounted ? 'heroFadeUp 0.7s ease both' : 'none', 
+              animationDelay: '0ms' 
+            }}
           >
             <div className="flex items-center gap-1">
-              <div className="w-1 h-1 rounded-full bg-bushal-copper animate-pulse" />
-              <div className="w-1.5 h-1.5 rounded-full bg-bushal-copperGlow" />
-              <div className="w-1 h-1 rounded-full bg-bushal-copper animate-pulse" style={{ animationDelay: '0.3s' }} />
+              <div className="w-1 h-1 rounded-full bg-[#B87333] animate-pulse" />
+              <div className="w-1.5 h-1.5 rounded-full bg-[#F0B96A]" />
+              <div className="w-1 h-1 rounded-full bg-[#B87333] animate-pulse" style={{ animationDelay: '0.3s' }} />
             </div>
             <span
-              className="text-[10px] md:text-[11px] font-semibold uppercase tracking-[0.3em] font-body"
-              style={{ color: '#d4975a' }}
+              className="text-[10px] md:text-[11px] font-semibold uppercase tracking-[0.3em] font-sans"
+              style={{ color: '#D4954A' }}
             >
               The Bushal Collection
             </span>
@@ -257,14 +306,17 @@ export default function HeroBanner() {
           {/* Headline — crossfade between states */}
           <div
             className="mb-6 md:mb-8 lg:mb-10"
-            style={{ animation: mounted ? 'heroFadeUp 0.7s ease both' : 'none', animationDelay: '80ms' }}
+            style={{ 
+              animation: mounted ? 'heroFadeUp 0.7s ease both' : 'none', 
+              animationDelay: '80ms' 
+            }}
           >
             {/* Eyebrow line */}
             <div className="relative overflow-visible h-[1.6em] mb-1">
               {HEADLINES.map((h, i) => (
                 <p
                   key={i}
-                  className="absolute inset-0 text-base md:text-xl lg:text-2xl font-body font-light tracking-wide transition-all duration-700 ease-in-out"
+                  className="absolute inset-0 text-base md:text-xl lg:text-2xl font-sans font-light tracking-wide transition-all duration-700 ease-in-out"
                   style={{
                     color: 'rgba(240,232,210,0.6)',
                     opacity: i === headlineIndex ? 1 : 0,
@@ -278,19 +330,17 @@ export default function HeroBanner() {
 
             {/* Hero word — large, dramatic */}
             <div
-              className=" overflow-visible relative dark:text-white"
+              className="overflow-visible relative"
               style={{ lineHeight: 1.2, paddingTop: '.08em' }}
             >
               {HEADLINES.map((h, i) => (
                 <h1
                   key={i}
-                  className="absolute left-0 top-0 font-heading font-bold transition-all duration-700 ease-in-out whitespace-nowrap"
+                  className="absolute left-0 top-0 font-serif font-bold transition-all duration-700 ease-in-out whitespace-nowrap"
                   style={{
                     fontSize: 'clamp(3rem, 7vw, 6.5rem)',
                     letterSpacing: '-0.02em',
-                    background: i === headlineIndex
-                      ? 'linear-gradient(135deg, #f0b96a 0%, #d4975a 40%, #f0e8d2 80%)'
-                      : 'linear-gradient(135deg, #f0b96a 0%, #d4975a 40%, #f0e8d2 80%)',
+                    background: 'linear-gradient(135deg, #F0B96A 0%, #D4954A 40%, #F0E8D2 80%)',
                     WebkitBackgroundClip: 'text',
                     WebkitTextFillColor: 'transparent',
                     backgroundClip: 'text',
@@ -303,7 +353,7 @@ export default function HeroBanner() {
               ))}
               {/* Spacer to hold height */}
               <h1
-                className="font-heading font-bold invisible"
+                className="font-serif font-bold invisible"
                 style={{ fontSize: 'clamp(3rem, 7vw, 6.5rem)', letterSpacing: '-0.02em' }}
                 aria-hidden
               >
@@ -314,7 +364,7 @@ export default function HeroBanner() {
 
           {/* Description */}
           <p
-            className="text-sm md:text-base leading-relaxed max-w-[420px] mb-8 md:mb-10 font-body"
+            className="text-sm md:text-base leading-relaxed max-w-[420px] mb-8 md:mb-10 font-sans"
             style={{
               color: 'rgba(240,232,210,0.5)',
               animation: mounted ? 'heroFadeUp 0.7s ease both' : 'none',
@@ -327,14 +377,17 @@ export default function HeroBanner() {
           {/* CTA Row */}
           <div
             className="flex flex-wrap items-center gap-3 md:gap-4 mb-10 md:mb-12"
-            style={{ animation: mounted ? 'heroFadeUp 0.7s ease both' : 'none', animationDelay: '240ms' }}
+            style={{ 
+              animation: mounted ? 'heroFadeUp 0.7s ease both' : 'none', 
+              animationDelay: '240ms' 
+            }}
           >
             <Link
               href="#products"
-              className="group/p relative inline-flex items-center gap-2.5 overflow-visible rounded-xl font-semibold font-body text-sm px-6 md:px-8 py-3.5 md:py-4"
+              className="group/p relative inline-flex items-center gap-2.5 overflow-visible rounded-xl font-semibold font-sans text-sm px-6 md:px-8 py-3.5 md:py-4"
               style={{
-                background: 'linear-gradient(135deg, #c07840 0%, #a0622e 100%)',
-                color: '#f0e8d2',
+                background: 'linear-gradient(135deg, #C07840 0%, #A0622E 100%)',
+                color: '#F0E8D2',
                 boxShadow: '0 8px 32px rgba(184,115,51,0.35), inset 0 1px 0 rgba(255,255,255,0.1)',
               }}
             >
@@ -354,7 +407,7 @@ export default function HeroBanner() {
 
             <Link
               href="/orders"
-              className="group/t inline-flex items-center gap-2 rounded-xl font-medium font-body text-sm px-5 md:px-6 py-3.5 md:py-4 backdrop-blur-sm transition-all duration-300"
+              className="group/t inline-flex items-center gap-2 rounded-xl font-medium font-sans text-sm px-5 md:px-6 py-3.5 md:py-4 backdrop-blur-sm transition-all duration-300"
               style={{
                 color: 'rgba(240,232,210,0.7)',
                 border: '1px solid rgba(240,232,210,0.15)',
@@ -407,10 +460,10 @@ export default function HeroBanner() {
               },
             ].map(({ icon, label }) => (
               <div key={label} className="flex items-center gap-2">
-                <svg className="w-3.5 h-3.5 flex-shrink-0" style={{ color: '#d4975a' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-3.5 h-3.5 flex-shrink-0" style={{ color: '#D4954A' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   {icon}
                 </svg>
-                <span className="text-[10px] md:text-[11px] font-medium font-body" style={{ color: 'rgba(240,232,210,0.45)' }}>
+                <span className="text-[10px] md:text-[11px] font-medium font-sans" style={{ color: 'rgba(240,232,210,0.45)' }}>
                   {label}
                 </span>
               </div>
@@ -444,7 +497,7 @@ export default function HeroBanner() {
                   cx={p.cx}
                   cy={p.cy}
                   r={p.r * 0.4}
-                  fill="#f0b96a"
+                  fill="#F0B96A"
                   opacity={p.opacity}
                   style={{
                     animation: `particlePulse ${p.duration}s ease-in-out ${p.delay}s infinite alternate`,
@@ -467,7 +520,7 @@ export default function HeroBanner() {
                 style={{
                   top: '4%', left: '50%', transform: 'translate(-50%,-50%)',
                   width: 10, height: 10, borderRadius: '50%',
-                  background: 'radial-gradient(circle, #f0b96a, #c07840)',
+                  background: 'radial-gradient(circle, #F0B96A, #C07840)',
                   boxShadow: '0 0 12px 4px rgba(240,185,106,0.5)',
                 }}
               />
@@ -526,16 +579,17 @@ export default function HeroBanner() {
                 }}
               />
 
-              {topProduct ? (
+              {productImage ? (
                 <Link
-                  href={`/product/${topProduct.id}`}
+                  href={`/product/${topProduct!.id}`}
                   className="block w-full h-full relative group/img pointer-events-auto"
                 >
                   <img
-                    src={productImage!}
-                    alt={topProduct.name}
+                    src={productImage}
+                    alt={topProduct!.name}
                     className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover/img:scale-110"
                     style={{ filter: 'brightness(0.95) contrast(1.05) saturate(1.1)' }}
+                    onError={() => setImageError(true)}
                   />
                   {/* Vignette */}
                   <div
@@ -554,14 +608,14 @@ export default function HeroBanner() {
                         border: '1px solid rgba(184,115,51,0.35)',
                       }}
                     >
-                      <svg className="w-3 h-3" style={{ color: '#f0b96a' }} fill="currentColor" viewBox="0 0 20 20">
+                      <svg className="w-3 h-3" style={{ color: '#F0B96A' }} fill="currentColor" viewBox="0 0 20 20">
                         <path fillRule="evenodd" d="M12.395 2.553a1 1 0 00-1.45-.385c-.345.23-.614.558-.822.88-.214.33-.403.713-.57 1.116-.334.804-.614 1.768-.84 2.734a31.365 31.365 0 00-.613 3.58 2.64 2.64 0 01-.945-1.067c-.328-.68-.398-1.534-.398-2.654A1 1 0 005.05 6.05 6.981 6.981 0 003 11a7 7 0 1011.95-4.95c-.592-.591-.98-.985-1.348-1.467-.363-.476-.724-1.063-1.207-2.03zM12.12 15.12A3 3 0 017 13s.879.5 2.5.5c0-1 .5-4 1.25-4.5.5 1 .786 1.293 1.371 1.879A2.99 2.99 0 0113 13a2.99 2.99 0 01-.879 2.121z" clipRule="evenodd" />
                       </svg>
-                      <span className="text-[9px] font-bold uppercase tracking-[0.2em] font-body" style={{ color: '#f0b96a' }}>
+                      <span className="text-[9px] font-bold uppercase tracking-[0.2em] font-sans" style={{ color: '#F0B96A' }}>
                         Best Seller
                       </span>
-                      <span className="text-[9px] font-body" style={{ color: 'rgba(240,232,210,0.5)' }}>
-                        · {topProduct.total_sold} sold
+                      <span className="text-[9px] font-sans" style={{ color: 'rgba(240,232,210,0.5)' }}>
+                        · {topProduct!.total_sold} sold
                       </span>
                     </div>
                   </div>
@@ -570,16 +624,16 @@ export default function HeroBanner() {
                 <div className="w-full h-full flex items-center justify-center">
                   <div
                     className="w-12 h-12 rounded-full animate-spin"
-                    style={{ border: '2px solid rgba(184,115,51,0.2)', borderTopColor: '#c07840' }}
+                    style={{ border: '2px solid rgba(184,115,51,0.2)', borderTopColor: '#C07840' }}
                   />
                 </div>
               ) : (
                 <div className="w-full h-full flex items-center justify-center">
                   <span
-                    className="font-heading font-bold"
+                    className="font-serif font-bold"
                     style={{
                       fontSize: '5rem',
-                      background: 'linear-gradient(135deg, #f0b96a, #d4975a)',
+                      background: 'linear-gradient(135deg, #F0B96A, #D4954A)',
                       WebkitBackgroundClip: 'text',
                       WebkitTextFillColor: 'transparent',
                       backgroundClip: 'text',
@@ -618,15 +672,15 @@ export default function HeroBanner() {
                     className="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0"
                     style={{ background: 'rgba(184,115,51,0.2)' }}
                   >
-                    <svg className="w-3.5 h-3.5" style={{ color: '#f0b96a' }} fill="currentColor" viewBox="0 0 20 20">
+                    <svg className="w-3.5 h-3.5" style={{ color: '#F0B96A' }} fill="currentColor" viewBox="0 0 20 20">
                       <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                     </svg>
                   </div>
-                  <span className="text-[10px] font-bold uppercase tracking-wider font-body" style={{ color: 'rgba(240,232,210,0.85)' }}>
+                  <span className="text-[10px] font-bold uppercase tracking-wider font-sans" style={{ color: 'rgba(240,232,210,0.85)' }}>
                     Premium
                   </span>
                 </div>
-                <p className="text-[10px] leading-snug font-body" style={{ color: 'rgba(240,232,210,0.45)' }}>
+                <p className="text-[10px] leading-snug font-sans" style={{ color: 'rgba(240,232,210,0.45)' }}>
                   Heritage-grade goods
                 </p>
               </div>
@@ -653,15 +707,15 @@ export default function HeroBanner() {
                 }}
               >
                 <div className="flex items-center justify-between gap-3 mb-1.5">
-                  <span className="text-[10px] font-bold uppercase tracking-wider font-body" style={{ color: '#d4975a' }}>
+                  <span className="text-[10px] font-bold uppercase tracking-wider font-sans" style={{ color: '#D4954A' }}>
                     Live Status
                   </span>
                   <div className="flex items-center gap-1">
                     <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    <span className="text-[8px] font-bold font-body text-emerald-400">ONLINE</span>
+                    <span className="text-[8px] font-bold font-sans text-emerald-400">ONLINE</span>
                   </div>
                 </div>
-                <p className="text-[10px] font-body" style={{ color: 'rgba(240,232,210,0.4)' }}>
+                <p className="text-[10px] font-sans" style={{ color: 'rgba(240,232,210,0.4)' }}>
                   Orders shipping now
                 </p>
               </div>
@@ -686,10 +740,10 @@ export default function HeroBanner() {
                   boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
                 }}
               >
-                <p className="text-[9px] font-bold uppercase tracking-[0.2em] font-body text-center" style={{ color: '#f48fb1' }}>
+                <p className="text-[9px] font-bold uppercase tracking-[0.2em] font-sans text-center" style={{ color: '#F48FB1' }}>
                   bKash
                 </p>
-                <p className="text-[8px] font-body text-center mt-0.5" style={{ color: 'rgba(240,232,210,0.5)' }}>
+                <p className="text-[8px] font-sans text-center mt-0.5" style={{ color: 'rgba(240,232,210,0.5)' }}>
                   Secure Pay
                 </p>
               </div>
@@ -712,9 +766,14 @@ export default function HeroBanner() {
             boxShadow: '0 0 0 1px rgba(184,115,51,0.2), 0 16px 40px rgba(0,0,0,0.5)',
           }}
         >
-          {topProduct ? (
-            <Link href={`/product/${topProduct.id}`} className="block w-full h-full pointer-events-auto">
-              <img src={productImage!} alt={topProduct.name} className="w-full h-full object-cover" />
+          {productImage ? (
+            <Link href={`/product/${topProduct!.id}`} className="block w-full h-full pointer-events-auto">
+              <img 
+                src={productImage} 
+                alt={topProduct!.name} 
+                className="w-full h-full object-cover" 
+                onError={() => setImageError(true)}
+              />
               <div
                 className="absolute inset-0"
                 style={{ background: 'radial-gradient(circle at 50% 50%, transparent 50%, rgba(10,24,12,0.45) 100%)' }}
@@ -722,7 +781,7 @@ export default function HeroBanner() {
             </Link>
           ) : (
             <div className="w-full h-full flex items-center justify-center" style={{ background: '#0d1f0f' }}>
-              <span className="font-heading font-bold text-3xl" style={{ color: '#d4975a' }}>B</span>
+              <span className="font-serif font-bold text-3xl" style={{ color: '#D4954A' }}>B</span>
             </div>
           )}
         </div>
@@ -739,8 +798,8 @@ export default function HeroBanner() {
           to   { transform: rotate(360deg); }
         }
         @keyframes particlePulse {
-          from { opacity: var(--op, 0.12); r: 0.4; }
-          to   { opacity: calc(var(--op, 0.12) * 3); r: 0.7; }
+          from { opacity: 0.12; r: 0.4; }
+          to   { opacity: 0.36; r: 0.7; }
         }
         @keyframes floatA {
           0%, 100% { margin-top: 0px; }
