@@ -40,9 +40,9 @@ export default async function DashboardPage() {
   return (
     <div className="min-h-screen bg-bushal-ivory">
       <Navbar />
-      
+      <HeroBanner />
       <PageWrapper maxWidth="7xl" className="pb-28 md:pb-12">
-        <HeroBanner />
+        
 
 
         {discounted.length > 0 && (

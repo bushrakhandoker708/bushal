@@ -10,12 +10,15 @@ const config: Config = {
           forest:      "#1B3A2D",
           forestMid:   "#2D5A42",
           forestLight: "#3D7A5A",
+          forestMuted: "#F4F7F6", // New: Subtle forest tint for selected states
           copper:      "#B87333",
           copperLight: "#D4954A",
           copperGlow:  "#F0B96A",
+          copperMuted: "#FBF6F1", // New: Subtle copper tint for hover states
           ivory:       "#F9F6F0",
           ivoryDeep:   "#F0EBE1",
-          surface:     "#FFFFFF",
+          surface:     "#FEFCF8", // Updated: Warmer white (was #FFFFFF)
+          surfaceAlt:  "#F5F1EA", // New: Second surface level for nested cards
           ink:         "#1A1A18",
           inkMid:      "#3D3D3A",
           inkSoft:     "#6B6B65",
@@ -61,6 +64,8 @@ const config: Config = {
         "shimmer":    "shimmer 1.8s infinite linear",
         "shake":      "shake 0.35s ease-in-out",
         "pulse-soft": "pulseSoft 2.8s cubic-bezier(0.4, 0, 0.6, 1) infinite",
+        "float":      "float 3s ease-in-out infinite", // New
+        "glow":       "glow 2s ease-in-out infinite",   // New
       },
       keyframes: {
         fadeUp: {
@@ -99,6 +104,14 @@ const config: Config = {
         pulseSoft: {
           "0%, 100%": { opacity: "1" },
           "50%":      { opacity: "0.55" },
+        },
+        float: {
+          "0%, 100%": { transform: "translateY(0px)" },
+          "50%":      { transform: "translateY(-10px)" },
+        },
+        glow: {
+          "0%, 100%": { opacity: "0.4" },
+          "50%":      { opacity: "0.8" },
         },
       },
       backgroundImage: {

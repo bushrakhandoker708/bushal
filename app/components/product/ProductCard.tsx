@@ -20,11 +20,11 @@ export default function ProductCard({ product, index = 0 }: Props) {
   const [imgIndex, setImgIndex] = useState(0)
   const [isWished, setIsWished] = useState(false)
   const [quickViewOpen, setQuickViewOpen] = useState(false)
-  
+
   const discountedPrice = product.discount_percent
     ? product.price * (1 - product.discount_percent / 100)
     : null
-    
+
   const images = product.images?.length ? product.images : product.image_url ? [product.image_url] : []
 
   const handleAdd = (e: React.MouseEvent) => {
@@ -41,8 +41,11 @@ export default function ProductCard({ product, index = 0 }: Props) {
       className="group animate-fade-up flex flex-col"
       style={{ animationDelay: `${index * 60}ms` }}
     >
-      {/* Image Container */}
-      <Link href={`/product/${product.id}`} className="block relative overflow-hidden rounded-2xl bg-bushal-ivoryDeep aspect-[4/5]">
+      {/* Image Container - Editorial 3:4 Portrait Ratio */}
+      <Link 
+        href={`/product/${product.id}`} 
+        className="block relative overflow-hidden rounded-2xl bg-bushal-ivoryDeep aspect-[3/4] shadow-card hover:shadow-cardHover transition-all duration-500 ease-out"
+      >
         <div
           className="absolute inset-0"
           onMouseEnter={() => images.length > 1 && setImgIndex(1)}
@@ -54,8 +57,8 @@ export default function ProductCard({ product, index = 0 }: Props) {
                 src={images[0]}
                 alt={product.name}
                 className={cn(
-                  'absolute inset-0 w-full h-full object-cover transition-all duration-700 ease-out',
-                  imgIndex === 1 ? 'opacity-0 scale-105' : 'opacity-100 group-hover:scale-105'
+                  'absolute inset-0 w-full h-full object-cover transition-all duration-1000 ease-out',
+                  imgIndex === 1 ? 'opacity-0 scale-110' : 'opacity-100 group-hover:scale-105'
                 )}
               />
               {images.length > 1 && (
@@ -63,7 +66,7 @@ export default function ProductCard({ product, index = 0 }: Props) {
                   src={images[1]}
                   alt={product.name}
                   className={cn(
-                    'absolute inset-0 w-full h-full object-cover transition-all duration-700 ease-out',
+                    'absolute inset-0 w-full h-full object-cover transition-all duration-1000 ease-out',
                     imgIndex === 1 ? 'opacity-100 scale-105' : 'opacity-0 scale-100'
                   )}
                 />
@@ -78,28 +81,32 @@ export default function ProductCard({ product, index = 0 }: Props) {
           )}
         </div>
 
-        {/* Badges */}
-        <div className="absolute top-3 left-3 flex flex-col gap-2 z-10">
-          {product.discount_percent ? (
-            <span className="bg-bushal-copper text-white text-[10px] font-semibold tracking-wider uppercase px-2.5 py-1 rounded-full shadow-sm">
-              Save {product.discount_percent}%
-            </span>
-          ) : null}
-          {!product.in_stock && (
-            <span className="bg-bushal-forest/90 backdrop-blur-md text-bushal-ivory text-[10px] font-semibold tracking-wider uppercase px-2.5 py-1 rounded-full">
-              Sold Out
-            </span>
-          )}
-        </div>
+        {/* Inner Vignette for Premium Depth */}
+        <div className="absolute inset-0 rounded-2xl ring-1 ring-inset ring-black/5 pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/10 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+
+        {/* Typographic Discount Badge */}
+        {product.discount_percent && (
+          <div className="absolute top-4 left-4 z-10 bg-bushal-forest text-bushal-copperGlow text-[10px] font-bold tracking-[0.15em] uppercase px-3 py-1.5 shadow-lg shadow-black/10">
+            −{product.discount_percent}%
+          </div>
+        )}
+
+        {/* Sold Out Badge */}
+        {!product.in_stock && (
+          <div className="absolute top-4 left-4 z-10 bg-bushal-ivory/90 backdrop-blur-md text-bushal-inkMid text-[10px] font-bold tracking-[0.15em] uppercase px-3 py-1.5 border border-bushal-border">
+            Sold Out
+          </div>
+        )}
 
         {/* Wishlist Button */}
         <button
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); setIsWished(!isWished) }}
           className={cn(
-            "absolute top-3 right-3 w-9 h-9 rounded-full flex items-center justify-center transition-all duration-300 z-10",
-            isWished 
-              ? "bg-bushal-copper text-white scale-110" 
-              : "bg-bushal-surface/80 backdrop-blur-md text-bushal-forest hover:bg-bushal-surface hover:scale-110"
+            "absolute top-4 right-4 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 z-10 backdrop-blur-md",
+            isWished
+              ? "bg-bushal-copper text-white scale-110 shadow-lg shadow-bushal-copper/30"
+              : "bg-bushal-ivory/80 text-bushal-forest hover:bg-bushal-ivory hover:scale-110"
           )}
           aria-label="Add to wishlist"
         >
@@ -111,7 +118,7 @@ export default function ProductCard({ product, index = 0 }: Props) {
         {/* Quick View Button */}
         <button
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); setQuickViewOpen(true) }}
-          className="absolute bottom-3 left-3 w-9 h-9 rounded-full flex items-center justify-center bg-bushal-surface/80 backdrop-blur-md text-bushal-forest hover:bg-bushal-surface hover:scale-110 transition-all duration-300 z-10 opacity-0 group-hover:opacity-100 shadow-sm"
+          className="absolute bottom-4 left-4 w-10 h-10 rounded-full flex items-center justify-center bg-bushal-ivory/90 backdrop-blur-md text-bushal-forest hover:bg-bushal-ivory hover:scale-110 transition-all duration-300 z-10 opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 shadow-lg"
           aria-label="Quick view"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -121,54 +128,68 @@ export default function ProductCard({ product, index = 0 }: Props) {
         </button>
 
         {/* Quick Add Overlay (Desktop Only) */}
-        <div className="absolute inset-x-0 bottom-0 p-3 translate-y-full group-hover:translate-y-0 transition-transform duration-500 ease-out z-10 hidden md:block">
+        <div className="absolute inset-x-0 bottom-0 p-4 translate-y-full group-hover:translate-y-0 transition-transform duration-500 ease-out z-10 hidden md:block">
           <button
             onClick={handleAdd}
             disabled={!product.in_stock}
             className={cn(
-              "w-full py-3 rounded-xl font-semibold text-sm tracking-wide transition-all duration-300 shadow-lg",
+              "w-full py-3.5 rounded-xl font-semibold text-sm tracking-wide transition-all duration-300 shadow-xl backdrop-blur-md",
               product.in_stock
                 ? added
                   ? "bg-bushal-success text-white"
-                  : "btn-forest active:scale-[0.98]"
-                : "bg-bushal-border text-bushal-inkSoft cursor-not-allowed"
+                  : "bg-bushal-forest/95 text-bushal-ivory hover:bg-bushal-forest active:scale-[0.98]"
+                : "bg-bushal-ivory/80 text-bushal-inkSoft cursor-not-allowed"
             )}
           >
-            {added ? "Added to Bag" : product.in_stock ? "Add to Bag" : "Sold Out"}
+            {added ? "Added to Bag ✓" : product.in_stock ? "Add to Bag" : "Sold Out"}
           </button>
         </div>
       </Link>
 
-      {/* Content */}
-      <div className="pt-4 px-1 flex flex-col flex-1">
-        <Link href={`/product/${product.id}`} className="group/link">
-          <h3 className="font-heading text-lg text-bushal-forest leading-tight mb-1 group-hover/link:text-bushal-copper transition-colors duration-300 line-clamp-2">
+      {/* Content Section */}
+      <div className="pt-5 px-1 flex flex-col flex-1">
+        {/* Category Eyebrow */}
+        {product.category && (
+          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-bushal-copper mb-2">
+            {product.category}
+          </p>
+        )}
+
+        {/* Product Name - Italic for luxury signal if discounted */}
+        <Link href={`/product/${product.id}`} className="group/link block">
+          <h3 
+            className={cn(
+              "font-heading text-xl leading-tight mb-2 transition-colors duration-300 line-clamp-2",
+              product.discount_percent ? "italic text-bushal-forest group-hover/link:text-bushal-copper" : "text-bushal-forest group-hover/link:text-bushal-copper"
+            )}
+          >
             {product.name}
           </h3>
         </Link>
-        
-        <div className="flex items-center justify-between mt-auto pt-2">
+
+        {/* Price & Actions */}
+        <div className="flex items-center justify-between mt-auto pt-3 border-t border-bushal-border/50">
           <div className="flex items-baseline gap-2">
-            <span className="font-semibold text-bushal-copper text-lg">
+            <span className="font-heading text-2xl font-semibold text-bushal-copper">
               {formatPrice(discountedPrice ?? product.price)}
             </span>
             {discountedPrice && (
-              <span className="text-xs text-bushal-inkSoft line-through">
+              <span className="text-xs text-bushal-inkSoft line-through font-body">
                 {formatPrice(product.price)}
               </span>
             )}
           </div>
-          
+
           {/* Mobile Add Button */}
           <button
             onClick={handleAdd}
             disabled={!product.in_stock}
             className={cn(
-              "md:hidden w-9 h-9 rounded-full flex items-center justify-center transition-all duration-300 active:scale-90",
+              "md:hidden w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 active:scale-90 shadow-md",
               product.in_stock
                 ? added
                   ? "bg-bushal-success text-white"
-                  : "bg-bushal-copper text-white hover:bg-bushal-copperLight shadow-md shadow-bushal-copper/20"
+                  : "bg-bushal-copper text-white hover:bg-bushal-copperLight shadow-bushal-copper/20"
                 : "bg-bushal-border text-bushal-inkSoft cursor-not-allowed"
             )}
             aria-label="Add to cart"

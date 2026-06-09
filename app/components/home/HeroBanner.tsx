@@ -1,8 +1,8 @@
+// app/components/home/HeroBanner.tsx
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useRef, useState } from 'react'
-// 🔒 FIX: Use createBrowserClient instead of createClient
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { createBrowserClient } from '@/lib/supabase/client'
 
 interface TopProduct {
@@ -13,39 +13,69 @@ interface TopProduct {
   total_sold: number
 }
 
+const HEADLINES = [
+  { eyebrow: 'Curated for', word: 'Bangladesh.' },
+  { eyebrow: 'Heritage in', word: 'Every Detail.' },
+  { eyebrow: 'Shop with', word: 'Transparency.' },
+]
+
+// Particle positions are deterministic so SSR/CSR don't mismatch
+const PARTICLES = Array.from({ length: 28 }, (_, i) => ({
+  id: i,
+  cx: ((i * 137.508) % 100),
+  cy: ((i * 97.3) % 100),
+  r: 1 + (i % 3) * 0.8,
+  delay: (i * 0.4) % 6,
+  duration: 3 + (i % 4),
+  opacity: 0.12 + (i % 5) * 0.06,
+}))
+
 export default function HeroBanner() {
   const containerRef = useRef<HTMLDivElement>(null)
   const [mousePos, setMousePos] = useState({ x: 0.5, y: 0.5 })
   const [isHovering, setIsHovering] = useState(false)
   const [topProduct, setTopProduct] = useState<TopProduct | null>(null)
   const [loading, setLoading] = useState(true)
+  const [headlineIndex, setHeadlineIndex] = useState(0)
+  const [prevHeadlineIndex, setPrevHeadlineIndex] = useState<number | null>(null)
+  const [isTouchDevice, setIsTouchDevice] = useState(false)
+  const [mounted, setMounted] = useState(false)
+  const rafRef = useRef<number>()
+  const targetPos = useRef({ x: 0.5, y: 0.5 })
+  const currentPos = useRef({ x: 0.5, y: 0.5 })
+
+  // Smooth cursor interpolation
+  const animateMouse = useCallback(() => {
+    const dx = targetPos.current.x - currentPos.current.x
+    const dy = targetPos.current.y - currentPos.current.y
+    if (Math.abs(dx) > 0.0005 || Math.abs(dy) > 0.0005) {
+      currentPos.current.x += dx * 0.08
+      currentPos.current.y += dy * 0.08
+      setMousePos({ x: currentPos.current.x, y: currentPos.current.y })
+    }
+    rafRef.current = requestAnimationFrame(animateMouse)
+  }, [])
+
+  useEffect(() => {
+    setMounted(true)
+    setIsTouchDevice('ontouchstart' in window || navigator.maxTouchPoints > 0)
+  }, [])
+
+  useEffect(() => {
+    if (isTouchDevice) return
+    rafRef.current = requestAnimationFrame(animateMouse)
+    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current) }
+  }, [isTouchDevice, animateMouse])
 
   useEffect(() => {
     const fetchTopProduct = async () => {
-      // 🔒 FIX: Initialize the browser client correctly
       const supabase = createBrowserClient()
-      
       try {
-        // Try the RPC function first (if you created the migration)
         const { data, error } = await supabase.rpc('get_top_selling_product')
-        
         if (error) {
-          console.warn('RPC not found or failed, falling back to standard query:', error.message)
-          
-          // Fallback: Fetch order items and calculate the top seller in JS
           const { data: ordersData } = await supabase
             .from('order_items')
-            .select(`
-              product_id,
-              quantity,
-              products (
-                id,
-                name,
-                image_url,
-                images
-              )
-            `)
-          
+            .select(`product_id, quantity, products (id, name, image_url, images)`)
           if (ordersData) {
             const productSales: Record<string, { sold: number; product: any }> = {}
             ordersData.forEach((item: any) => {
@@ -55,7 +85,6 @@ export default function HeroBanner() {
               }
               productSales[productId].sold += item.quantity || 0
             })
-            
             const sorted = Object.values(productSales).sort((a, b) => b.sold - a.sold)
             if (sorted.length > 0) {
               setTopProduct({
@@ -63,7 +92,7 @@ export default function HeroBanner() {
                 name: sorted[0].product.name,
                 image_url: sorted[0].product.image_url,
                 images: sorted[0].product.images || [],
-                total_sold: sorted[0].sold
+                total_sold: sorted[0].sold,
               })
             }
           }
@@ -76,279 +105,656 @@ export default function HeroBanner() {
         setLoading(false)
       }
     }
-
     fetchTopProduct()
   }, [])
 
   useEffect(() => {
+    const timer = setInterval(() => {
+      setPrevHeadlineIndex(headlineIndex)
+      setHeadlineIndex(prev => (prev + 1) % HEADLINES.length)
+    }, 4500)
+    return () => clearInterval(timer)
+  }, [headlineIndex])
+
+  useEffect(() => {
+    if (isTouchDevice) return
     const el = containerRef.current
     if (!el) return
-
-    const handleMouseMove = (e: MouseEvent) => {
+    const handleMove = (e: MouseEvent) => {
       const rect = el.getBoundingClientRect()
-      const x = (e.clientX - rect.left) / rect.width
-      const y = (e.clientY - rect.top) / rect.height
-      setMousePos({ x, y })
+      targetPos.current = {
+        x: (e.clientX - rect.left) / rect.width,
+        y: (e.clientY - rect.top) / rect.height,
+      }
       setIsHovering(true)
     }
-
-    const handleMouseLeave = () => {
+    const handleLeave = () => {
+      targetPos.current = { x: 0.5, y: 0.5 }
       setIsHovering(false)
     }
-
-    el.addEventListener('mousemove', handleMouseMove)
-    el.addEventListener('mouseleave', handleMouseLeave)
+    el.addEventListener('mousemove', handleMove)
+    el.addEventListener('mouseleave', handleLeave)
     return () => {
-      el.removeEventListener('mousemove', handleMouseMove)
-      el.removeEventListener('mouseleave', handleMouseLeave)
+      el.removeEventListener('mousemove', handleMove)
+      el.removeEventListener('mouseleave', handleLeave)
     }
-  }, [])
+  }, [isTouchDevice])
 
-  // Parallax calculations
   const rotateX = (mousePos.y - 0.5) * -8
   const rotateY = (mousePos.x - 0.5) * 8
-  
-  const translateX = (mousePos.x - 0.5) * 20
-  const translateY = (mousePos.y - 0.5) * 20
-
-  // Get product image
-  const productImage = topProduct 
-    ? (topProduct.images?.[0] || topProduct.image_url)
-    : null
+  const tx = (mousePos.x - 0.5) * 24
+  const ty = (mousePos.y - 0.5) * 24
+  const productImage = topProduct ? (topProduct.images?.[0] || topProduct.image_url) : null
 
   return (
-    <div 
+    <div
       ref={containerRef}
-      className="relative overflow-hidden rounded-3xl bg-bushal-forest min-h-[500px] md:min-h-[600px] flex items-center mb-12 border border-bushal-forestMid/30 shadow-2xl shadow-bushal-forest/40 group"
-      style={{ perspective: '1500px' }}
+      className="relative overflow-hidden mb-12"
+      style={{
+        background: 'linear-gradient(135deg, #0d1f0f 0%, #0f2312 40%, #122815 70%, #0d1f0f 100%)',
+        minHeight: 'clamp(520px, 65vh, 720px)',
+        perspective: '1800px',
+        boxShadow: '0 32px 80px rgba(10,30,12,0.7), 0 0 0 1px rgba(184,115,51,0.12)',
+      }}
     >
-      {/* Cursor Spotlight */}
-      <div 
-        className="absolute inset-0 transition-opacity duration-500 pointer-events-none z-0"
+      {/* ── Grain Texture Overlay ── */}
+      <div
+        className="absolute inset-0 pointer-events-none z-0"
         style={{
-          opacity: isHovering ? 1 : 0,
-          background: `radial-gradient(800px circle at ${mousePos.x * 100}% ${mousePos.y * 100}%, rgba(184, 115, 51, 0.12), transparent 40%)`
+          opacity: 0.035,
+          backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`,
+          backgroundSize: '200px 200px',
         }}
       />
 
-      {/* Background Elements */}
-      <div className="absolute inset-0 pointer-events-none">
-        {/* Grid */}
-        <div className="absolute inset-0 opacity-[0.03]" style={{
-          backgroundImage: `linear-gradient(rgba(240, 185, 106, 0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(240, 185, 106, 0.5) 1px, transparent 1px)`,
-          backgroundSize: '60px 60px'
-        }} />
-        
-        {/* Glows */}
-        <div 
-          className="absolute w-[600px] h-[600px] rounded-full bg-bushal-copper/10 blur-[120px] transition-transform duration-1000 ease-out"
-          style={{ 
-            top: '20%', right: '5%',
-            transform: `translate(${translateX * -0.5}px, ${translateY * -0.5}px)`
+      {/* ── Mesh Gradient Background ── */}
+      <div className="absolute inset-0 pointer-events-none z-0">
+        <div
+          className="absolute rounded-full blur-[160px]"
+          style={{
+            width: '70%', height: '80%',
+            top: '-20%', right: '-10%',
+            background: 'radial-gradient(ellipse, rgba(184,115,51,0.13) 0%, transparent 70%)',
+            transform: isTouchDevice ? 'none' : `translate(${tx * -0.3}px, ${ty * -0.3}px)`,
+            transition: 'transform 0.1s linear',
           }}
         />
-        <div 
-          className="absolute w-[400px] h-[400px] rounded-full bg-bushal-forestLight/20 blur-[100px] transition-transform duration-1000 ease-out"
-          style={{ 
-            bottom: '10%', left: '10%',
-            transform: `translate(${translateX * 0.5}px, ${translateY * 0.5}px)`
+        <div
+          className="absolute rounded-full blur-[120px]"
+          style={{
+            width: '50%', height: '60%',
+            bottom: '-10%', left: '-5%',
+            background: 'radial-gradient(ellipse, rgba(56,143,60,0.1) 0%, transparent 70%)',
+            transform: isTouchDevice ? 'none' : `translate(${tx * 0.2}px, ${ty * 0.2}px)`,
+            transition: 'transform 0.1s linear',
+          }}
+        />
+        <div
+          className="absolute rounded-full blur-[200px]"
+          style={{
+            width: '40%', height: '40%',
+            top: '30%', left: '30%',
+            background: 'radial-gradient(ellipse, rgba(240,185,106,0.06) 0%, transparent 70%)',
           }}
         />
       </div>
 
-      {/* Left Content */}
-      <div className="relative z-10 px-8 md:px-16 py-12 md:py-20 max-w-2xl flex flex-col justify-center h-full">
-        {/* Eyebrow */}
-        <div className="flex items-center gap-3 mb-6 animate-fade-up">
-          <div className="h-px w-12 bg-gradient-to-r from-transparent to-bushal-copper" />
-          <p className="text-bushal-copperGlow text-[11px] font-semibold uppercase tracking-[0.3em] font-body">
-            The Bushal Collection
-          </p>
-        </div>
-        
-        {/* Headline */}
-        <h1 className="animate-fade-up" style={{ animationDelay: '100ms' }}>
-          <span className="block text-bushal-ivory/70 text-lg md:text-2xl font-body font-light tracking-wide mb-3">
-            Discover the
-          </span>
-          <span className="block text-6xl md:text-8xl font-heading font-semibold text-bushal-copperGlow leading-[0.95] tracking-tight">
-            Extraordinary.
-          </span>
-        </h1>
+      {/* ── Grid Lines ── */}
+      <div
+        className="absolute inset-0 pointer-events-none z-0"
+        style={{
+          opacity: 0.025,
+          backgroundImage: `linear-gradient(rgba(240,185,106,1) 1px, transparent 1px), linear-gradient(90deg, rgba(240,185,106,1) 1px, transparent 1px)`,
+          backgroundSize: '72px 72px',
+        }}
+      />
 
-        {/* Description */}
-        <p className="text-bushal-ivory/60 text-base md:text-lg leading-relaxed mt-8 mb-10 max-w-lg font-body animate-fade-up" style={{ animationDelay: '200ms' }}>
-          Handpicked, heritage-quality goods delivered across Bangladesh. 
-          Experience transparent pricing and genuine care in every detail.
-        </p>
-
-        {/* CTAs */}
-        <div className="flex flex-wrap items-center gap-4 animate-fade-up" style={{ animationDelay: '300ms' }}>
-          <Link
-            href="#products"
-            className="group/btn relative inline-flex items-center gap-2 bg-bushal-copper text-bushal-ivory text-sm font-semibold font-body px-8 py-4 rounded-xl overflow-hidden transition-all duration-300 hover:shadow-lg hover:shadow-bushal-copper/40 hover:-translate-y-0.5 active:scale-95"
-          >
-            <span className="relative z-10">Explore Collection</span>
-            <svg className="w-4 h-4 relative z-10 transition-transform duration-300 group-hover/btn:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
-            </svg>
-            <div className="absolute inset-0 bg-gradient-to-r from-bushal-copperLight to-bushal-copper opacity-0 group-hover/btn:opacity-100 transition-opacity duration-300" />
-          </Link>
-          
-          <Link
-            href="/orders"
-            className="group/trk inline-flex items-center gap-2 text-bushal-ivory/80 hover:text-bushal-ivory text-sm font-medium font-body px-6 py-4 rounded-xl border border-bushal-ivory/20 hover:border-bushal-ivory/40 hover:bg-bushal-ivory/5 backdrop-blur-sm transition-all duration-300"
-          >
-            <svg className="w-4 h-4 transition-transform duration-300 group-hover/trk:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-            Track Order
-          </Link>
-        </div>
-
-        {/* Trust Indicators */}
-        <div className="flex flex-wrap items-center gap-6 mt-12 animate-fade-up" style={{ animationDelay: '400ms' }}>
-          <div className="flex items-center gap-2 text-bushal-ivory/40 text-xs font-medium">
-            <svg className="w-4 h-4 text-bushal-copperGlow" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
-            Secure bKash
-          </div>
-          <div className="flex items-center gap-2 text-bushal-ivory/40 text-xs font-medium">
-            <svg className="w-4 h-4 text-bushal-copperGlow" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>
-            Free Delivery ৳1000+
-          </div>
-          <div className="flex items-center gap-2 text-bushal-ivory/40 text-xs font-medium">
-            <svg className="w-4 h-4 text-bushal-copperGlow" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" /></svg>
-            4.9/5 Rating
-          </div>
-        </div>
-      </div>
-
-      {/* Right Visual Anchor (Advanced 3D Artifact) */}
-      <div className="absolute right-0 top-0 bottom-0 w-1/2 hidden md:flex items-center justify-center pr-16 pointer-events-none">
-        <div 
-          className="relative w-[400px] h-[500px] transition-transform duration-500 ease-out"
-          style={{ 
-            transform: `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg)`,
-            transformStyle: 'preserve-3d'
-          }}
-        >
-          {/* Outer Rotating Ring */}
-          <div 
-            className="absolute inset-0 border border-bushal-copper/20 rounded-full"
-            style={{ transform: 'translateZ(-20px)', animation: 'spin 40s linear infinite' }}
-          >
-            <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-3 bg-bushal-copper rounded-full shadow-lg shadow-bushal-copper/50" />
-            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 w-2 h-2 bg-bushal-copperGlow rounded-full" />
-          </div>
-
-          {/* Inner Rotating Ring (Reverse) */}
-          <div 
-            className="absolute inset-8 border border-dashed border-bushal-ivory/10 rounded-full"
-            style={{ transform: 'translateZ(10px)', animation: 'spin 30s linear infinite reverse' }}
+      {/* ── Dual Cursor Spotlight ── */}
+      {!isTouchDevice && mounted && (
+        <>
+          <div
+            className="absolute inset-0 pointer-events-none z-0 transition-opacity duration-700"
+            style={{
+              opacity: isHovering ? 1 : 0,
+              background: `radial-gradient(480px circle at ${mousePos.x * 100}% ${mousePos.y * 100}%, rgba(184,115,51,0.11), transparent 50%)`,
+            }}
           />
+          <div
+            className="absolute inset-0 pointer-events-none z-0 transition-opacity duration-1000"
+            style={{
+              opacity: isHovering ? 0.6 : 0,
+              background: `radial-gradient(240px circle at ${mousePos.x * 100}% ${mousePos.y * 100}%, rgba(240,185,106,0.07), transparent 60%)`,
+            }}
+          />
+        </>
+      )}
 
-          {/* Central Glass Emblem - Shows Top Product */}
-          <div 
-            className="absolute inset-12 bg-bushal-ivory/5 backdrop-blur-xl rounded-full border border-bushal-ivory/20 shadow-2xl flex items-center justify-center overflow-hidden"
-            style={{ transform: 'translateZ(40px)' }}
+      {/* ════════════════════════════════════════
+          LEFT — Copy Column
+      ════════════════════════════════════════ */}
+      <div className="relative z-10 flex h-full items-center">
+        <div className="px-6 md:px-12 lg:px-16 py-12 md:py-16 lg:py-20 w-full md:w-[52%] flex flex-col justify-center">
+
+          {/* Eyebrow Tag */}
+          <div
+            className="inline-flex items-center gap-2.5 mb-6 md:mb-8"
+            style={{ animation: mounted ? 'heroFadeUp 0.7s ease both' : 'none', animationDelay: '0ms' }}
           >
-            {/* Inner Glow */}
-            <div className="absolute inset-0 bg-gradient-to-br from-bushal-copper/20 via-transparent to-bushal-forestLight/20" />
-            
-            {/* Central Content */}
-            <div className="relative z-10 flex flex-col items-center gap-2 p-4">
-              {loading ? (
-                <div className="w-20 h-20 rounded-full bg-bushal-forest/50 border-2 border-bushal-copper/30 flex items-center justify-center animate-pulse">
-                  <svg className="w-8 h-8 text-bushal-copper/50 animate-spin" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-                  </svg>
-                </div>
-              ) : productImage ? (
-                <div className="relative">
-                  <div className="w-25 h-30 rounded-full overflow-hidden border-4 border-bushal-copper/50 shadow-lg">
-                    <img 
-                      src={productImage} 
-                      alt="Top Product" 
-                      className="w-full h-full object-cover"
-                    />
+            <div className="flex items-center gap-1">
+              <div className="w-1 h-1 rounded-full bg-bushal-copper animate-pulse" />
+              <div className="w-1.5 h-1.5 rounded-full bg-bushal-copperGlow" />
+              <div className="w-1 h-1 rounded-full bg-bushal-copper animate-pulse" style={{ animationDelay: '0.3s' }} />
+            </div>
+            <span
+              className="text-[10px] md:text-[11px] font-semibold uppercase tracking-[0.3em] font-body"
+              style={{ color: '#d4975a' }}
+            >
+              The Bushal Collection
+            </span>
+            <div className="h-px flex-1 max-w-[40px]" style={{ background: 'linear-gradient(to right, rgba(184,115,51,0.8), transparent)' }} />
+          </div>
+
+          {/* Headline — crossfade between states */}
+          <div
+            className="mb-6 md:mb-8 lg:mb-10"
+            style={{ animation: mounted ? 'heroFadeUp 0.7s ease both' : 'none', animationDelay: '80ms' }}
+          >
+            {/* Eyebrow line */}
+            <div className="relative overflow-visible h-[1.6em] mb-1">
+              {HEADLINES.map((h, i) => (
+                <p
+                  key={i}
+                  className="absolute inset-0 text-base md:text-xl lg:text-2xl font-body font-light tracking-wide transition-all duration-700 ease-in-out"
+                  style={{
+                    color: 'rgba(240,232,210,0.6)',
+                    opacity: i === headlineIndex ? 1 : 0,
+                    transform: i === headlineIndex ? 'translateY(0)' : i === prevHeadlineIndex ? 'translateY(-100%)' : 'translateY(100%)',
+                  }}
+                >
+                  {h.eyebrow}
+                </p>
+              ))}
+            </div>
+
+            {/* Hero word — large, dramatic */}
+            <div
+              className=" overflow-visible relative dark:text-white"
+              style={{ lineHeight: 1.2, paddingTop: '.08em' }}
+            >
+              {HEADLINES.map((h, i) => (
+                <h1
+                  key={i}
+                  className="absolute left-0 top-0 font-heading font-bold transition-all duration-700 ease-in-out whitespace-nowrap"
+                  style={{
+                    fontSize: 'clamp(3rem, 7vw, 6.5rem)',
+                    letterSpacing: '-0.02em',
+                    background: i === headlineIndex
+                      ? 'linear-gradient(135deg, #f0b96a 0%, #d4975a 40%, #f0e8d2 80%)'
+                      : 'linear-gradient(135deg, #f0b96a 0%, #d4975a 40%, #f0e8d2 80%)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    backgroundClip: 'text',
+                    opacity: i === headlineIndex ? 1 : 0,
+                    transform: i === headlineIndex ? 'translateY(0) skewX(0deg)' : i === prevHeadlineIndex ? 'translateY(-110%)' : 'translateY(110%)',
+                  }}
+                >
+                  {h.word}
+                </h1>
+              ))}
+              {/* Spacer to hold height */}
+              <h1
+                className="font-heading font-bold invisible"
+                style={{ fontSize: 'clamp(3rem, 7vw, 6.5rem)', letterSpacing: '-0.02em' }}
+                aria-hidden
+              >
+                {HEADLINES[0].word}
+              </h1>
+            </div>
+          </div>
+
+          {/* Description */}
+          <p
+            className="text-sm md:text-base leading-relaxed max-w-[420px] mb-8 md:mb-10 font-body"
+            style={{
+              color: 'rgba(240,232,210,0.5)',
+              animation: mounted ? 'heroFadeUp 0.7s ease both' : 'none',
+              animationDelay: '160ms',
+            }}
+          >
+            Handpicked, heritage-quality goods delivered across Bangladesh. Transparent pricing. Genuine care. Every single detail.
+          </p>
+
+          {/* CTA Row */}
+          <div
+            className="flex flex-wrap items-center gap-3 md:gap-4 mb-10 md:mb-12"
+            style={{ animation: mounted ? 'heroFadeUp 0.7s ease both' : 'none', animationDelay: '240ms' }}
+          >
+            <Link
+              href="#products"
+              className="group/p relative inline-flex items-center gap-2.5 overflow-visible rounded-xl font-semibold font-body text-sm px-6 md:px-8 py-3.5 md:py-4"
+              style={{
+                background: 'linear-gradient(135deg, #c07840 0%, #a0622e 100%)',
+                color: '#f0e8d2',
+                boxShadow: '0 8px 32px rgba(184,115,51,0.35), inset 0 1px 0 rgba(255,255,255,0.1)',
+              }}
+            >
+              {/* Shine sweep */}
+              <span
+                className="absolute inset-0 -translate-x-full group-hover/p:translate-x-full transition-transform duration-700 ease-in-out pointer-events-none"
+                style={{ background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent)' }}
+              />
+              <span className="relative z-10">Explore Collection</span>
+              <svg
+                className="w-4 h-4 relative z-10 transition-transform duration-300 group-hover/p:translate-x-1"
+                fill="none" stroke="currentColor" viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+              </svg>
+            </Link>
+
+            <Link
+              href="/orders"
+              className="group/t inline-flex items-center gap-2 rounded-xl font-medium font-body text-sm px-5 md:px-6 py-3.5 md:py-4 backdrop-blur-sm transition-all duration-300"
+              style={{
+                color: 'rgba(240,232,210,0.7)',
+                border: '1px solid rgba(240,232,210,0.15)',
+              }}
+              onMouseEnter={e => {
+                ;(e.currentTarget as HTMLElement).style.backgroundColor = 'rgba(240,232,210,0.06)'
+                ;(e.currentTarget as HTMLElement).style.borderColor = 'rgba(240,232,210,0.3)'
+                ;(e.currentTarget as HTMLElement).style.color = 'rgba(240,232,210,0.9)'
+              }}
+              onMouseLeave={e => {
+                ;(e.currentTarget as HTMLElement).style.backgroundColor = 'transparent'
+                ;(e.currentTarget as HTMLElement).style.borderColor = 'rgba(240,232,210,0.15)'
+                ;(e.currentTarget as HTMLElement).style.color = 'rgba(240,232,210,0.7)'
+              }}
+            >
+              <svg className="w-3.5 h-3.5 transition-transform duration-300 group-hover/t:translate-x-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+              Track Order
+            </Link>
+          </div>
+
+          {/* Trust Strip */}
+          <div
+            className="flex flex-wrap items-center gap-5 md:gap-8 pt-6 md:pt-8"
+            style={{
+              borderTop: '1px solid rgba(240,232,210,0.08)',
+              animation: mounted ? 'heroFadeUp 0.7s ease both' : 'none',
+              animationDelay: '320ms',
+            }}
+          >
+            {[
+              {
+                icon: (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                ),
+                label: 'Secure bKash',
+              },
+              {
+                icon: (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                ),
+                label: 'Free Delivery ৳1000+',
+              },
+              {
+                icon: (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                ),
+                label: '4.9 / 5 Rating',
+              },
+            ].map(({ icon, label }) => (
+              <div key={label} className="flex items-center gap-2">
+                <svg className="w-3.5 h-3.5 flex-shrink-0" style={{ color: '#d4975a' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  {icon}
+                </svg>
+                <span className="text-[10px] md:text-[11px] font-medium font-body" style={{ color: 'rgba(240,232,210,0.45)' }}>
+                  {label}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ════════════════════════════════════════
+            RIGHT — Product Visual Column (desktop)
+        ════════════════════════════════════════ */}
+        <div className="absolute right-0 top-0 bottom-0 w-[52%] hidden md:flex items-center justify-center pointer-events-none">
+          <div
+            className="relative transition-transform duration-300 ease-out"
+            style={{
+              width: 'clamp(340px, 38vw, 520px)',
+              height: 'clamp(340px, 38vw, 520px)',
+              transform: isTouchDevice ? 'none' : `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg)`,
+              transformStyle: 'preserve-3d',
+            }}
+          >
+            {/* ── Particle Field (SVG, behind everything) ── */}
+            <svg
+              className="absolute inset-0 w-full h-full pointer-events-none"
+              style={{ transform: 'translateZ(-60px)', opacity: 0.7 }}
+              viewBox="0 0 100 100"
+              preserveAspectRatio="xMidYMid meet"
+            >
+              {PARTICLES.map(p => (
+                <circle
+                  key={p.id}
+                  cx={p.cx}
+                  cy={p.cy}
+                  r={p.r * 0.4}
+                  fill="#f0b96a"
+                  opacity={p.opacity}
+                  style={{
+                    animation: `particlePulse ${p.duration}s ease-in-out ${p.delay}s infinite alternate`,
+                  }}
+                />
+              ))}
+            </svg>
+
+            {/* ── Orbit Ring 3 — outermost, slow ── */}
+            <div
+              className="absolute inset-0 rounded-full"
+              style={{
+                border: '1px solid rgba(184,115,51,0.12)',
+                transform: 'translateZ(-30px)',
+                animation: 'orbitSpin 60s linear infinite',
+              }}
+            >
+              <div
+                className="absolute"
+                style={{
+                  top: '4%', left: '50%', transform: 'translate(-50%,-50%)',
+                  width: 10, height: 10, borderRadius: '50%',
+                  background: 'radial-gradient(circle, #f0b96a, #c07840)',
+                  boxShadow: '0 0 12px 4px rgba(240,185,106,0.5)',
+                }}
+              />
+              <div
+                className="absolute"
+                style={{
+                  bottom: '4%', left: '50%', transform: 'translate(-50%,50%)',
+                  width: 6, height: 6, borderRadius: '50%',
+                  background: 'rgba(184,115,51,0.6)',
+                }}
+              />
+            </div>
+
+            {/* ── Orbit Ring 2 — mid, reverse ── */}
+            <div
+              className="absolute inset-[6%] rounded-full"
+              style={{
+                border: '1px dashed rgba(240,185,106,0.1)',
+                transform: 'translateZ(-10px)',
+                animation: 'orbitSpin 40s linear infinite reverse',
+              }}
+            >
+              <div
+                className="absolute"
+                style={{
+                  top: '2%', right: '12%',
+                  width: 5, height: 5, borderRadius: '50%',
+                  background: 'rgba(240,185,106,0.45)',
+                  boxShadow: '0 0 6px 2px rgba(240,185,106,0.3)',
+                }}
+              />
+            </div>
+
+            {/* ── Central Image Frame ── */}
+            <div
+              className="absolute inset-[13%] rounded-full overflow-hidden"
+              style={{
+                transform: 'translateZ(50px)',
+                background: 'rgba(13,31,15,0.6)',
+                backdropFilter: 'blur(2px)',
+                boxShadow: `
+                  0 0 0 1px rgba(184,115,51,0.25),
+                  0 0 0 8px rgba(13,31,15,0.4),
+                  0 0 0 9px rgba(184,115,51,0.08),
+                  0 32px 80px rgba(0,0,0,0.6),
+                  inset 0 1px 0 rgba(240,185,106,0.15)
+                `,
+              }}
+            >
+              {/* Lens flare arc at top */}
+              <div
+                className="absolute top-0 left-0 right-0 h-1/2 pointer-events-none z-10"
+                style={{
+                  background: 'linear-gradient(180deg, rgba(240,185,106,0.08) 0%, transparent 100%)',
+                  borderRadius: '50% 50% 0 0 / 100% 100% 0 0',
+                }}
+              />
+
+              {topProduct ? (
+                <Link
+                  href={`/product/${topProduct.id}`}
+                  className="block w-full h-full relative group/img pointer-events-auto"
+                >
+                  <img
+                    src={productImage!}
+                    alt={topProduct.name}
+                    className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover/img:scale-110"
+                    style={{ filter: 'brightness(0.95) contrast(1.05) saturate(1.1)' }}
+                  />
+                  {/* Vignette */}
+                  <div
+                    className="absolute inset-0 pointer-events-none"
+                    style={{ background: 'radial-gradient(circle at 50% 50%, transparent 50%, rgba(10,24,12,0.5) 100%)' }}
+                  />
+                  {/* Best seller badge */}
+                  <div
+                    className="absolute bottom-[14%] left-1/2 -translate-x-1/2 z-20 pointer-events-none"
+                  >
+                    <div
+                      className="flex items-center gap-1.5 rounded-full px-3 py-1"
+                      style={{
+                        background: 'rgba(10,24,12,0.75)',
+                        backdropFilter: 'blur(12px)',
+                        border: '1px solid rgba(184,115,51,0.35)',
+                      }}
+                    >
+                      <svg className="w-3 h-3" style={{ color: '#f0b96a' }} fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M12.395 2.553a1 1 0 00-1.45-.385c-.345.23-.614.558-.822.88-.214.33-.403.713-.57 1.116-.334.804-.614 1.768-.84 2.734a31.365 31.365 0 00-.613 3.58 2.64 2.64 0 01-.945-1.067c-.328-.68-.398-1.534-.398-2.654A1 1 0 005.05 6.05 6.981 6.981 0 003 11a7 7 0 1011.95-4.95c-.592-.591-.98-.985-1.348-1.467-.363-.476-.724-1.063-1.207-2.03zM12.12 15.12A3 3 0 017 13s.879.5 2.5.5c0-1 .5-4 1.25-4.5.5 1 .786 1.293 1.371 1.879A2.99 2.99 0 0113 13a2.99 2.99 0 01-.879 2.121z" clipRule="evenodd" />
+                      </svg>
+                      <span className="text-[9px] font-bold uppercase tracking-[0.2em] font-body" style={{ color: '#f0b96a' }}>
+                        Best Seller
+                      </span>
+                      <span className="text-[9px] font-body" style={{ color: 'rgba(240,232,210,0.5)' }}>
+                        · {topProduct.total_sold} sold
+                      </span>
+                    </div>
                   </div>
-                  <div className="absolute bottom-5 right-5 w-7 h-7 bg-bushal-copper rounded-full flex items-center justify-center border-2 border-bushal-forest shadow-md">
-                    <svg className="w-3.5 h-3.5 text-bushal-ivory" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M12.395 2.553a1 1 0 00-1.45-.385c-.345.23-.614.558-.822.88-.214.33-.403.713-.57 1.116-.334.804-.614 1.768-.84 2.734a31.365 31.365 0 00-.613 3.58 2.64 2.64 0 01-.945-1.067c-.328-.68-.398-1.534-.398-2.654A1 1 0 005.05 6.05 6.981 6.981 0 003 11a7 7 0 1011.95-4.95c-.592-.591-.98-.985-1.348-1.467-.363-.476-.724-1.063-1.207-2.03zM12.12 15.12A3 3 0 017 13s.879.5 2.5.5c0-1 .5-4 1.25-4.5.5 1 .786 1.293 1.371 1.879A2.99 2.99 0 0113 13a2.99 2.99 0 01-.879 2.121z" clipRule="evenodd" />
-                    </svg>
-                  </div>
+                </Link>
+              ) : loading ? (
+                <div className="w-full h-full flex items-center justify-center">
+                  <div
+                    className="w-12 h-12 rounded-full animate-spin"
+                    style={{ border: '2px solid rgba(184,115,51,0.2)', borderTopColor: '#c07840' }}
+                  />
                 </div>
               ) : (
-                <div className="w-20 h-20 rounded-full bg-bushal-forest border-2 border-bushal-copper/50 flex items-center justify-center shadow-inner">
-                  <span className="text-4xl font-heading font-bold text-bushal-copperGlow">B</span>
+                <div className="w-full h-full flex items-center justify-center">
+                  <span
+                    className="font-heading font-bold"
+                    style={{
+                      fontSize: '5rem',
+                      background: 'linear-gradient(135deg, #f0b96a, #d4975a)',
+                      WebkitBackgroundClip: 'text',
+                      WebkitTextFillColor: 'transparent',
+                      backgroundClip: 'text',
+                    }}
+                  >
+                    B
+                  </span>
                 </div>
               )}
-              
-              <div className="text-center mt-2">
-                <p className="text-[9px] font-body font-bold uppercase tracking-[0.15em] text-bushal-copperGlow">
-                  {loading ? 'Loading...' : topProduct ? 'Best Seller' : 'Est. 2026'}
+            </div>
+
+            {/* ── Floating Cards ── */}
+
+            {/* Card A — top-left: Premium Quality */}
+            <div
+              className="absolute pointer-events-none"
+              style={{
+                top: '6%', left: '-4%',
+                transform: isTouchDevice ? 'translateZ(90px)' : `translateZ(90px) translate(${tx * -1.8}px, ${ty * -1.8}px)`,
+                transition: 'transform 0.1s linear',
+                animation: mounted ? 'floatA 6s ease-in-out infinite' : 'none',
+              }}
+            >
+              <div
+                className="rounded-2xl px-3 py-2.5 md:px-4 md:py-3"
+                style={{
+                  background: 'rgba(13,31,15,0.8)',
+                  backdropFilter: 'blur(20px)',
+                  border: '1px solid rgba(184,115,51,0.25)',
+                  boxShadow: '0 16px 40px rgba(0,0,0,0.4)',
+                  minWidth: 120,
+                }}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <div
+                    className="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0"
+                    style={{ background: 'rgba(184,115,51,0.2)' }}
+                  >
+                    <svg className="w-3.5 h-3.5" style={{ color: '#f0b96a' }} fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                    </svg>
+                  </div>
+                  <span className="text-[10px] font-bold uppercase tracking-wider font-body" style={{ color: 'rgba(240,232,210,0.85)' }}>
+                    Premium
+                  </span>
+                </div>
+                <p className="text-[10px] leading-snug font-body" style={{ color: 'rgba(240,232,210,0.45)' }}>
+                  Heritage-grade goods
                 </p>
-                {!loading && topProduct && (
-                  <p className="text-[8px] text-bushal-ivory/60 mt-0.5">
-                    {topProduct.total_sold} sold
-                  </p>
-                )}
               </div>
             </div>
 
-            {/* Shimmer Effect */}
-            <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/10 to-transparent -translate-x-full animate-shimmer" />
-          </div>
-
-          {/* Floating Glass Card 1 (Top Left) */}
-          <div 
-            className="absolute -top-4 -left-4 w-32 p-3 bg-bushal-ivory/10 backdrop-blur-md rounded-xl border border-bushal-ivory/20 shadow-xl transition-transform duration-700 ease-out"
-            style={{ 
-              transform: `translateZ(80px) translate(${translateX * -1.5}px, ${translateY * -1.5}px)`
-            }}
-          >
-            <div className="flex items-center gap-2 mb-1">
-              <div className="w-7 h-7 rounded-full bg-bushal-copper/20 flex items-center justify-center">
-                <svg className="w-3 h-3 text-bushal-copperGlow" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg>
+            {/* Card B — bottom-right: Live Status */}
+            <div
+              className="absolute pointer-events-none"
+              style={{
+                bottom: '4%', right: '-6%',
+                transform: isTouchDevice ? 'translateZ(70px)' : `translateZ(70px) translate(${tx * 1.6}px, ${ty * 1.6}px)`,
+                transition: 'transform 0.1s linear',
+                animation: mounted ? 'floatB 7s ease-in-out infinite' : 'none',
+              }}
+            >
+              <div
+                className="rounded-2xl px-3 py-2.5 md:px-4 md:py-3"
+                style={{
+                  background: 'rgba(13,31,15,0.85)',
+                  backdropFilter: 'blur(20px)',
+                  border: '1px solid rgba(184,115,51,0.2)',
+                  boxShadow: '0 16px 40px rgba(0,0,0,0.4)',
+                  minWidth: 130,
+                }}
+              >
+                <div className="flex items-center justify-between gap-3 mb-1.5">
+                  <span className="text-[10px] font-bold uppercase tracking-wider font-body" style={{ color: '#d4975a' }}>
+                    Live Status
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    <span className="text-[8px] font-bold font-body text-emerald-400">ONLINE</span>
+                  </div>
+                </div>
+                <p className="text-[10px] font-body" style={{ color: 'rgba(240,232,210,0.4)' }}>
+                  Orders shipping now
+                </p>
               </div>
-              <span className="text-[10px] font-bold text-bushal-ivory/90 uppercase tracking-wider">Premium</span>
             </div>
-            <p className="text-xs text-bushal-ivory/60 leading-tight">Handpicked heritage goods</p>
-          </div>
 
-          {/* Floating Glass Card 2 (Bottom Right) */}
-          <div 
-            className="absolute -bottom-4 -right-4 w-36 p-3 bg-bushal-forest/80 backdrop-blur-md rounded-xl border border-bushal-copper/30 shadow-xl transition-transform duration-700 ease-out"
-            style={{ 
-              transform: `translateZ(60px) translate(${translateX * 1.5}px, ${translateY * 1.5}px)`
-            }}
-          >
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] font-bold text-bushal-copperGlow uppercase tracking-wider">Live Status</span>
-              <div className="flex items-center gap-1">
-                <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                <span className="text-[9px] text-emerald-400 font-bold">ONLINE</span>
+            {/* Card C — top-right: bKash */}
+            <div
+              className="absolute pointer-events-none"
+              style={{
+                top: '18%', right: '-8%',
+                transform: isTouchDevice ? 'translateZ(110px)' : `translateZ(110px) translate(${tx * 2.2}px, ${ty * 2.2}px)`,
+                transition: 'transform 0.1s linear',
+                animation: mounted ? 'floatC 5s ease-in-out infinite' : 'none',
+              }}
+            >
+              <div
+                className="rounded-xl px-2.5 py-2"
+                style={{
+                  background: 'rgba(200,0,80,0.15)',
+                  backdropFilter: 'blur(16px)',
+                  border: '1px solid rgba(200,0,80,0.25)',
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
+                }}
+              >
+                <p className="text-[9px] font-bold uppercase tracking-[0.2em] font-body text-center" style={{ color: '#f48fb1' }}>
+                  bKash
+                </p>
+                <p className="text-[8px] font-body text-center mt-0.5" style={{ color: 'rgba(240,232,210,0.5)' }}>
+                  Secure Pay
+                </p>
               </div>
             </div>
-            <div className="flex items-baseline gap-1">
-              <span className="text-lg font-heading font-bold text-bushal-ivory">12</span>
-              <span className="text-[10px] text-bushal-ivory/50">orders today</span>
-            </div>
-          </div>
-          
-          {/* Floating Glass Card 3 (Top Right) */}
-          <div 
-            className="absolute top-10 -right-8 w-24 p-2 bg-bushal-copper/10 backdrop-blur-md rounded-lg border border-bushal-copper/20 shadow-lg transition-transform duration-700 ease-out"
-            style={{ 
-              transform: `translateZ(100px) translate(${translateX * 2}px, ${translateY * 2}px)`
-            }}
-          >
-            <p className="text-[9px] font-bold text-bushal-copperGlow uppercase tracking-widest text-center">Secure</p>
-            <p className="text-[10px] text-bushal-ivory/80 text-center mt-0.5">bKash Pay</p>
           </div>
         </div>
       </div>
+
+      {/* ════════════════════════════════════════
+          MOBILE — Product Visual (≤md)
+      ════════════════════════════════════════ */}
+      <div className="md:hidden absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ width: 160, height: 160 }}>
+        <div
+          className="absolute inset-0 rounded-full"
+          style={{ border: '1px solid rgba(184,115,51,0.15)', animation: 'orbitSpin 60s linear infinite' }}
+        />
+        <div
+          className="absolute inset-[12%] rounded-full overflow-hidden"
+          style={{
+            boxShadow: '0 0 0 1px rgba(184,115,51,0.2), 0 16px 40px rgba(0,0,0,0.5)',
+          }}
+        >
+          {topProduct ? (
+            <Link href={`/product/${topProduct.id}`} className="block w-full h-full pointer-events-auto">
+              <img src={productImage!} alt={topProduct.name} className="w-full h-full object-cover" />
+              <div
+                className="absolute inset-0"
+                style={{ background: 'radial-gradient(circle at 50% 50%, transparent 50%, rgba(10,24,12,0.45) 100%)' }}
+              />
+            </Link>
+          ) : (
+            <div className="w-full h-full flex items-center justify-center" style={{ background: '#0d1f0f' }}>
+              <span className="font-heading font-bold text-3xl" style={{ color: '#d4975a' }}>B</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Keyframe injector ── */}
+      <style>{`
+        @keyframes heroFadeUp {
+          from { opacity: 0; transform: translateY(18px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes orbitSpin {
+          from { transform: rotate(0deg); }
+          to   { transform: rotate(360deg); }
+        }
+        @keyframes particlePulse {
+          from { opacity: var(--op, 0.12); r: 0.4; }
+          to   { opacity: calc(var(--op, 0.12) * 3); r: 0.7; }
+        }
+        @keyframes floatA {
+          0%, 100% { margin-top: 0px; }
+          50%       { margin-top: -8px; }
+        }
+        @keyframes floatB {
+          0%, 100% { margin-bottom: 0px; }
+          50%       { margin-bottom: -10px; }
+        }
+        @keyframes floatC {
+          0%, 100% { margin-top: 0px; }
+          50%       { margin-top: 6px; }
+        }
+      `}</style>
     </div>
   )
 }

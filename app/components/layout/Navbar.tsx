@@ -1,4 +1,4 @@
-// app/(customer)/components/navbar/Navbar.tsx
+// app/components/layout/Navbar.tsx
 'use client'
 
 import { useAuth } from '@/app/hooks/useAuth'
@@ -59,39 +59,34 @@ export default function Navbar() {
   const { items } = useCart()
   const { user, signOut } = useAuth()
   const supabase = createBrowserClient()
-  
   const [cartOpen, setCartOpen] = useState(false)
   const [prevCount, setPrevCount] = useState(0)
   const [cartBump, setCartBump] = useState(false)
   const cartCount = items.reduce((sum, item) => sum + item.quantity, 0)
-  
   const [scrolled, setScrolled] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<SearchResult[]>([])
   const [searching, setSearching] = useState(false)
   const [showResults, setShowResults] = useState(false)
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false)
-  
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [notifOpen, setNotifOpen] = useState(false)
   const [userRole, setUserRole] = useState<string | null>(null)
   const [notifLoading, setNotifLoading] = useState(true)
-  
+  const [searchFocused, setSearchFocused] = useState(false)
   const notifRef = useRef<HTMLDivElement>(null)
   const debouncedQuery = useDebounce(query, 280)
   const searchRef = useRef<HTMLDivElement>(null)
   const mobileSearchRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const mobileInputRef = useRef<HTMLInputElement>(null)
-  
   const unreadCount = notifications.filter((n) => !n.read).length
   const isAdmin = userRole === 'admin'
 
   // Scroll listener for navbar background
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 10)
+    const onScroll = () => setScrolled(window.scrollY > 60)
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => window.removeEventListener('scroll', onScroll)
   }, [])
@@ -129,20 +124,17 @@ export default function Navbar() {
         .select('role')
         .eq('id', user.id)
         .single()
-      
       const admin = profile?.role === 'admin'
       let q = supabase
         .from('notifications')
         .select('id, type, title, body, read, created_at, order_id, comment_id')
         .order('created_at', { ascending: false })
         .limit(20)
-      
       if (admin) {
         q = q.is('user_id', null)
       } else {
         q = q.eq('user_id', user.id)
       }
-      
       const { data, error } = await q
       if (error) {
         console.error('Error fetching notifications:', error)
@@ -250,6 +242,7 @@ export default function Navbar() {
     const handler = (e: MouseEvent) => {
       if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
         setShowResults(false)
+        setSearchFocused(false)
       }
       if (mobileSearchRef.current && !mobileSearchRef.current.contains(e.target as Node)) {
         setMobileSearchOpen(false)
@@ -277,39 +270,44 @@ export default function Navbar() {
   const SearchDropdown = () => {
     if (!showResults) return null
     return (
-      <div className="absolute z-50 bg-bushal-surface rounded-xl border border-bushal-border shadow-cardHover top-full left-0 right-0 mt-2 overflow-hidden animate-scale-in">
+      <div className="absolute z-50 bg-bushal-surface rounded-2xl border border-bushal-border shadow-2xl top-full left-0 right-0 mt-3 overflow-hidden animate-scale-in">
         {results.length === 0 ? (
-          <div className="px-4 py-8 text-center">
+          <div className="px-6 py-10 text-center">
+            <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-bushal-ivoryDeep flex items-center justify-center">
+              <svg className="w-6 h-6 text-bushal-inkSoft" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
             <p className="text-sm font-medium text-bushal-ink mb-1">No results for "{query}"</p>
             <p className="text-xs text-bushal-inkSoft">Try different keywords or browse all products</p>
-            <Link href="/dashboard" onClick={handleResultClick} className="inline-flex items-center gap-1 mt-3 text-xs font-semibold text-bushal-copper hover:text-bushal-copperLight">
+            <Link href="/dashboard" onClick={handleResultClick} className="inline-flex items-center gap-1 mt-4 text-xs font-semibold text-bushal-copper hover:text-bushal-copperLight">
               Browse all →
             </Link>
           </div>
         ) : (
           <>
-            <div className="px-3 pt-2.5 pb-1">
+            <div className="px-4 pt-3 pb-2 border-b border-bushal-border">
               <p className="text-[11px] text-bushal-inkSoft font-semibold uppercase tracking-wide">
                 {results.length} result{results.length !== 1 ? 's' : ''}
               </p>
             </div>
-            <div className="divide-y divide-bushal-ivory max-h-[400px] overflow-y-auto no-scrollbar">
+            <div className="divide-y divide-bushal-ivory max-h-[420px] overflow-y-auto no-scrollbar">
               {results.map((product) => {
                 const cover = (Array.isArray(product.images) && product.images[0]) || product.image_url
                 const dp = product.discount_percent ? product.price * (1 - product.discount_percent / 100) : null
                 return (
-                  <Link 
-                    key={product.id} 
-                    href={`/product/${product.id}`} 
+                  <Link
+                    key={product.id}
+                    href={`/product/${product.id}`}
                     onClick={handleResultClick}
-                    className="flex items-center gap-3 px-3 py-2.5 hover:bg-bushal-ivoryDeep transition-colors group"
+                    className="flex items-center gap-4 px-4 py-3 hover:bg-bushal-ivoryDeep transition-colors group"
                   >
-                    <div className="w-10 h-10 rounded-lg overflow-hidden bg-bushal-ivoryDeep border border-bushal-border flex-shrink-0">
+                    <div className="w-12 h-12 rounded-xl overflow-hidden bg-bushal-ivoryDeep border border-bushal-border flex-shrink-0">
                       {cover ? (
                         <img src={cover} alt="" className="w-full h-full object-cover" />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center text-bushal-borderMid">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                           </svg>
                         </div>
@@ -319,8 +317,8 @@ export default function Navbar() {
                       <p className="text-sm font-semibold text-bushal-ink group-hover:text-bushal-forest transition-colors line-clamp-1">
                         {highlightMatch(product.name, query)}
                       </p>
-                      <div className="flex items-center gap-1.5 mt-0.5">
-                        <span className="text-xs font-semibold text-bushal-forest">{formatPrice(dp ?? product.price)}</span>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-xs font-bold text-bushal-copper">{formatPrice(dp ?? product.price)}</span>
                         {dp && <span className="text-[11px] text-bushal-inkSoft line-through">{formatPrice(product.price)}</span>}
                       </div>
                     </div>
@@ -331,10 +329,10 @@ export default function Navbar() {
                 )
               })}
             </div>
-            <Link 
-              href={`/dashboard?q=${encodeURIComponent(query)}`} 
+            <Link
+              href={`/dashboard?q=${encodeURIComponent(query)}`}
               onClick={handleResultClick}
-              className="flex items-center justify-center gap-1.5 px-3 py-2.5 text-xs font-semibold text-bushal-copper hover:bg-bushal-ivoryDeep transition-colors border-t border-bushal-border"
+              className="flex items-center justify-center gap-1.5 px-4 py-3 text-xs font-semibold text-bushal-copper hover:bg-bushal-ivoryDeep transition-colors border-t border-bushal-border"
             >
               See all results →
             </Link>
@@ -345,8 +343,8 @@ export default function Navbar() {
   }
 
   const NotificationPanel = () => (
-    <div className="absolute right-0 top-full mt-2 w-80 bg-bushal-surface rounded-xl border border-bushal-border shadow-cardHover z-50 overflow-hidden animate-scale-in">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-bushal-border">
+    <div className="absolute right-0 top-full mt-3 w-96 bg-bushal-surface rounded-2xl border border-bushal-border shadow-2xl z-50 overflow-hidden animate-scale-in">
+      <div className="flex items-center justify-between px-5 py-4 border-b border-bushal-border">
         <p className="text-sm font-semibold text-bushal-ink">
           {isAdmin ? 'Admin Notifications' : 'Notifications'}
         </p>
@@ -360,35 +358,35 @@ export default function Navbar() {
         )}
       </div>
       {notifLoading ? (
-        <div className="px-4 py-8 text-center">
-          <div className="w-6 h-6 border-2 border-bushal-copper border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+        <div className="px-5 py-12 text-center">
+          <div className="w-8 h-8 border-2 border-bushal-copper border-t-transparent rounded-full animate-spin mx-auto mb-3" />
           <p className="text-sm text-bushal-inkSoft">Loading...</p>
         </div>
       ) : notifications.length === 0 ? (
-        <div className="px-4 py-10 text-center">
-          <div className="w-12 h-12 bg-bushal-ivoryDeep rounded-full flex items-center justify-center mx-auto mb-3">
-            <svg className="w-6 h-6 text-bushal-inkSoft" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="px-5 py-14 text-center">
+          <div className="w-14 h-14 bg-bushal-ivoryDeep rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-7 h-7 text-bushal-inkSoft" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
             </svg>
           </div>
           <p className="text-sm text-bushal-inkSoft">No notifications yet</p>
         </div>
       ) : (
-        <div className="max-h-80 overflow-y-auto divide-y divide-bushal-ivory no-scrollbar">
+        <div className="max-h-96 overflow-y-auto divide-y divide-bushal-ivory no-scrollbar">
           {notifications.map((n) => (
             <div
               key={n.id}
-              className={cn('px-4 py-3 transition-colors', !n.read ? 'bg-bushal-ivoryDeep' : 'hover:bg-bushal-ivoryDeep')}
+              className={cn('px-5 py-4 transition-colors', !n.read ? 'bg-bushal-ivoryDeep' : 'hover:bg-bushal-ivoryDeep')}
             >
-              <div className="flex items-start gap-2.5">
-                <div className={cn('w-2 h-2 rounded-full mt-1.5 flex-shrink-0', !n.read ? 'bg-bushal-copper' : 'bg-transparent')} />
+              <div className="flex items-start gap-3">
+                <div className={cn('w-2 h-2 rounded-full mt-2 flex-shrink-0', !n.read ? 'bg-bushal-copper' : 'bg-transparent')} />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-bushal-ink leading-snug">{n.title}</p>
-                  <p className="text-xs text-bushal-inkSoft mt-0.5 leading-relaxed">{n.body}</p>
+                  <p className="text-xs text-bushal-inkSoft mt-1 leading-relaxed">{n.body}</p>
                   {n.order_id && (
                     <Link
                       href={isAdmin ? `/admin/orders/${n.order_id}` : '/orders'}
-                      className="text-xs text-bushal-copper font-semibold mt-1 inline-block hover:underline"
+                      className="text-xs text-bushal-copper font-semibold mt-2 inline-block hover:underline"
                     >
                       View order →
                     </Link>
@@ -396,12 +394,12 @@ export default function Navbar() {
                   {n.comment_id && isAdmin && (
                     <Link
                       href="/admin/comments"
-                      className="text-xs text-bushal-copper font-semibold mt-1 inline-block hover:underline"
+                      className="text-xs text-bushal-copper font-semibold mt-2 inline-block hover:underline"
                     >
                       View comment →
                     </Link>
                   )}
-                  <p className="text-[10px] text-bushal-inkSoft mt-1">
+                  <p className="text-[10px] text-bushal-inkSoft mt-2">
                     {new Date(n.created_at).toLocaleDateString('en-BD', {
                       month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
                     })}
@@ -421,10 +419,12 @@ export default function Navbar() {
         <nav className={cn(
           'pointer-events-auto transition-all duration-500 ease-out',
           scrolled
-            ? 'bg-bushal-forest shadow-2xl shadow-bushal-forest/40'
-            : 'bg-bushal-forest/95 backdrop-blur-md'
+            ? 'bg-bushal-forest/95 backdrop-blur-xl shadow-2xl shadow-bushal-forest/30'
+            : 'bg-bushal-forest'
         )}>
-          <div className="h-0.5 bg-gradient-to-r from-transparent via-bushal-copper to-transparent opacity-60" />
+          {/* Top accent line */}
+          <div className="h-[2px] bg-gradient-to-r from-transparent via-bushal-copper to-transparent opacity-70" />
+          
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex items-center justify-between h-16 lg:h-20">
               {/* Logo */}
@@ -446,11 +446,14 @@ export default function Navbar() {
                 </div>
               </Link>
 
-              {/* Desktop Search */}
+              {/* Desktop Search - Inline Expanding */}
               <div className="flex-1 mx-8 hidden lg:block" ref={searchRef}>
-                <div className="relative max-w-xl">
-                  <div className="absolute inset-0 bg-white/5 rounded-xl blur-sm" />
-                  <svg className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/50 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="relative max-w-md mx-auto">
+                  <div className={cn(
+                    'absolute inset-0 rounded-xl blur-sm transition-opacity duration-300',
+                    searchFocused ? 'bg-bushal-copper/10 opacity-100' : 'bg-white/5 opacity-0'
+                  )} />
+                  <svg className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/50 pointer-events-none transition-colors duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                   </svg>
                   <input
@@ -458,9 +461,14 @@ export default function Navbar() {
                     type="search"
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
-                    onFocus={() => results.length > 0 && setShowResults(true)}
-                    placeholder="Search products, categories..."
-                    className="relative w-full bg-white/10 text-white placeholder-white/50 pl-12 pr-12 py-3 rounded-xl border border-white/10 text-sm focus:outline-none focus:border-bushal-copper/60 focus:bg-white/15 focus:ring-2 focus:ring-bushal-copper/20 transition-all duration-300"
+                    onFocus={() => { setSearchFocused(true); if (results.length > 0) setShowResults(true) }}
+                    onBlur={() => setSearchFocused(false)}
+                    placeholder="Search products..."
+                    className={cn(
+                      'relative w-full bg-white/10 text-white placeholder-white/50 pl-12 pr-12 py-3 rounded-xl border border-white/10 text-sm transition-all duration-300',
+                      'focus:outline-none focus:border-bushal-copper/60 focus:bg-white/15 focus:ring-2 focus:ring-bushal-copper/20',
+                      searchFocused ? 'max-w-sm' : 'max-w-xs'
+                    )}
                   />
                   {searching && (
                     <div className="absolute right-4 top-1/2 -translate-y-1/2">
@@ -493,7 +501,7 @@ export default function Navbar() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                   </svg>
                 </button>
-                
+
                 <button
                   onClick={() => setCartOpen(true)}
                   className="relative p-2.5 rounded-xl transition-all duration-200 hover:scale-110 text-white/70 hover:text-white hover:bg-white/10"
@@ -587,70 +595,69 @@ export default function Navbar() {
               </div>
             </div>
           </div>
-
-          {/* Mobile Search Dropdown */}
-          {mobileSearchOpen && (
-            <div ref={mobileSearchRef} className="lg:hidden border-t border-white/10 py-4 px-4 animate-fade-up bg-bushal-forest backdrop-blur-xl">
-              <div className="relative">
-                <svg className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/50 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-                <input
-                  ref={mobileInputRef}
-                  type="search"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search products..."
-                  className="w-full bg-white/10 text-white placeholder-white/50 pl-12 pr-4 py-3 rounded-xl border border-white/10 text-sm focus:outline-none focus:border-bushal-copper/60 focus:ring-2 focus:ring-bushal-copper/20"
-                />
-                {searching && (
-                  <div className="absolute right-4 top-1/2 -translate-y-1/2">
-                    <div className="w-5 h-5 border-2 border-bushal-copper/60 border-t-transparent rounded-full animate-spin" />
-                  </div>
-                )}
-              </div>
-              <SearchDropdown />
-            </div>
-          )}
-
-          {/* Mobile Menu Dropdown */}
-          {mobileMenuOpen && (
-            <div className="lg:hidden border-t border-white/10 py-4 space-y-2 animate-fade-up px-4 bg-bushal-forest backdrop-blur-xl">
-              {user ? (
-                <>
-                  <Link href="/orders" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 text-sm text-white/70 hover:text-white px-3 py-3 rounded-xl hover:bg-white/10 transition-all">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                    </svg>
-                    My Orders
-                  </Link>
-                  <Link href={isAdmin ? '/admin' : '/profile'} onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 text-sm text-white/70 hover:text-white px-3 py-3 rounded-xl hover:bg-white/10 transition-all">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                    </svg>
-                    {isAdmin ? 'Analytics' : 'Profile'}
-                  </Link>
-                  <button onClick={() => { signOut(); setMobileMenuOpen(false) }} className="flex items-center gap-3 w-full text-left text-sm text-white/50 hover:text-white px-3 py-3 rounded-xl hover:bg-white/10 transition-all">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                    </svg>
-                    Sign out
-                  </button>
-                </>
-              ) : (
-                <>
-                  <Link href="/login" onClick={() => setMobileMenuOpen(false)} className="block text-sm text-white/70 hover:text-white px-3 py-3 rounded-xl hover:bg-white/10 transition-all">Sign in</Link>
-                  <Link href="/register" onClick={() => setMobileMenuOpen(false)} className="block text-sm bg-gradient-to-r from-bushal-copper to-bushal-copperLight text-white text-center px-3 py-3 rounded-xl font-semibold mt-2">Register</Link>
-                </>
-              )}
-            </div>
-          )}
         </nav>
       </div>
-      
+
+      {/* Mobile Search Dropdown */}
+      {mobileSearchOpen && (
+        <div ref={mobileSearchRef} className="lg:hidden fixed top-16 left-0 right-0 z-40 border-t border-white/10 py-4 px-4 animate-fade-up bg-bushal-forest backdrop-blur-xl">
+          <div className="relative">
+            <svg className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/50 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              ref={mobileInputRef}
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search products..."
+              className="w-full bg-white/10 text-white placeholder-white/50 pl-12 pr-4 py-3 rounded-xl border border-white/10 text-sm focus:outline-none focus:border-bushal-copper/60 focus:ring-2 focus:ring-bushal-copper/20"
+            />
+            {searching && (
+              <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                <div className="w-5 h-5 border-2 border-bushal-copper/60 border-t-transparent rounded-full animate-spin" />
+              </div>
+            )}
+          </div>
+          <SearchDropdown />
+        </div>
+      )}
+
+      {/* Mobile Menu Dropdown */}
+      {mobileMenuOpen && (
+        <div className="lg:hidden fixed top-16 left-0 right-0 z-40 border-t border-white/10 py-4 space-y-2 animate-fade-up px-4 bg-bushal-forest backdrop-blur-xl">
+          {user ? (
+            <>
+              <Link href="/orders" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 text-sm text-white/70 hover:text-white px-3 py-3 rounded-xl hover:bg-white/10 transition-all">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+                My Orders
+              </Link>
+              <Link href={isAdmin ? '/admin' : '/profile'} onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 text-sm text-white/70 hover:text-white px-3 py-3 rounded-xl hover:bg-white/10 transition-all">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+                {isAdmin ? 'Analytics' : 'Profile'}
+              </Link>
+              <button onClick={() => { signOut(); setMobileMenuOpen(false) }} className="flex items-center gap-3 w-full text-left text-sm text-white/50 hover:text-white px-3 py-3 rounded-xl hover:bg-white/10 transition-all">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+                Sign out
+              </button>
+            </>
+          ) : (
+            <>
+              <Link href="/login" onClick={() => setMobileMenuOpen(false)} className="block text-sm text-white/70 hover:text-white px-3 py-3 rounded-xl hover:bg-white/10 transition-all">Sign in</Link>
+              <Link href="/register" onClick={() => setMobileMenuOpen(false)} className="block text-sm bg-gradient-to-r from-bushal-copper to-bushal-copperLight text-white text-center px-3 py-3 rounded-xl font-semibold mt-2">Register</Link>
+            </>
+          )}
+        </div>
+      )}
+
       {/* Spacer to prevent content from hiding behind fixed navbar */}
       <div className="h-16 lg:h-20" />
-      
       <CartDrawer isOpen={cartOpen} onClose={() => setCartOpen(false)} />
     </>
   )

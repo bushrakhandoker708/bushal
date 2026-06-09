@@ -11,24 +11,14 @@ export const metadata: Metadata = {
   },
   description: 'Discover heritage-quality, handpicked products delivered across Bangladesh. Shop premium goods with transparent pricing, fast delivery, and secure bKash payments at Bushal.',
   keywords: [
-    'Bushal',
-    'Bushal e-commerce',
-    'online shopping Bangladesh',
-    'buy products online BD',
-    'bKash payment shopping',
-    'premium products Dhaka',
-    'Bushra Khandoker',
-    'curated goods Bangladesh',
-    'fast delivery e-commerce BD'
+    'Bushal', 'Bushal e-commerce', 'online shopping Bangladesh', 'buy products online BD',
+    'bKash payment shopping', 'premium products Dhaka', 'Bushra Khandoker',
+    'curated goods Bangladesh', 'fast delivery e-commerce BD'
   ],
   authors: [{ name: 'Bushra Khandoker', url: 'https://github.com/Bushraabir' }],
   creator: 'Bushra Khandoker',
   publisher: 'Bushal',
-  formatDetection: { 
-    email: false, 
-    address: false, 
-    telephone: false 
-  },
+  formatDetection: { email: false, address: false, telephone: false },
   openGraph: {
     type: 'website',
     locale: 'en_BD',
@@ -36,36 +26,20 @@ export const metadata: Metadata = {
     siteName: 'Bushal',
     title: 'Bushal — Premium Curated Products in Bangladesh',
     description: 'Discover heritage-quality, handpicked products delivered across Bangladesh. Transparent pricing & secure bKash payments.',
-    images: [
-      { 
-        url: '/og-image.png', 
-        width: 1200, 
-        height: 630, 
-        alt: 'Bushal E-commerce Platform - Premium Products in Bangladesh' 
-      }
-    ],
+    images: [{ url: '/og-image.png', width: 1200, height: 630, alt: 'Bushal E-commerce Platform - Premium Products in Bangladesh' }],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'Bushal — Premium Curated Products in Bangladesh',
     description: 'Discover heritage-quality, handpicked products delivered across Bangladesh.',
     images: ['/og-image.png'],
-    creator: '@BushalBD', // Replace with actual Twitter handle if available
+    creator: '@BushalBD', 
   },
   robots: {
-    index: true,
-    follow: true,
-    googleBot: { 
-      index: true, 
-      follow: true, 
-      'max-video-preview': -1, 
-      'max-image-preview': 'large', 
-      'max-snippet': -1 
-    },
+    index: true, follow: true,
+    googleBot: { index: true, follow: true, 'max-video-preview': -1, 'max-image-preview': 'large', 'max-snippet': -1 },
   },
-  alternates: { 
-    canonical: 'https://bushal.vercel.app' 
-  },
+  alternates: { canonical: 'https://bushal.vercel.app' },
 }
 
 // Global JSON-LD for Google Knowledge Graph (Organization/Store)
@@ -77,29 +51,13 @@ const organizationJsonLd = {
   url: 'https://bushal.vercel.app',
   logo: 'https://bushal.vercel.app/logo.png',
   description: 'Curated premium products, transparent pricing, and fast delivery across Bangladesh.',
-  founder: { 
-    '@type': 'Person', 
-    name: 'Bushra Khandoker', 
-    url: 'https://github.com/Bushraabir' 
-  },
-  sameAs: [
-    'https://github.com/Bushraabir/bushal',
-    // Add Facebook, Instagram, or LinkedIn URLs here when available
-  ],
-  contactPoint: {
-    '@type': 'ContactPoint',
-    contactType: 'customer service',
-    areaServed: 'BD',
-    availableLanguage: ['English', 'Bengali'],
-  },
-  address: { 
-    '@type': 'PostalAddress', 
-    addressCountry: 'BD', 
-    addressLocality: 'Dhaka' 
-  },
+  founder: { '@type': 'Person', name: 'Bushra Khandoker', url: 'https://github.com/Bushraabir' },
+  sameAs: ['https://github.com/Bushraabir/bushal'],
+  contactPoint: { '@type': 'ContactPoint', contactType: 'customer service', areaServed: 'BD', availableLanguage: ['English', 'Bengali'] },
+  address: { '@type': 'PostalAddress', addressCountry: 'BD', addressLocality: 'Dhaka' },
 }
 
-// Global JSON-LD for Sitelinks Searchbox (Helps Google show a search bar under your site in results)
+// Global JSON-LD for Sitelinks Searchbox
 const websiteJsonLd = {
   '@context': 'https://schema.org',
   '@type': 'WebSite',
@@ -107,33 +65,26 @@ const websiteJsonLd = {
   url: 'https://bushal.vercel.app',
   potentialAction: {
     '@type': 'SearchAction',
-    target: { 
-      '@type': 'EntryPoint', 
-      urlTemplate: 'https://bushal.vercel.app/dashboard?q={search_term_string}' 
-    },
+    target: { '@type': 'EntryPoint', urlTemplate: 'https://bushal.vercel.app/dashboard?q={search_term_string}' },
     'query-input': 'required name=search_term_string',
   },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en-BD">
+    <html lang="en-BD" suppressHydrationWarning>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&display=swap" rel="stylesheet" />
         
         {/* Inject Global Structured Data for Maximum SEO Impact */}
-        <script 
-          type="application/ld+json" 
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd) }} 
-        />
-        <script 
-          type="application/ld+json" 
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteJsonLd) }} 
-        />
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd) }} />
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteJsonLd) }} />
       </head>
-      <body className="antialiased">
+      
+      {/* Added suppressHydrationWarning to prevent Grammarly/Extension errors */}
+      <body className="antialiased" suppressHydrationWarning>
         <ToastProvider>{children}</ToastProvider>
       </body>
     </html>
