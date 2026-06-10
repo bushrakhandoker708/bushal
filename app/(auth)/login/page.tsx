@@ -11,8 +11,9 @@ export const metadata: Metadata = {
 
 export default function LoginPage() {
   return (
-    <div className="min-h-screen bg-bushal-ivory flex items-center justify-center px-4 py-12">
+    <div className="min-h-screen bg-bushal-ivory flex items-center justify-center px-4 py-12 sm:py-16">
       <div className="w-full max-w-md animate-fade-in-up">
+        {/* Brand Header */}
         <div className="text-center mb-8">
           <Link
             href="/dashboard"
@@ -21,19 +22,37 @@ export default function LoginPage() {
           >
             Bushal
           </Link>
-          <p className="mt-2 text-bushal-inkSoft text-sm">Sign in to continue shopping</p>
+          <p className="mt-3 text-bushal-inkSoft text-sm sm:text-base">
+            Sign in to continue shopping
+          </p>
         </div>
-        
-        <div className="bg-bushal-surface rounded-2xl border border-bushal-border shadow-card p-8">
+
+        {/* Login Form Card */}
+        <div className="bg-bushal-surface rounded-2xl border border-bushal-border shadow-card p-6 sm:p-8">
           <LoginForm />
+          
+          {/* FIX: Added Forgot Password Link */}
+          <div className="mt-6 text-center">
+            <Link 
+              href="/forgot-password" 
+              className="text-sm text-bushal-copper font-semibold hover:text-bushal-copperLight transition-colors hover:underline"
+            >
+              Forgot your password?
+            </Link>
+          </div>
+
           <p className="mt-6 text-center text-sm text-bushal-inkSoft">
             Don&apos;t have an account?{' '}
-            <Link href="/register" className="text-bushal-copper font-semibold hover:text-bushal-copperLight transition-colors">
+            <Link 
+              href="/register" 
+              className="text-bushal-copper font-semibold hover:text-bushal-copperLight transition-colors hover:underline"
+            >
               Register here
             </Link>
           </p>
         </div>
-        
+
+        {/* Trust Badges */}
         <div className="mt-6 flex items-center justify-center gap-5 text-xs text-bushal-inkSoft">
           <span className="flex items-center gap-1.5">
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

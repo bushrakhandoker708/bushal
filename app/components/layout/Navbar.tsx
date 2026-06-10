@@ -1,5 +1,6 @@
 // app/components/layout/Navbar.tsx
 'use client'
+
 import { useAuth } from '@/app/hooks/useAuth'
 import { useCart } from '@/app/hooks/useCart'
 import Link from 'next/link'
@@ -58,10 +59,12 @@ export default function Navbar() {
   const { items } = useCart()
   const { user, signOut } = useAuth()
   const supabase = createBrowserClient()
+  
   const [cartOpen, setCartOpen] = useState(false)
   const [prevCount, setPrevCount] = useState(0)
   const [cartBump, setCartBump] = useState(false)
   const cartCount = items.reduce((sum, item) => sum + item.quantity, 0)
+  
   const [scrolled, setScrolled] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -69,17 +72,20 @@ export default function Navbar() {
   const [searching, setSearching] = useState(false)
   const [showResults, setShowResults] = useState(false)
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false)
+  
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [notifOpen, setNotifOpen] = useState(false)
   const [userRole, setUserRole] = useState<string | null>(null)
   const [notifLoading, setNotifLoading] = useState(true)
   const [searchFocused, setSearchFocused] = useState(false)
+  
   const notifRef = useRef<HTMLDivElement>(null)
   const debouncedQuery = useDebounce(query, 280)
   const searchRef = useRef<HTMLDivElement>(null)
   const mobileSearchRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const mobileInputRef = useRef<HTMLInputElement>(null)
+  
   const unreadCount = notifications.filter((n) => !n.read).length
   const isAdmin = userRole === 'admin'
 
@@ -124,16 +130,19 @@ export default function Navbar() {
         .eq('id', user.id)
         .single()
       const admin = profile?.role === 'admin'
+      
       let q = supabase
         .from('notifications')
         .select('id, type, title, body, read, created_at, order_id, comment_id')
         .order('created_at', { ascending: false })
         .limit(20)
+        
       if (admin) {
         q = q.is('user_id', null)
       } else {
         q = q.eq('user_id', user.id)
       }
+      
       const { data, error } = await q
       if (error) {
         console.error('Error fetching notifications:', error)
@@ -384,7 +393,7 @@ export default function Navbar() {
                   <p className="text-xs text-bushal-inkSoft mt-1 leading-relaxed">{n.body}</p>
                   {n.order_id && (
                     <Link
-                      href={isAdmin ? `/admin/orders/${n.order_id}` : '/orders'}
+                      href={isAdmin ? '/admin/orders' : '/orders'}
                       className="text-xs text-bushal-copper font-semibold mt-2 inline-block hover:underline"
                     >
                       View order →
@@ -421,17 +430,16 @@ export default function Navbar() {
             ? 'bg-bushal-forest/95 backdrop-blur-xl shadow-2xl shadow-bushal-forest/30'
             : 'bg-bushal-forest'
         )}>
-          {/* Top accent line */}
-          <div className="h-[2px] " />
+          <div className="h-[2px]" />
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex items-center justify-between h-16 lg:h-20">
-              {/* Logo — Now uses logo.png */}
+              {/* Logo */}
               <Link href="/dashboard" className="flex items-center gap-3 flex-shrink-0 group">
                 <div className="relative">
                   <img
                     src="/logo.png"
                     alt="Bushal"
-                    className="w-10 h-10 rounded-xl object-cover  transition-all duration-300 group-hover:scale-110"
+                    className="w-10 h-10 rounded-xl object-cover transition-all duration-300 group-hover:scale-110"
                   />
                   <div className="absolute -inset-1 bg-bushal-copper/20 rounded-xl blur-md opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                 </div>
@@ -446,7 +454,7 @@ export default function Navbar() {
                 </div>
               </Link>
 
-              {/* Desktop Search - Inline Expanding */}
+              {/* Desktop Search */}
               <div className="flex-1 mx-8 hidden lg:block" ref={searchRef}>
                 <div className="relative max-w-md mx-auto">
                   <div className={cn(
@@ -501,23 +509,28 @@ export default function Navbar() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                   </svg>
                 </button>
-                <button
-                  onClick={() => setCartOpen(true)}
-                  className="relative p-2.5 rounded-xl transition-all duration-200 hover:scale-110 text-white/70 hover:text-white hover:bg-white/10"
-                  aria-label="Cart"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13l-1.5 6h13M7 13L5.4 5M10 21a1 1 0 100-2 1 1 0 000 2zm7 0a1 1 0 100-2 1 1 0 000 2z" />
-                  </svg>
-                  {cartCount > 0 && (
-                    <span className={cn(
-                      'absolute -top-1 -right-1 min-w-[20px] h-5 bg-gradient-to-r from-bushal-copper to-bushal-copperLight text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1.5 leading-none shadow-lg shadow-bushal-copper/40',
-                      cartBump && 'animate-bounce-pop'
-                    )}>
-                      {cartCount > 99 ? '99+' : cartCount}
-                    </span>
-                  )}
-                </button>
+                
+                {/* Cart Icon - Hidden for Admins */}
+                {!isAdmin && (
+                  <button
+                    onClick={() => setCartOpen(true)}
+                    className="relative p-2.5 rounded-xl transition-all duration-200 hover:scale-110 text-white/70 hover:text-white hover:bg-white/10"
+                    aria-label="Cart"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13l-1.5 6h13M7 13L5.4 5M10 21a1 1 0 100-2 1 1 0 000 2zm7 0a1 1 0 100-2 1 1 0 000 2z" />
+                    </svg>
+                    {cartCount > 0 && (
+                      <span className={cn(
+                        'absolute -top-1 -right-1 min-w-[20px] h-5 bg-gradient-to-r from-bushal-copper to-bushal-copperLight text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1.5 leading-none shadow-lg shadow-bushal-copper/40',
+                        cartBump && 'animate-bounce-pop'
+                      )}>
+                        {cartCount > 99 ? '99+' : cartCount}
+                      </span>
+                    )}
+                  </button>
+                )}
+
                 {user && (
                   <div className="relative" ref={notifRef}>
                     <button
@@ -537,6 +550,7 @@ export default function Navbar() {
                     {notifOpen && <NotificationPanel />}
                   </div>
                 )}
+
                 {/* Desktop Auth Links */}
                 <div className="hidden md:flex items-center gap-2 ml-2">
                   {user ? (
@@ -576,6 +590,7 @@ export default function Navbar() {
                     </>
                   )}
                 </div>
+
                 {/* Mobile Menu Toggle */}
                 <button
                   onClick={() => setMobileMenuOpen((v) => !v)}
@@ -654,6 +669,7 @@ export default function Navbar() {
 
       {/* Spacer to prevent content from hiding behind fixed navbar */}
       <div className="h-16 lg:h-20" />
+      
       <CartDrawer isOpen={cartOpen} onClose={() => setCartOpen(false)} />
     </>
   )

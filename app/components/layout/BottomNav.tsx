@@ -59,6 +59,8 @@ export default function BottomNav() {
     href === '/dashboard' ? pathname === '/dashboard' : pathname.startsWith(href)
 
   return (
+    // FIX: 'md:hidden' ensures this bar is completely hidden on desktop/larger screens, 
+    // preventing redundancy with the top Navbar.
     <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-bushal-surface border-t border-bushal-border safe-bottom shadow-[0_-4px_20px_rgba(27,58,45,0.08)]">
       <div className="flex items-center justify-around px-2 pt-2 pb-1">
         {NAV_ITEMS.map((item) => {

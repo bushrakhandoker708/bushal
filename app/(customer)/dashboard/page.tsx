@@ -4,13 +4,13 @@ import Navbar from '@/app/components/layout/Navbar'
 import Footer from '@/app/components/layout/Footer'
 import BottomNav from '@/app/components/layout/BottomNav'
 import HeroBanner from '@/app/components/home/HeroBanner'
-
 import SectionHeader from '@/app/components/ui/SectionHeader'
 import PageWrapper from '@/app/components/layout/PageWrapper'
 import { formatPrice } from '@/app/lib/utils/formatPrice'
 import Link from 'next/link'
 import { Metadata } from 'next'
 import CategoryFilter from '@/app/components/product/CatagoryFilter'
+import VerificationToast from '@/app/components/dashboard/VerificationToast'
 
 export const metadata: Metadata = {
   title: 'Home — Premium Curated Products',
@@ -24,13 +24,14 @@ export const metadata: Metadata = {
 
 export default async function DashboardPage() {
   const supabase = createServerClient()
+  
   const { data: products, error } = await supabase
     .from('products')
     .select(`*, comments ( rating )`)
     .order('created_at', { ascending: false })
-
+    
   if (error) console.error('Error fetching products:', error)
-
+  
   const allProducts = products ?? []
   const discounted = allProducts
     .filter((p) => p.discount_percent && p.discount_percent > 0 && p.in_stock)
@@ -39,12 +40,13 @@ export default async function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-bushal-ivory">
+      {/* FIX: Handles the ?verified=true query param from Supabase email redirects */}
+      <VerificationToast />
+      
       <Navbar />
       <HeroBanner />
+      
       <PageWrapper maxWidth="7xl" className="pb-28 md:pb-12">
-        
-
-
         {discounted.length > 0 && (
           <section className="mb-10">
             <SectionHeader
@@ -61,7 +63,7 @@ export default async function DashboardPage() {
                 const cover = (Array.isArray(p.images) && p.images[0]) || p.image_url
                 const discountedPrice = p.price * (1 - (p.discount_percent ?? 0) / 100)
                 const saved = p.price - discountedPrice
-
+                
                 return (
                   <a
                     key={p.id}
@@ -70,7 +72,11 @@ export default async function DashboardPage() {
                   >
                     <div className="w-20 h-20 rounded-xl overflow-hidden bg-bushal-ivoryDeep flex-shrink-0 border border-bushal-border">
                       {cover ? (
-                        <img src={cover} alt={p.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                        <img 
+                          src={cover} 
+                          alt={p.name} 
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" 
+                        />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center text-bushal-borderMid">
                           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -96,7 +102,7 @@ export default async function DashboardPage() {
             </div>
           </section>
         )}
-
+        
         <section id="products">
           <SectionHeader
             title="All Products"
@@ -105,7 +111,7 @@ export default async function DashboardPage() {
           <CategoryFilter products={allProducts} />
         </section>
       </PageWrapper>
-
+      
       <Footer />
       <BottomNav />
     </div>
