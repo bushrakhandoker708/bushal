@@ -125,11 +125,7 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
                 {item.icon}
                 {item.label}
               </span>
-              {'badge' in item && item.badge && !active && (
-                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-bushal-copper/20 text-bushal-copperGlow border border-bushal-copper/30">
-                  {item.badge}
-                </span>
-              )}
+
             </Link>
           )
         })}
