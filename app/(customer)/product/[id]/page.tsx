@@ -4,9 +4,10 @@ import { createServerClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
 import Navbar from '@/app/components/layout/Navbar'
 import ProductDetail from '@/app/components/product/ProductDetail'
-import CommentForm from '@/app/components/comments/CommentForm'
+
 import CommentList from '@/app/components/comments/CommentList'
 import PageWrapper from '@/app/components/layout/PageWrapper'
+import CommentForm from '@/app/components/comments/CommentForm'
 
 interface Props {
   params: { id: string }

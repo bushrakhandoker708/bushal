@@ -15,7 +15,7 @@ export const metadata: Metadata = {
     'bKash payment shopping', 'premium products Dhaka', 'Bushra Khandoker',
     'curated goods Bangladesh', 'fast delivery e-commerce BD'
   ],
-  authors: [{ name: 'Bushra Khandoker', url: 'https://github.com/Bushraabir' }],
+  authors: [{ name: 'Bushra Khandoker', url: 'https://github.com/bushrakhandoker708' }],
   creator: 'Bushra Khandoker',
   publisher: 'Bushal',
   formatDetection: { email: false, address: false, telephone: false },
@@ -51,8 +51,8 @@ const organizationJsonLd = {
   url: 'https://bushal.vercel.app',
   logo: 'https://bushal.vercel.app/logo.png',
   description: 'Curated premium products, transparent pricing, and fast delivery across Bangladesh.',
-  founder: { '@type': 'Person', name: 'Bushra Khandoker', url: 'https://github.com/Bushraabir' },
-  sameAs: ['https://github.com/Bushraabir/bushal'],
+  founder: { '@type': 'Person', name: 'Bushra Khandoker', url: 'https://github.com/bushrakhandoker708' },
+  sameAs: ['https://github.com/bushrakhandoker708/bushal'],
   contactPoint: { '@type': 'ContactPoint', contactType: 'customer service', areaServed: 'BD', availableLanguage: ['English', 'Bengali'] },
   address: { '@type': 'PostalAddress', addressCountry: 'BD', addressLocality: 'Dhaka' },
 }

@@ -118,7 +118,7 @@ export default function ProductCard({ product, index = 0 }: Props) {
         {/* Quick View Button */}
         <button
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); setQuickViewOpen(true) }}
-          className="absolute bottom-4 left-4 w-10 h-10 rounded-full flex items-center justify-center bg-bushal-ivory/90 backdrop-blur-md text-bushal-forest hover:bg-bushal-ivory hover:scale-110 transition-all duration-300 z-10 opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 shadow-lg"
+          className="absolute bottom-5 left-4 w-10 h-10 rounded-full flex items-center justify-center bg-bushal-ivory/90 backdrop-blur-md text-bushal-forest hover:bg-bushal-ivory hover:scale-110 transition-all duration-300 z-10 opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 shadow-lg"
           aria-label="Quick view"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -128,7 +128,7 @@ export default function ProductCard({ product, index = 0 }: Props) {
         </button>
 
         {/* Quick Add Overlay (Desktop Only) */}
-        <div className="absolute inset-x-0 bottom-0 p-4 translate-y-full group-hover:translate-y-0 transition-transform duration-500 ease-out z-10 hidden md:block">
+        <div className="absolute inset-x-2 bottom-0 px-16 py-2 translate-y-full group-hover:translate-y-0 transition-transform duration-500 ease-out z-10 hidden md:block">
           <button
             onClick={handleAdd}
             disabled={!product.in_stock}

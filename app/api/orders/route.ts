@@ -1,62 +1,83 @@
 // app/api/orders/route.ts
-import { createServerClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import { requireAuth } from '@/lib/auth'
 
 export async function GET() {
-  const supabase = createServerClient()
+  const auth = await requireAuth()
+  if (!auth.success) return auth.response
 
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const { data, error } = await supabase
+  const { data, error } = await auth.supabase
     .from('orders')
     .select('*, order_items(*, products(name, image_url, price))')
-    .eq('user_id', session.user.id)
+    .eq('user_id', auth.userId)
     .order('created_at', { ascending: false })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-
   return NextResponse.json(data)
 }
 
 export async function POST(request: Request) {
-  const supabase = createServerClient()
-
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const auth = await requireAuth()
+  if (!auth.success) return auth.response
 
   const body = await request.json()
+  const { items, total, payment_method = 'cod', delivery_address, customer_note, phone } = body
 
-  const { data: order, error: orderError } = await supabase
-    .from('orders')
-    .insert({
-      user_id: session.user.id,
-      total: body.total,
-      status: 'pending',
-      payment_method: body.payment_method || 'bkash',
-      stripe_session_id: body.stripe_session_id ?? null,
-    })
-    .select()
-    .single()
+  if (!Array.isArray(items) || items.length === 0) {
+    return NextResponse.json({ error: 'Cart is empty' }, { status: 400 })
+  }
+  if (!delivery_address?.trim() || !phone?.trim()) {
+    return NextResponse.json({ error: 'Delivery address and phone number are required.' }, { status: 400 })
+  }
 
-  if (orderError) return NextResponse.json({ error: orderError.message }, { status: 500 })
-
-  const orderItems = body.items.map((item: { id: string; quantity: number; price: number }) => ({
-    order_id: order.id,
+  // Format items for the PostgreSQL RPC
+  const rpcItems = items.map((item: any) => ({
     product_id: item.id,
     quantity: item.quantity,
-    unit_price: item.price,
+    unit_price: item.price
   }))
 
-  const { error: itemsError } = await supabase.from('order_items').insert(orderItems)
-  if (itemsError) return NextResponse.json({ error: itemsError.message }, { status: 500 })
+  // Call atomic RPC to create order & validate stock (Stock is NOT reduced here)
+  const { data: orderId, error: rpcError } = await auth.supabase.rpc('create_order_with_stock_check', {
+    p_user_id: auth.userId,
+    p_items: rpcItems,
+    p_total: total,
+    p_bkash_invoice: payment_method === 'bkash' ? (body.bkash_invoice || null) : null
+  })
 
+  if (rpcError) {
+    console.error('Order creation RPC failed:', rpcError)
+    // Handle custom PL/pgSQL exceptions
+    if (rpcError.message.includes('insufficient_stock')) {
+      return NextResponse.json({ error: 'One or more items are out of stock. Please adjust your cart.' }, { status: 409 })
+    }
+    if (rpcError.message.includes('product_not_found')) {
+      return NextResponse.json({ error: 'A selected product no longer exists.' }, { status: 400 })
+    }
+    return NextResponse.json({ error: 'Failed to create order' }, { status: 500 })
+  }
+
+  // Immediately attach delivery details, phone, and payment method to the order
+  const { error: updateError } = await auth.supabase
+    .from('orders')
+    .update({
+      delivery_address: delivery_address.trim(),
+      customer_note: customer_note?.trim() || null,
+      phone: phone.trim(),
+      payment_method
+    })
+    .eq('id', orderId)
+
+  if (updateError) {
+    console.error('Failed to save order delivery details:', updateError)
+  }
+
+  // Admin notification email
   if (process.env.RESEND_API_KEY && process.env.ADMIN_EMAIL) {
     try {
-      const paymentLabel = order.payment_method === 'cod' ? 'Cash on Delivery' : 'bKash'
+      const paymentLabel = payment_method === 'cod' ? 'Cash on Delivery' : 'bKash'
       const adminUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/admin/orders`
-      const orderId = order.id.slice(0, 8).toUpperCase()
-
+      
       await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
@@ -64,141 +85,31 @@ export async function POST(request: Request) {
           Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
         },
         body: JSON.stringify({
-          from: 'Bushal <onboarding@resend.dev>',
-          to: process.env.ADMIN_EMAIL,
-          subject: `New Order #${orderId} — ${paymentLabel}`,
+          from: 'Bushal <noreply@bushal.com>',
+          to: [process.env.ADMIN_EMAIL],
+          subject: `New Order #${orderId.slice(0, 8).toUpperCase()} — ${paymentLabel}`,
           html: `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>New Order — Bushal</title>
-</head>
-<body style="margin:0;padding:0;background:#F9F6F0;font-family:'DM Sans',system-ui,sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#F9F6F0;padding:32px 16px;">
-    <tr>
-      <td align="center">
-        <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #E0D9CE;">
-
-          <!-- Header -->
-          <tr>
-            <td style="background:#1B3A2D;padding:28px 32px;">
-              <table width="100%" cellpadding="0" cellspacing="0">
-                <tr>
-                  <td>
-                    <table cellpadding="0" cellspacing="0">
-                      <tr>
-                        <td style="background:#B87333;border-radius:8px;width:32px;height:32px;text-align:center;vertical-align:middle;">
-                          <span style="color:#ffffff;font-weight:700;font-size:14px;line-height:32px;">B</span>
-                        </td>
-                        <td style="padding-left:10px;">
-                          <span style="color:#ffffff;font-family:Georgia,serif;font-size:20px;font-weight:600;letter-spacing:0.02em;">Bushal</span>
-                        </td>
-                      </tr>
-                    </table>
-                  </td>
-                  <td align="right">
-                    <span style="display:inline-block;background:#B87333;color:#ffffff;font-size:11px;font-weight:700;padding:4px 12px;border-radius:20px;letter-spacing:0.05em;text-transform:uppercase;">New Order</span>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-
-          <!-- Title row -->
-          <tr>
-            <td style="padding:28px 32px 0 32px;">
-              <h1 style="margin:0 0 4px 0;font-family:Georgia,serif;font-size:22px;font-weight:600;color:#1B3A2D;letter-spacing:-0.01em;">
-                Order Received
-              </h1>
-              <p style="margin:0;font-size:14px;color:#6B6B65;">
-                A new order has been placed and is awaiting your action.
-              </p>
-            </td>
-          </tr>
-
-          <!-- Order details card -->
-          <tr>
-            <td style="padding:20px 32px;">
-              <table width="100%" cellpadding="0" cellspacing="0" style="background:#F9F6F0;border-radius:12px;border:1px solid #E0D9CE;overflow:hidden;">
-                <tr>
-                  <td style="padding:16px 20px;border-bottom:1px solid #E0D9CE;">
-                    <table width="100%" cellpadding="0" cellspacing="0">
-                      <tr>
-                        <td style="font-size:12px;color:#6B6B65;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;">Order ID</td>
-                        <td align="right" style="font-size:13px;color:#1A1A18;font-weight:700;font-family:monospace;">#${orderId}</td>
-                      </tr>
-                    </table>
-                  </td>
-                </tr>
-                <tr>
-                  <td style="padding:16px 20px;border-bottom:1px solid #E0D9CE;">
-                    <table width="100%" cellpadding="0" cellspacing="0">
-                      <tr>
-                        <td style="font-size:12px;color:#6B6B65;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;">Payment Method</td>
-                        <td align="right">
-                          <span style="display:inline-block;background:${order.payment_method === 'cod' ? '#FEF6E4' : '#E8F5EE'};color:${order.payment_method === 'cod' ? '#B07D2A' : '#2A7A4E'};font-size:12px;font-weight:700;padding:3px 10px;border-radius:20px;border:1px solid ${order.payment_method === 'cod' ? '#B07D2A33' : '#2A7A4E33'};">
-                            ${paymentLabel}
-                          </span>
-                        </td>
-                      </tr>
-                    </table>
-                  </td>
-                </tr>
-                <tr>
-                  <td style="padding:16px 20px;">
-                    <table width="100%" cellpadding="0" cellspacing="0">
-                      <tr>
-                        <td style="font-size:12px;color:#6B6B65;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;">Order Total</td>
-                        <td align="right" style="font-family:Georgia,serif;font-size:22px;font-weight:700;color:#1B3A2D;">৳${order.total.toLocaleString()}</td>
-                      </tr>
-                    </table>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-
-          <!-- CTA -->
-          <tr>
-            <td style="padding:0 32px 32px 32px;" align="center">
-              <a href="${adminUrl}"
-                style="display:inline-block;background:#B87333;color:#ffffff;padding:14px 32px;border-radius:10px;text-decoration:none;font-size:14px;font-weight:600;letter-spacing:0.01em;box-shadow:0 6px 20px rgba(184,115,51,0.28);">
-                View in Admin Panel →
-              </a>
-            </td>
-          </tr>
-
-          <!-- Footer -->
-          <tr>
-            <td style="background:#F0EBE1;padding:18px 32px;border-top:1px solid #E0D9CE;">
-              <table width="100%" cellpadding="0" cellspacing="0">
-                <tr>
-                  <td style="font-size:11px;color:#6B6B65;">
-                    © ${new Date().getFullYear()} Bushal · Made with care in Bangladesh
-                  </td>
-                  <td align="right" style="font-size:11px;color:#6B6B65;">
-                    bushal.com
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-
-        </table>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>
+            <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 32px 24px;">
+              <h1 style="color:#f97316; font-size:24px; margin-bottom:8px;">Bushal Admin Alert</h1>
+              <hr style="border:none; border-top:1px solid #e2e8f0; margin: 16px 0;" />
+              <p style="color:#475569;">A new order has been placed.</p>
+              <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:16px 20px; margin:20px 0;">
+                <p><strong>Order ID:</strong> ${orderId.slice(0, 8).toUpperCase()}</p>
+                <p><strong>Phone:</strong> ${phone}</p>
+                <p><strong>Address:</strong> ${delivery_address}</p>
+                <p><strong>Total:</strong> ৳${Number(total).toLocaleString()}</p>
+                <p><strong>Payment:</strong> ${paymentLabel}</p>
+                ${customer_note ? `<p><strong>Notes:</strong> ${customer_note}</p>` : ''}
+              </div>
+              <a href="${adminUrl}" style="background:#1B3A2D; color:white; padding:10px 20px; border-radius:8px; text-decoration:none;">View in Admin Panel</a>
+            </div>
           `,
         }),
       })
-    } catch (emailError) {
-      console.error('Failed to send order email:', emailError)
+    } catch (emailErr) {
+      console.error('Admin email notification failed:', emailErr)
     }
   }
 
-  return NextResponse.json(order, { status: 201 })
+  return NextResponse.json({ id: orderId, message: 'Order created successfully' }, { status: 201 })
 }

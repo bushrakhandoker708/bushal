@@ -10,28 +10,38 @@ import Link from 'next/link'
 import CheckoutForm from '@/app/components/Checkout/CheckoutForm'
 import OrderSummary from '@/app/components/Checkout/OrderSummery'
 
+
+interface CheckoutData {
+  delivery_address: string
+  customer_note: string
+  phone: string
+}
+
 export default function CheckoutPage() {
   const { items, clearCart } = useCart()
   const { user } = useAuth()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const handleBkash = async () => {
+  const handleBkash = async (checkoutData: CheckoutData) => {
     setLoading(true)
     setError('')
     try {
       const res = await fetch('/api/bkash/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items }),
+        body: JSON.stringify({ 
+          items,
+          delivery_address: checkoutData.delivery_address,
+          customer_note: checkoutData.customer_note,
+          phone: checkoutData.phone
+        }),
       })
       const data = await res.json()
-      
       if (!res.ok) {
         setError(data.error ?? 'Payment initiation failed')
         return
       }
-      
       clearCart()
       window.location.href = data.bkashURL
     } catch {
@@ -41,7 +51,7 @@ export default function CheckoutPage() {
     }
   }
 
-  const handleCOD = async () => {
+  const handleCOD = async (checkoutData: CheckoutData) => {
     setLoading(true)
     setError('')
     try {
@@ -51,22 +61,26 @@ export default function CheckoutPage() {
           : item.price
         return sum + price * item.quantity
       }, 0)
-      
       const shipping = subtotal >= 1000 ? 0 : 120
       const total = subtotal + shipping
 
       const res = await fetch('/api/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items, total, payment_method: 'cod' }),
+        body: JSON.stringify({ 
+          items, 
+          total, 
+          payment_method: 'cod',
+          delivery_address: checkoutData.delivery_address,
+          customer_note: checkoutData.customer_note,
+          phone: checkoutData.phone
+        }),
       })
       const data = await res.json()
-      
       if (!res.ok) {
         setError(data.error ?? 'Order failed')
         return
       }
-      
       clearCart()
       window.location.href = `/thank-you?orderId=${data.id}`
     } catch {
@@ -97,14 +111,14 @@ export default function CheckoutPage() {
               <p className="text-sm text-bushal-inkSoft mt-1">You need to be logged in to place an order.</p>
             </div>
             <div className="flex items-center gap-3">
-              <Link 
-                href={`/login?redirect=/checkout`} 
+              <Link
+                href={`/login?redirect=/checkout`}
                 className="px-6 py-2.5 bg-gradient-to-r from-bushal-copper to-bushal-copperLight text-white text-sm font-semibold rounded-xl hover:shadow-lg hover:shadow-bushal-copper/30 hover:-translate-y-0.5 transition-all duration-300 active:scale-95"
               >
                 Sign in
               </Link>
-              <Link 
-                href="/register" 
+              <Link
+                href="/register"
                 className="px-6 py-2.5 border border-bushal-border text-bushal-ink text-sm font-semibold rounded-xl hover:bg-bushal-ivoryDeep transition-all duration-200"
               >
                 Register
