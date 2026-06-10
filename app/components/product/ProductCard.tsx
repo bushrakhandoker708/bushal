@@ -128,12 +128,12 @@ export default function ProductCard({ product, index = 0 }: Props) {
         </button>
 
         {/* Quick Add Overlay (Desktop Only) */}
-        <div className="absolute inset-x-2 bottom-0 px-16 py-2 translate-y-full group-hover:translate-y-0 transition-transform duration-500 ease-out z-10 hidden md:block">
+        <div className="absolute inset-x-2 bottom-0 px-16 py-2 translate-y-full group-hover:translate-y-0 transition-transform duration-500 ease-out z-10 hidden md:block ">
           <button
             onClick={handleAdd}
             disabled={!product.in_stock}
             className={cn(
-              "w-full py-3.5 rounded-xl font-semibold text-sm tracking-wide transition-all duration-300 shadow-xl backdrop-blur-md",
+              "w-full py-3.5 rounded-xl font-semibold text-sm tracking-wide transition-all duration-300 shadow-xl backdrop-blur-md hover:bg-bushal-copperLight",
               product.in_stock
                 ? added
                   ? "bg-bushal-success text-white"
