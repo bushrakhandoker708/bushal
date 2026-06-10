@@ -26,20 +26,28 @@ export const metadata: Metadata = {
     siteName: 'Bushal',
     title: 'Bushal — Premium Curated Products in Bangladesh',
     description: 'Discover heritage-quality, handpicked products delivered across Bangladesh. Transparent pricing & secure bKash payments.',
-    images: [{ url: '/og-image.png', width: 1200, height: 630, alt: 'Bushal E-commerce Platform - Premium Products in Bangladesh' }],
+    images: [{ url: '/logo.png', width: 1200, height: 630, alt: 'Bushal E-commerce Platform - Premium Products in Bangladesh' }],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'Bushal — Premium Curated Products in Bangladesh',
     description: 'Discover heritage-quality, handpicked products delivered across Bangladesh.',
-    images: ['/og-image.png'],
-    creator: '@BushalBD', 
+    images: ['/logo.png'],
+    creator: '@BushalBD',
   },
   robots: {
     index: true, follow: true,
     googleBot: { index: true, follow: true, 'max-video-preview': -1, 'max-image-preview': 'large', 'max-snippet': -1 },
   },
   alternates: { canonical: 'https://bushal.vercel.app' },
+  icons: {
+    icon: [
+      { url: '/logo.png', type: 'image/png' },
+    ],
+    apple: [
+      { url: '/logo.png', type: 'image/png' },
+    ],
+  },
 }
 
 // Global JSON-LD for Google Knowledge Graph (Organization/Store)
@@ -77,12 +85,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&display=swap" rel="stylesheet" />
-        
+        {/* Favicon */}
+        <link rel="icon" type="image/png" href="/logo.png" />
+        <link rel="apple-touch-icon" href="/logo.png" />
         {/* Inject Global Structured Data for Maximum SEO Impact */}
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd) }} />
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteJsonLd) }} />
       </head>
-      
       {/* Added suppressHydrationWarning to prevent Grammarly/Extension errors */}
       <body className="antialiased" suppressHydrationWarning>
         <ToastProvider>{children}</ToastProvider>

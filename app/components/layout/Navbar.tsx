@@ -1,6 +1,5 @@
 // app/components/layout/Navbar.tsx
 'use client'
-
 import { useAuth } from '@/app/hooks/useAuth'
 import { useCart } from '@/app/hooks/useCart'
 import Link from 'next/link'
@@ -423,16 +422,17 @@ export default function Navbar() {
             : 'bg-bushal-forest'
         )}>
           {/* Top accent line */}
-          <div className="h-[2px] bg-gradient-to-r from-transparent via-bushal-copper to-transparent opacity-70" />
-          
+          <div className="h-[2px] " />
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex items-center justify-between h-16 lg:h-20">
-              {/* Logo */}
-              <Link href="/dashboard" className="flex items-center gap-3 flex-shrink-0 group relative">
+              {/* Logo — Now uses logo.png */}
+              <Link href="/dashboard" className="flex items-center gap-3 flex-shrink-0 group">
                 <div className="relative">
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center shadow-lg transition-all duration-300 group-hover:scale-110 bg-gradient-to-br from-bushal-copper to-bushal-copperLight shadow-bushal-copper/30 group-hover:shadow-bushal-copper/50">
-                    <span className="font-heading font-bold text-lg leading-none text-white">B</span>
-                  </div>
+                  <img
+                    src="/logo.png"
+                    alt="Bushal"
+                    className="w-10 h-10 rounded-xl object-cover  transition-all duration-300 group-hover:scale-110"
+                  />
                   <div className="absolute -inset-1 bg-bushal-copper/20 rounded-xl blur-md opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                 </div>
                 <div className="flex flex-col">
@@ -501,7 +501,6 @@ export default function Navbar() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                   </svg>
                 </button>
-
                 <button
                   onClick={() => setCartOpen(true)}
                   className="relative p-2.5 rounded-xl transition-all duration-200 hover:scale-110 text-white/70 hover:text-white hover:bg-white/10"
@@ -519,7 +518,6 @@ export default function Navbar() {
                     </span>
                   )}
                 </button>
-
                 {user && (
                   <div className="relative" ref={notifRef}>
                     <button
@@ -539,7 +537,6 @@ export default function Navbar() {
                     {notifOpen && <NotificationPanel />}
                   </div>
                 )}
-
                 {/* Desktop Auth Links */}
                 <div className="hidden md:flex items-center gap-2 ml-2">
                   {user ? (
@@ -579,7 +576,6 @@ export default function Navbar() {
                     </>
                   )}
                 </div>
-
                 {/* Mobile Menu Toggle */}
                 <button
                   onClick={() => setMobileMenuOpen((v) => !v)}
