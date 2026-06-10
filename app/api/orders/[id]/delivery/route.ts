@@ -17,7 +17,7 @@ export async function PATCH(
   request: Request,
   { params }: { params: { id: string } }
 ) {
-  // 🔒 AUDIT FIX: Use requireAdmin helper instead of manual session/role checks.
+  //  Use requireAdmin helper instead of manual session/role checks.
   const auth = await requireAdmin()
   if (!auth.success) return auth.response
 
