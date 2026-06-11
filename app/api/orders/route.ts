@@ -91,7 +91,9 @@ export async function POST(request: Request) {
   }
   
   // Fetch order details for emails
-  const { data: orderItems } = await auth.supabase
+  console.log('📦 Fetching order details for order:', orderId)
+  
+  const { data: orderItems, error: itemsError } = await auth.supabase
     .from('order_items')
     .select(`
       id,
@@ -102,11 +104,21 @@ export async function POST(request: Request) {
     `)
     .eq('order_id', orderId)
   
-  const { data: profile } = await auth.supabase
+  if (itemsError) {
+    console.error('❌ Failed to fetch order items:', itemsError)
+  }
+  
+  console.log('📦 Order items fetched:', orderItems?.length ?? 0)
+  
+  const { data: profile, error: profileError } = await auth.supabase
     .from('profiles')
     .select('full_name, email, phone')
     .eq('id', auth.userId)
     .single()
+  
+  if (profileError) {
+    console.error('❌ Failed to fetch profile:', profileError)
+  }
   
   // Prepare items for email
   const emailItems = (orderItems ?? []).map((item: any) => {
@@ -121,10 +133,14 @@ export async function POST(request: Request) {
     }
   })
   
+  console.log('📧 Prepared email items:', emailItems)
+  
   // SEND ADMIN EMAIL
   try {
     if (process.env.RESEND_API_KEY && process.env.ADMIN_EMAIL) {
-      await resend.emails.send({
+      console.log('📧 Sending admin email to:', process.env.ADMIN_EMAIL)
+      
+      const adminEmailResult = await resend.emails.send({
         from: 'Bushal Orders <noreply@bushal.com>',
         to: [process.env.ADMIN_EMAIL],
         subject: `🛒 New Order #${orderId.slice(0, 8).toUpperCase()} — ৳${roundedTotal} (${payment_method.toUpperCase()})`,
@@ -149,7 +165,10 @@ export async function POST(request: Request) {
         `,
         replyTo: profile?.email ?? undefined,
       })
-      console.log('✅ Admin email sent successfully')
+      
+      console.log('✅ Admin email sent successfully:', adminEmailResult)
+    } else {
+      console.warn('⚠️ Email not sent - Missing RESEND_API_KEY or ADMIN_EMAIL')
     }
   } catch (emailErr) {
     console.error('❌ Admin email notification failed:', emailErr)
@@ -158,7 +177,9 @@ export async function POST(request: Request) {
   // SEND CUSTOMER CONFIRMATION EMAIL
   try {
     if (process.env.RESEND_API_KEY && profile?.email) {
-      await resend.emails.send({
+      console.log('📧 Sending customer email to:', profile.email)
+      
+      const customerEmailResult = await resend.emails.send({
         from: 'Bushal <noreply@bushal.com>',
         to: [profile.email],
         subject: `Order Confirmed — #${orderId.slice(0, 8).toUpperCase()}`,
@@ -187,7 +208,10 @@ export async function POST(request: Request) {
           </div>
         `,
       })
-      console.log('✅ Customer email sent successfully')
+      
+      console.log('✅ Customer email sent successfully:', customerEmailResult)
+    } else {
+      console.warn('⚠️ Customer email not sent - Missing RESEND_API_KEY or customer email')
     }
   } catch (emailErr) {
     console.error('❌ Customer email notification failed:', emailErr)

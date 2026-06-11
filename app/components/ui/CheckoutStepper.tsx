@@ -1,4 +1,6 @@
 // components/ui/CheckoutStepper.tsx
+// Stepper component for the checkout process, showing progress through steps like Cart, Shipping, Payment, and Confirmation.
+
 import { cn } from '@/app/lib/utils/cn'
 
 interface Step {
