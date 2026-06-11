@@ -359,17 +359,21 @@ export default function ProductForm({ mode, product, categories }: Props) {
         </div>
       )}
 
-      {/* Actions */}
-      <div className="flex flex-col-reverse sm:flex-row gap-3 pt-2">
+      {/* Actions - Fixed to ensure both buttons are visible */}
+      <div className="flex flex-col sm:flex-row gap-3 pt-6 border-t border-bushal-border mt-8">
         <Button
           type="button"
           variant="outline"
-          className="flex-1"
+          className="flex-1 order-2 sm:order-1"
           onClick={() => router.back()}
         >
           Cancel
         </Button>
-        <Button type="submit" loading={loading} className="flex-1">
+        <Button 
+          type="submit" 
+          loading={loading} 
+          className="flex-1 order-1 sm:order-2 bg-bushal-copper hover:bg-bushal-copperLight text-white"
+        >
           {mode === 'create' ? 'Create Product' : 'Save Changes'}
         </Button>
       </div>

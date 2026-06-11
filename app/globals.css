@@ -3,18 +3,23 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ──────────────────────────────────────────────────────────────
-   🎨 BUSHAL PREMIUM THEME VARIABLES
-   Ensures consistent luxury styling across all components.
-   ────────────────────────────────────────────────────────────── */
+/* ─────────────────────────────────────────────────────────────
+ BUSHAL PREMIUM THEME VARIABLES
+Ensures consistent luxury styling across all components.
+────────────────────────────────────────────────────────────── */
 :root {
   --bushal-forest: #1a362d;
+  --bushal-forestMid: #2d5a42;
+  --bushal-forestLight: #3d7a5a;
   --bushal-ivory: #f8f5f0;
   --bushal-ivoryDeep: #f1ede6;
   --bushal-surface: #ffffff;
   --bushal-copper: #b87333;
   --bushal-copperLight: #d49a5a;
+  --bushal-copperGlow: #f0b96a;
+  --bushal-copperMuted: #e8d5c4;
   --bushal-ink: #2c2c2c;
+  --bushal-inkMid: #4a5568;
   --bushal-inkSoft: #6b7280;
   --bushal-border: #e5e7eb;
   --bushal-borderMid: #d1d5db;
@@ -32,7 +37,6 @@
     -webkit-tap-highlight-color: transparent;
     scroll-behavior: smooth;
   }
-
   body {
     @apply bg-bushal-ivory text-bushal-ink antialiased;
     /* Respect device safe areas (notches, home indicators) */
@@ -40,7 +44,6 @@
     /* Use dynamic viewport height to prevent mobile browser URL bar cutoff */
     min-height: 100dvh;
   }
-
   /* Mobile-first touch targets (minimum 44x44px for accessibility) */
   button, [role="button"], a, input, select, textarea {
     @apply touch-manipulation cursor-pointer;
@@ -48,14 +51,12 @@
 }
 
 @layer components {
-  /* 📱 FIX: Mobile Safe Padding for Bottom Nav / Sticky Elements
-     Solves: "upload comment button gets hidden due to the bottom ad to card" */
+  /*  FIX: Mobile Safe Padding for Bottom Nav / Sticky Elements */
   .pb-mobile-safe {
     padding-bottom: calc(5rem + env(safe-area-inset-bottom, 0px));
   }
 
-  /* 📱 FIX: Notification Panel Scrollable Area
-     Prevents cutoff on small mobile screens while keeping desktop elegant */
+  /* 📱 FIX: Notification Panel Scrollable Area */
   .notif-scroll-area {
     max-height: 60dvh;
     overflow-y: auto;
@@ -72,14 +73,82 @@
 
   /* Premium Input Focus Ring */
   .input-luxury {
-    @apply border border-bushal-border rounded-xl bg-bushal-surface px-4 py-2.5 
-           text-sm text-bushal-ink placeholder-bushal-inkSoft/60
-           transition-all duration-200 focus:outline-none focus:border-bushal-copper focus:ring-2 focus:ring-bushal-copper/20;
+    @apply border border-bushal-border rounded-xl bg-bushal-surface px-4 py-2.5
+    text-sm text-bushal-ink placeholder-bushal-inkSoft/60
+    transition-all duration-200 focus:outline-none focus:border-bushal-copper focus:ring-2 focus:ring-bushal-copper/20;
   }
 
   /* Subtle Card Hover Lift */
   .card-hover {
     @apply transition-all duration-300 hover:-translate-y-0.5 hover:shadow-cardHover;
+  }
+
+  /* ──────────────────────────────────────────────────────────────
+     🎨 PREMIUM BUTTON CLASSES
+     Fixes invisible buttons across the app (Cart, Checkout, Forms).
+     ────────────────────────────────────────────────────────────── */
+  .btn-copper {
+    background: linear-gradient(135deg, #b87333 0%, #d49a5a 100%);
+    color: #ffffff;
+    font-weight: 600;
+    border-radius: 0.75rem;
+    padding: 0.625rem 1.25rem;
+    transition: all 0.2s ease;
+    box-shadow: 0 4px 6px -1px rgba(184, 115, 51, 0.2), 0 2px 4px -1px rgba(184, 115, 51, 0.1);
+    border: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+  }
+
+  .btn-copper:hover {
+    background: linear-gradient(135deg, #d49a5a 0%, #b87333 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 10px 15px -3px rgba(184, 115, 51, 0.3), 0 4px 6px -2px rgba(184, 115, 51, 0.15);
+  }
+
+  .btn-copper:active {
+    transform: scale(0.98);
+  }
+
+  .btn-copper:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+  }
+
+  .btn-forest {
+    background: linear-gradient(135deg, #1a362d 0%, #2d5a42 100%);
+    color: #ffffff;
+    font-weight: 600;
+    border-radius: 0.75rem;
+    padding: 0.625rem 1.25rem;
+    transition: all 0.2s ease;
+    box-shadow: 0 4px 6px -1px rgba(26, 54, 45, 0.2), 0 2px 4px -1px rgba(26, 54, 45, 0.1);
+    border: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+  }
+
+  .btn-forest:hover {
+    background: linear-gradient(135deg, #2d5a42 0%, #1a362d 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 10px 15px -3px rgba(26, 54, 45, 0.3), 0 4px 6px -2px rgba(26, 54, 45, 0.15);
+  }
+
+  .btn-forest:active {
+    transform: scale(0.98);
+  }
+
+  .btn-forest:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
   }
 }
 

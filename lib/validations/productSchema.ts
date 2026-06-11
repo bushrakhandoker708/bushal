@@ -1,6 +1,4 @@
 // lib/validations/productSchema.ts
-//Defines the Zod validation schema for product creation and updates. This ensures type safety, enforces valid pricing rules, and guarantees a consistent data structure across your admin product forms and API route handlers.
-
 import { z } from 'zod'
 
 export const productSchema = z.object({
@@ -14,7 +12,9 @@ export const productSchema = z.object({
     .positive('Price must be greater than 0')
     .multipleOf(0.01, 'Price can have at most 2 decimal places'),
   image_url: z.string().url('Must be a valid URL').nullable().optional(),
+  images: z.array(z.string()).optional(),
   in_stock: z.boolean().default(true),
+  stock_quantity: z.number().int().min(0, 'Stock quantity cannot be negative').default(0),
   discount_percent: z.number().int().min(0).max(100).nullable().optional(),
   category: z.string().default('General'),
 })

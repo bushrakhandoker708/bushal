@@ -1,6 +1,5 @@
 // app/components/admin/AdminOrdersClient.tsx
 'use client'
-
 import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { formatPrice } from '@/app/lib/utils/formatPrice'
@@ -11,17 +10,24 @@ const DELIVERY_STEPS = [
   { key: 'order_placed',     label: 'Order Placed',      icon: '📋', color: 'bg-bushal-ivoryDeep text-bushal-inkMid border-bushal-border' },
   { key: 'confirmed',        label: 'Confirmed',         icon: '✅', color: 'bg-bushal-copper/10 text-bushal-copper border-bushal-copper/20' },
   { key: 'processing',       label: 'Processing',        icon: '⚙️', color: 'bg-bushal-warningBg text-bushal-warning border-bushal-warning/20' },
-  { key: 'shipped',          label: 'Shipped',           icon: '📦', color: 'bg-bushal-forest/10 text-bushal-forest border-bushal-forest/20' },
+  { key: 'shipped',          label: 'Shipped',           icon: '', color: 'bg-bushal-forest/10 text-bushal-forest border-bushal-forest/20' },
   { key: 'out_for_delivery', label: 'Out for Delivery',  icon: '🚚', color: 'bg-bushal-warningBg text-bushal-warning border-bushal-warning/20' },
   { key: 'delivered',        label: 'Delivered',         icon: '🎉', color: 'bg-bushal-successBg text-bushal-success border-bushal-success/20' },
   { key: 'cancelled',        label: 'Cancelled',         icon: '❌', color: 'bg-bushal-dangerBg text-bushal-danger border-bushal-danger/20' },
 ]
 
+interface ProductData {
+  name: string
+  image_url: string | null
+  images: string[] | null
+}
+
 interface OrderItem {
   id: string
   quantity: number
   unit_price: number
-  products: { name: string; image_url: string | null; images: string[] | null } | null
+  product_id: string
+  products: ProductData | null
 }
 
 interface Order {
@@ -37,6 +43,7 @@ interface Order {
   delivery_address: string | null
   phone: string | null
   customer_note: string | null
+  payment_method: string | null
   order_items: OrderItem[]
   customer: { full_name: string | null; email: string | null; phone: string | null }
 }
@@ -61,7 +68,8 @@ function OrderRow({ order, onUpdateStatus }: OrderRowProps) {
   const [updating, setUpdating] = useState(false)
   const [selectedStatus, setSelectedStatus] = useState(order.delivery_status ?? 'order_placed')
   
-  const items = order.order_items ?? []
+  // Properly map items with products relation
+  const items: OrderItem[] = order.order_items ?? []
   const totalItemsCount = items.reduce((sum, item) => sum + item.quantity, 0)
   
   const firstImg = items[0]?.products
@@ -119,13 +127,11 @@ function OrderRow({ order, onUpdateStatus }: OrderRowProps) {
           </svg>
         </td>
       </tr>
-
       {/* Expanded panel */}
       {expanded && (
         <tr>
           <td colSpan={6} className="px-4 pb-5 pt-0">
             <div className="bg-bushal-ivoryDeep rounded-xl border border-bushal-border p-4 sm:p-5 space-y-5 animate-fade-in">
-              
               {/* 1. Customer & Payment Info */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
                 <div>
@@ -137,6 +143,9 @@ function OrderRow({ order, onUpdateStatus }: OrderRowProps) {
                 <div>
                   <p className="text-xs font-semibold text-bushal-inkSoft uppercase tracking-wide mb-1.5">Payment</p>
                   <p className="text-xs text-bushal-ink">
+                    Method: <span className="font-semibold">{order.payment_method === 'cod' ? 'Cash on Delivery' : order.payment_method?.toUpperCase() ?? '—'}</span>
+                  </p>
+                  <p className="text-xs text-bushal-ink mt-0.5">
                     bKash TxID: <span className="font-mono">{order.bkash_trx_id ?? '—'}</span>
                   </p>
                   <p className="text-xs text-bushal-ink mt-0.5">
@@ -146,10 +155,11 @@ function OrderRow({ order, onUpdateStatus }: OrderRowProps) {
                 <div>
                   <p className="text-xs font-semibold text-bushal-inkSoft uppercase tracking-wide mb-1.5">Order Total</p>
                   <p className="text-lg font-bold text-bushal-forest">{formatPrice(order.total)}</p>
+                  <p className="text-xs text-bushal-inkSoft mt-0.5">{totalItemsCount} item{totalItemsCount !== 1 ? 's' : ''}</p>
                 </div>
               </div>
 
-              {/* 2. Delivery Details (Address, Phone, Notes) */}
+              {/* 2. Delivery Details */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm pt-4 border-t border-bushal-border">
                 <div>
                   <p className="text-xs font-semibold text-bushal-inkSoft uppercase tracking-wide mb-1.5">Delivery Address</p>
@@ -169,36 +179,42 @@ function OrderRow({ order, onUpdateStatus }: OrderRowProps) {
                 )}
               </div>
 
-              {/* 3. Order Items */}
+              {/* 3. Order Items - This is the key fix */}
               <div>
                 <p className="text-xs font-semibold text-bushal-inkSoft uppercase tracking-wide mb-2.5">
                   Ordered Products ({totalItemsCount} total)
                 </p>
-                <div className="space-y-2">
-                  {items.map((item) => {
-                    const img = item.products 
-                      ? (Array.isArray(item.products.images) && item.products.images[0]) || item.products.image_url 
-                      : null
-                    return (
-                      <div key={item.id} className="flex items-center gap-3 bg-bushal-surface rounded-lg px-3 py-2.5 border border-bushal-border">
-                        <div className="w-10 h-10 rounded-lg overflow-hidden bg-bushal-ivoryDeep flex-shrink-0">
-                          {img ? (
-                            <img src={img} alt="" className="w-full h-full object-cover" />
-                          ) : (
-                            <div className="w-full h-full bg-bushal-ivoryDeep flex items-center justify-center text-bushal-borderMid text-[10px]">📦</div>
-                          )}
+                {items.length === 0 ? (
+                  <div className="bg-bushal-surface rounded-lg p-4 text-center text-sm text-bushal-inkSoft border border-bushal-border">
+                    No item data available for this order.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {items.map((item) => {
+                      const img = item.products
+                        ? (Array.isArray(item.products.images) && item.products.images[0]) || item.products.image_url
+                        : null
+                      return (
+                        <div key={item.id} className="flex items-center gap-3 bg-bushal-surface rounded-lg px-3 py-2.5 border border-bushal-border">
+                          <div className="w-10 h-10 rounded-lg overflow-hidden bg-bushal-ivoryDeep flex-shrink-0">
+                            {img ? (
+                              <img src={img} alt="" className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full bg-bushal-ivoryDeep flex items-center justify-center text-bushal-borderMid text-[10px]"></div>
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-bushal-ink truncate">{item.products?.name ?? 'Unknown Product'}</p>
+                            <p className="text-xs text-bushal-inkSoft">Qty: {item.quantity} × {formatPrice(item.unit_price)}</p>
+                          </div>
+                          <p className="text-sm font-bold text-bushal-forest flex-shrink-0">
+                            {formatPrice(item.quantity * item.unit_price)}
+                          </p>
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-bushal-ink truncate">{item.products?.name ?? 'Unknown Product'}</p>
-                          <p className="text-xs text-bushal-inkSoft">Qty: {item.quantity} × {formatPrice(item.unit_price)}</p>
-                        </div>
-                        <p className="text-sm font-bold text-bushal-forest flex-shrink-0">
-                          {formatPrice(item.quantity * item.unit_price)}
-                        </p>
-                      </div>
-                    )
-                  })}
-                </div>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
 
               {/* 4. Delivery Status Updater */}
@@ -318,6 +334,7 @@ export default function AdminOrdersClient({ orders }: Props) {
             : o
         )
       )
+      router.refresh()
     }
   }
 

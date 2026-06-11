@@ -1,25 +1,11 @@
 // app/(admin)/admin/orders/page.tsx
 import { createServerClient } from '@/lib/supabase/server'
-import { redirect } from 'next/navigation'
 import AdminOrdersClient from '@/app/components/admin/AdminOrderClient'
 
 export default async function AdminOrdersPage() {
   const supabase = createServerClient()
-
-  // Verify admin session (redundant if layout.tsx handles it, but ensures safety)
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) redirect('/login')
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', session.user.id)
-    .single()
-
-  if (profile?.role !== 'admin') redirect('/dashboard')
-
-  //  Fetch orders with expanded details
-  // Note: Includes new columns like 'inventory_reduced' and 'payment_method'
+  
+  // Fetch orders with all necessary data including order items and products
   const { data: orders, error } = await supabase
     .from('orders')
     .select(`
@@ -28,20 +14,26 @@ export default async function AdminOrdersPage() {
       status,
       delivery_status,
       delivery_steps,
-      inventory_reduced,
-      payment_method,
-      phone,
-      customer_note,
-      delivery_address,
       bkash_trx_id,
       bkash_invoice,
       created_at,
       user_id,
+      delivery_address,
+      phone,
+      customer_note,
+      payment_method,
       order_items (
         id,
         quantity,
         unit_price,
-        products ( name, image_url, images )
+        product_id,
+        products (
+          id,
+          name,
+          image_url,
+          images,
+          price
+        )
       )
     `)
     .order('created_at', { ascending: false })
@@ -70,11 +62,30 @@ export default async function AdminOrdersPage() {
   }
 
   // Map and shape the data for the client component
-  const enrichedOrders = (orders ?? []).map((o) => ({
-    ...o,
-    order_items: (o.order_items ?? []) as any[],
-    customer: profilesMap[o.user_id] ?? { full_name: null, email: null, phone: null },
-  }))
+  const enrichedOrders = (orders ?? []).map((o) => {
+    const orderItems = (o.order_items ?? []).map((item: any) => ({
+      id: item.id,
+      quantity: item.quantity,
+      unit_price: item.unit_price,
+      product_id: item.product_id,
+      products: item.products ? {
+        id: item.products.id,
+        name: item.products.name,
+        image_url: item.products.image_url,
+        images: item.products.images ?? [],
+        price: item.products.price
+      } : null
+    }))
+
+    const totalItemsCount = orderItems.reduce((sum: number, item: any) => sum + item.quantity, 0)
+
+    return {
+      ...o,
+      order_items: orderItems,
+      customer: profilesMap[o.user_id] ?? { full_name: null, email: null, phone: null },
+      total_items_count: totalItemsCount
+    }
+  })
 
   return <AdminOrdersClient orders={enrichedOrders} />
 }
