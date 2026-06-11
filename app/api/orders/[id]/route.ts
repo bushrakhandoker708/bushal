@@ -1,44 +1,164 @@
 // app/api/orders/[id]/route.ts
-// Handles admin updates to order status. 
-// Uses the same atomic PostgreSQL function to ensure stock is reduced exactly once upon confirmation.
 
+import { createServerClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/auth'
 
-const DELIVERY_LABELS: Record<string, string> = {
-  order_placed:     'Order Placed',
-  confirmed:        'Order Confirmed',
-  processing:       'Processing Your Order',
-  shipped:          'Shipped',
-  out_for_delivery: 'Out for Delivery',
-  delivered:        'Delivered',
-  cancelled:        'Order Cancelled',
+interface Params {
+  params: { id: string }
 }
 
-export async function PATCH(
-  request: Request,
-  { params }: { params: { id: string } }
-) {
+// GET - Fetch order details with items and customer info
+export async function GET(_req: Request, { params }: Params) {
+  const auth = await requireAdmin()
+  if (!auth.success) return auth.response
+
+  const { data: order, error } = await auth.supabase
+    .from('orders')
+    .select(`
+      id,
+      user_id,
+      total,
+      status,
+      delivery_status,
+      delivery_steps,
+      bkash_trx_id,
+      bkash_invoice,
+      payment_method,
+      delivery_address,
+      phone,
+      customer_note,
+      inventory_reduced,
+      created_at,
+      order_items (
+        id,
+        quantity,
+        unit_price,
+        product_id,
+        products (
+          id,
+          name,
+          image_url,
+          images,
+          cost_price,
+          delivery_charge
+        )
+      )
+    `)
+    .eq('id', params.id)
+    .single()
+
+  if (error || !order) {
+    return NextResponse.json({ error: 'Order not found' }, { status: 404 })
+  }
+
+  // Fetch customer profile
+  const { data: profile } = await auth.supabase
+    .from('profiles')
+    .select('full_name, email, phone')
+    .eq('id', order.user_id)
+    .single()
+
+  // Transform order_items
+  const items = (order.order_items ?? []).map((item: any) => {
+    let product = null
+    if (item.products) {
+      if (Array.isArray(item.products)) {
+        product = item.products[0] ?? null
+      } else {
+        product = item.products
+      }
+    }
+    const costPrice: number = product?.cost_price ?? 0
+    const deliveryCharge: number = product?.delivery_charge ?? 0
+    const subtotal = item.unit_price * item.quantity
+    const itemProfit = subtotal - (costPrice * item.quantity) - (deliveryCharge * item.quantity)
+    const productImage =
+      (Array.isArray(product?.images) && product.images[0]) ||
+      product?.image_url ||
+      null
+
+    return {
+      id: item.id,
+      product_id: item.product_id,
+      product_name: product?.name ?? 'Unknown Product',
+      product_image: productImage,
+      quantity: item.quantity,
+      unit_price: item.unit_price,
+      cost_price: costPrice || null,
+      delivery_charge: deliveryCharge || null,
+      subtotal,
+      item_profit: itemProfit,
+    }
+  })
+
+  // Parse delivery address
+  let deliveryAddressObj = null
+  if (order.delivery_address) {
+    try {
+      deliveryAddressObj = JSON.parse(order.delivery_address)
+    } catch {
+      // Keep as null if not JSON
+    }
+  }
+
+  const shapedOrder = {
+    id: order.id,
+    user_id: order.user_id,
+    customer_name: profile?.full_name ?? null,
+    customer_email: profile?.email ?? null,
+    customer_phone: profile?.phone ?? null,
+    delivery_address: order.delivery_address,
+    delivery_address_obj: deliveryAddressObj,
+    customer_note: order.customer_note,
+    phone: order.phone,
+    payment_method: order.payment_method ?? 'cod',
+    bkash_invoice: order.bkash_invoice ?? null,
+    total: order.total,
+    status: order.status,
+    delivery_status: order.delivery_status ?? 'order_placed',
+    delivery_steps: order.delivery_steps ?? [],
+    inventory_reduced: order.inventory_reduced ?? false,
+    created_at: order.created_at,
+    items,
+  }
+
+  return NextResponse.json(shapedOrder)
+}
+
+// PATCH - Update order status with full delivery workflow
+export async function PATCH(request: Request, { params }: Params) {
   const auth = await requireAdmin()
   if (!auth.success) return auth.response
 
   const body = await request.json()
   const { delivery_status } = body
 
-  if (!delivery_status || !Object.keys(DELIVERY_LABELS).includes(delivery_status)) {
-    return NextResponse.json({ error: 'Invalid delivery_status' }, { status: 400 })
+  // Define valid delivery statuses with their labels
+  const DELIVERY_STATUSES: Record<string, string> = {
+    'order_placed': 'Order Placed',
+    'confirmed': 'Confirmed',
+    'processing': 'Processing',
+    'shipped': 'Shipped',
+    'out_for_delivery': 'Out for Delivery',
+    'delivered': 'Delivered',
+    'cancelled': 'Cancelled',
   }
 
-  // Fetch existing order to get user_id for email notification
-  const { data: existing } = await auth.supabase
-    .from('orders')
-    .select('id, user_id')
-    .eq('id', params.id)
-    .single()
+  if (!delivery_status || !DELIVERY_STATUSES[delivery_status]) {
+    return NextResponse.json({ 
+      error: 'Invalid delivery status',
+      validStatuses: Object.keys(DELIVERY_STATUSES)
+    }, { status: 400 })
+  }
 
-  if (!existing) return NextResponse.json({ error: 'Order not found' }, { status: 404 })
+  // Map delivery_status to order status
+  const orderStatus = 
+    delivery_status === 'delivered' ? 'fulfilled' :
+    delivery_status === 'cancelled' ? 'cancelled' :
+    'pending'
 
-  // Call the atomic RPC to update status, append delivery step, and reduce stock (if not already done)
+  // Call the atomic RPC to update status and reduce stock if confirming
   const { data: rpcData, error: rpcError } = await auth.supabase.rpc('confirm_order_and_reduce_stock', {
     p_order_id: params.id,
     p_new_status: delivery_status,
@@ -49,25 +169,31 @@ export async function PATCH(
     return NextResponse.json({ error: rpcError.message }, { status: 500 })
   }
 
-  // Email notification (non-fatal)
-  try {
-    const resendKey = process.env.RESEND_API_KEY
-    if (resendKey) {
-      const { data: customerProfile } = await auth.supabase
-        .from('profiles')
-        .select('email, full_name')
-        .eq('id', existing.user_id)
-        .single()
+  // Fetch order details for email notification
+  const { data: order } = await auth.supabase
+    .from('orders')
+    .select('user_id, total, bkash_invoice')
+    .eq('id', params.id)
+    .single()
 
-      if (customerProfile?.email) {
-        const label = DELIVERY_LABELS[delivery_status]
-        const orderId = params.id.slice(0, 8).toUpperCase()
+  // Send email notification to customer
+  if (order?.user_id) {
+    const { data: customerProfile } = await auth.supabase
+      .from('profiles')
+      .select('email, full_name')
+      .eq('id', order.user_id)
+      .single()
 
+    if (customerProfile?.email) {
+      const label = DELIVERY_STATUSES[delivery_status]
+      const orderId = params.id.slice(0, 8).toUpperCase()
+      
+      try {
         await fetch('https://api.resend.com/emails', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${resendKey}`,
+            'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
           },
           body: JSON.stringify({
             from: 'Bushal <noreply@bushal.com>',
@@ -89,14 +215,15 @@ export async function PATCH(
             `,
           }),
         })
+      } catch (emailErr) {
+        console.error('Email notification failed:', emailErr)
       }
     }
-  } catch (emailErr) {
-    console.error('Email notification failed:', emailErr)
   }
 
   return NextResponse.json({
     delivery_status,
+    status: orderStatus,
     inventory_reduced_now: rpcData?.inventory_reduced_now ?? false,
   })
 }

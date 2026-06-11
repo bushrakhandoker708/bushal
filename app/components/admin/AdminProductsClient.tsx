@@ -1,4 +1,5 @@
 // app/components/admin/AdminProductsClient.tsx
+
 'use client'
 
 import Link from 'next/link'
@@ -7,6 +8,7 @@ import { formatPrice } from '@/app/lib/utils/formatPrice'
 import { Product } from '@/app/types/product'
 import { cn } from '@/app/lib/utils/cn'
 import { useRouter } from 'next/navigation'
+import { useToast } from '@/app/components/ui/Toast'
 
 interface Props {
   products: Product[]
@@ -19,6 +21,7 @@ type SortDir = 'asc' | 'desc'
 
 export default function AdminProductsClient({ products, categories }: Props) {
   const router = useRouter()
+  const { toast } = useToast()
   const [search, setSearch] = useState('')
   const [stockFilter, setStockFilter] = useState<StockFilter>('all')
   const [categoryFilter, setCategoryFilter] = useState('all')
@@ -28,6 +31,7 @@ export default function AdminProductsClient({ products, categories }: Props) {
 
   const filtered = useMemo(() => {
     let list = [...products]
+    
     if (search.trim()) {
       const q = search.trim().toLowerCase()
       list = list.filter(
@@ -37,22 +41,26 @@ export default function AdminProductsClient({ products, categories }: Props) {
           (p.description ?? '').toLowerCase().includes(q)
       )
     }
+
     if (stockFilter === 'in_stock') list = list.filter((p) => p.in_stock && (p.stock_quantity ?? 0) > 5)
     if (stockFilter === 'out_of_stock') list = list.filter((p) => !p.in_stock)
     if (stockFilter === 'low_stock') list = list.filter((p) => p.in_stock && (p.stock_quantity ?? 0) > 0 && (p.stock_quantity ?? 0) <= 5)
     if (categoryFilter !== 'all') list = list.filter((p) => p.category === categoryFilter)
-    
+
     list.sort((a, b) => {
       let va: any = a[sortKey as keyof Product]
       let vb: any = b[sortKey as keyof Product]
+      
       if (sortKey === 'name' || sortKey === 'category') {
         va = (va ?? '').toLowerCase()
         vb = (vb ?? '').toLowerCase()
       }
+      
       if (va < vb) return sortDir === 'asc' ? -1 : 1
       if (va > vb) return sortDir === 'asc' ? 1 : -1
       return 0
     })
+
     return list
   }, [products, search, stockFilter, categoryFilter, sortKey, sortDir])
 
@@ -61,12 +69,36 @@ export default function AdminProductsClient({ products, categories }: Props) {
     else { setSortKey(key); setSortDir('asc') }
   }
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Delete this product? This cannot be undone.')) return
+  const handleDelete = async (id: string, productName: string) => {
+    if (!confirm(`Delete "${productName}"? This cannot be undone.`)) return
+    
     setDeleting(id)
-    await fetch(`/api/products/${id}`, { method: 'DELETE' })
-    setDeleting(null)
-    router.refresh()
+    
+    try {
+      const res = await fetch(`/api/products/${id}`, { method: 'DELETE' })
+      const data = await res.json()
+
+      if (!res.ok) {
+        if (res.status === 409) {
+          // Product has orders - show friendly message
+          toast('Cannot delete product', 'warning', 5000)
+          setTimeout(() => {
+            toast('This product has been ordered. Set stock to 0 instead.', 'info', 4000)
+          }, 100)
+        } else {
+          toast(data.error || 'Failed to delete product', 'error', 4000)
+        }
+        return
+      }
+
+      toast('Product deleted successfully', 'success', 3000)
+      router.refresh()
+    } catch (err) {
+      console.error('Delete error:', err)
+      toast('Failed to delete product', 'error', 4000)
+    } finally {
+      setDeleting(null)
+    }
   }
 
   const SortIcon = ({ k }: { k: SortKey }) =>
@@ -89,10 +121,10 @@ export default function AdminProductsClient({ products, categories }: Props) {
   }
 
   const stockFilterOptions: { value: StockFilter; label: string; color: string; activeColor: string }[] = [
-    { value: 'all',          label: `All (${stockCounts.all})`,                   color: 'bg-bushal-surface text-bushal-inkMid border-bushal-border',         activeColor: 'bg-bushal-forest text-white border-bushal-forest' },
-    { value: 'in_stock',     label: `In Stock (${stockCounts.in_stock})`,         color: 'bg-bushal-successBg text-bushal-success border-bushal-success/20', activeColor: 'bg-bushal-success text-white border-bushal-success' },
-    { value: 'low_stock',    label: `Low Stock (${stockCounts.low_stock})`,       color: 'bg-bushal-warningBg text-bushal-warning border-bushal-warning/20', activeColor: 'bg-bushal-warning text-white border-bushal-warning' },
-    { value: 'out_of_stock', label: `Out of Stock (${stockCounts.out_of_stock})`, color: 'bg-bushal-dangerBg text-bushal-danger border-bushal-danger/20',   activeColor: 'bg-bushal-danger text-white border-bushal-danger' },
+    { value: 'all', label: `All (${stockCounts.all})`, color: 'bg-bushal-surface text-bushal-inkMid border-bushal-border', activeColor: 'bg-bushal-forest text-white border-bushal-forest' },
+    { value: 'in_stock', label: `In Stock (${stockCounts.in_stock})`, color: 'bg-bushal-successBg text-bushal-success border-bushal-success/20', activeColor: 'bg-bushal-success text-white border-bushal-success' },
+    { value: 'low_stock', label: `Low Stock (${stockCounts.low_stock})`, color: 'bg-bushal-warningBg text-bushal-warning border-bushal-warning/20', activeColor: 'bg-bushal-warning text-white border-bushal-warning' },
+    { value: 'out_of_stock', label: `Out of Stock (${stockCounts.out_of_stock})`, color: 'bg-bushal-dangerBg text-bushal-danger border-bushal-danger/20', activeColor: 'bg-bushal-danger text-white border-bushal-danger' },
   ]
 
   return (
@@ -205,6 +237,7 @@ export default function AdminProductsClient({ products, categories }: Props) {
                   const isOut = qty === 0
                   const isLow = qty > 0 && qty <= 5
                   const cover = (Array.isArray(product.images) && product.images[0]) || product.image_url
+                  
                   return (
                     <tr key={product.id} className="hover:bg-bushal-ivoryDeep/50 transition-colors">
                       <td className="px-4 py-3.5">
@@ -263,7 +296,7 @@ export default function AdminProductsClient({ products, categories }: Props) {
                             Edit
                           </Link>
                           <button
-                            onClick={() => handleDelete(product.id)}
+                            onClick={() => handleDelete(product.id, product.name)}
                             disabled={deleting === product.id}
                             className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-bushal-dangerBg text-bushal-danger text-xs font-semibold hover:bg-bushal-danger/20 transition-colors disabled:opacity-50"
                           >
@@ -302,6 +335,7 @@ export default function AdminProductsClient({ products, categories }: Props) {
             const isOut = qty === 0
             const isLow = qty > 0 && qty <= 5
             const cover = (Array.isArray(product.images) && product.images[0]) || product.image_url
+            
             return (
               <div key={product.id} className="bg-bushal-surface rounded-2xl border border-bushal-border p-4">
                 <div className="flex items-start gap-3">
@@ -338,7 +372,7 @@ export default function AdminProductsClient({ products, categories }: Props) {
                     Edit
                   </Link>
                   <button
-                    onClick={() => handleDelete(product.id)}
+                    onClick={() => handleDelete(product.id, product.name)}
                     disabled={deleting === product.id}
                     className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-bushal-dangerBg text-bushal-danger text-xs font-semibold hover:bg-bushal-danger/20 transition-colors disabled:opacity-50"
                   >

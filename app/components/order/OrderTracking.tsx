@@ -1,4 +1,3 @@
-// components/order/OrderTracking.tsx
 'use client'
 
 import { cn } from '@/app/lib/utils/cn'
@@ -6,13 +5,13 @@ import Badge from '@/app/components/ui/Badge'
 
 type OrderStatus = 'order_placed' | 'confirmed' | 'processing' | 'shipped' | 'out_for_delivery' | 'delivered' | 'cancelled'
 
-const STEPS: { key: OrderStatus; label: string; description: string }[] = [
-  { key: 'order_placed',      label: 'Order Placed',      description: 'We received your order' },
-  { key: 'confirmed',         label: 'Confirmed',          description: 'Payment verified' },
-  { key: 'processing',        label: 'Processing',         description: 'Being prepared for dispatch' },
-  { key: 'shipped',           label: 'Shipped',            description: 'On its way to you' },
-  { key: 'out_for_delivery',  label: 'Out for Delivery',   description: 'With delivery agent' },
-  { key: 'delivered',         label: 'Delivered',          description: 'Enjoy your order!' },
+const STEPS: { key: OrderStatus; label: string; description: string; icon: string }[] = [
+  { key: 'order_placed',      label: 'Order Placed',      description: 'We received your order', icon: '📋' },
+  { key: 'confirmed',         label: 'Confirmed',         description: 'Payment verified', icon: '✅' },
+  { key: 'processing',        label: 'Processing',        description: 'Being prepared for dispatch', icon: '⚙️' },
+  { key: 'shipped',           label: 'Shipped',           description: 'On its way to you', icon: '📦' },
+  { key: 'out_for_delivery',  label: 'Out for Delivery',  description: 'With delivery agent', icon: '🚚' },
+  { key: 'delivered',         label: 'Delivered',         description: 'Enjoy your order!', icon: '🎉' },
 ]
 
 const statusBadgeVariant: Record<OrderStatus, 'success' | 'danger' | 'warning' | 'info' | 'copper'> = {
@@ -37,9 +36,7 @@ export default function OrderTracking({ currentStatus, orderId, estimatedDeliver
       <div className="bg-bushal-surface rounded-xl border border-bushal-danger/20 p-6">
         <div className="flex items-center gap-3 mb-2">
           <div className="w-9 h-9 rounded-full bg-bushal-dangerBg flex items-center justify-center">
-            <svg className="w-5 h-5 text-bushal-danger" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
+            <span className="text-xl">❌</span>
           </div>
           <div>
             <p className="font-heading font-semibold text-bushal-danger">Order Cancelled</p>
@@ -62,20 +59,19 @@ export default function OrderTracking({ currentStatus, orderId, estimatedDeliver
           {orderId && <p className="text-xs text-bushal-inkSoft mt-0.5">Order #{orderId}</p>}
         </div>
         <Badge variant={statusBadgeVariant[currentStatus]} dot>
-          {STEPS[currentIndex]?.label ?? currentStatus}
+          {STEPS[currentIndex]?.icon} {STEPS[currentIndex]?.label ?? currentStatus}
         </Badge>
       </div>
 
       {estimatedDelivery && (
         <div className="flex items-center gap-2 bg-bushal-successBg rounded-lg px-3 py-2 mb-5 border border-bushal-success/20">
-          <svg className="w-4 h-4 text-bushal-success flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-          </svg>
+          <span className="text-lg">📅</span>
           <p className="text-xs font-semibold text-bushal-success">Est. delivery: {estimatedDelivery}</p>
         </div>
       )}
 
       <div className="relative">
+        {/* Progress line */}
         <div className="absolute left-[17px] top-3 bottom-3 w-0.5 bg-bushal-border" />
         <div
           className="absolute left-[17px] top-3 w-0.5 bg-bushal-success transition-all duration-700"
@@ -101,10 +97,9 @@ export default function OrderTracking({ currentStatus, orderId, estimatedDeliver
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                     </svg>
                   ) : (
-                    <span className="text-[11px] font-bold">{index + 1}</span>
+                    <span className="text-lg">{step.icon}</span>
                   )}
                 </div>
-
                 <div className="pt-1.5">
                   <p className={cn(
                     'text-sm font-semibold transition-colors',

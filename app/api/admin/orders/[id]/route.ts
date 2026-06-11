@@ -1,4 +1,5 @@
 // app/api/admin/orders/[id]/route.ts
+
 import { createServerClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/auth'
@@ -7,7 +8,7 @@ interface Params {
   params: { id: string }
 }
 
-// GET - Fetch order details with items and customer info
+// GET - Fetch order details
 export async function GET(_req: Request, { params }: Params) {
   const auth = await requireAdmin()
   if (!auth.success) return auth.response
@@ -59,10 +60,8 @@ export async function GET(_req: Request, { params }: Params) {
     .eq('id', order.user_id)
     .single()
 
-  // Transform order_items into the format AdminOrderDetail expects
-  // CRITICAL FIX: Handle products as array from Supabase join
+  // Transform order_items
   const items = (order.order_items ?? []).map((item: any) => {
-    // Extract product data - Supabase returns array for joined relations
     let product = null
     if (item.products) {
       if (Array.isArray(item.products)) {
@@ -71,13 +70,11 @@ export async function GET(_req: Request, { params }: Params) {
         product = item.products
       }
     }
-
     const costPrice: number = product?.cost_price ?? 0
     const deliveryCharge: number = product?.delivery_charge ?? 0
     const subtotal = item.unit_price * item.quantity
     const itemProfit = subtotal - (costPrice * item.quantity) - (deliveryCharge * item.quantity)
-
-    const productImage = 
+    const productImage =
       (Array.isArray(product?.images) && product.images[0]) ||
       product?.image_url ||
       null
@@ -131,34 +128,104 @@ export async function GET(_req: Request, { params }: Params) {
   return NextResponse.json(shapedOrder)
 }
 
-// PATCH - Update order status
+// PATCH - Update order status with full delivery workflow
 export async function PATCH(request: Request, { params }: Params) {
   const auth = await requireAdmin()
   if (!auth.success) return auth.response
 
   const body = await request.json()
-  const { status, delivery_status } = body
+  const { delivery_status } = body
 
-  const newStatus = delivery_status || status
-
-  if (!newStatus) {
-    return NextResponse.json({ error: 'status or delivery_status is required' }, { status: 400 })
+  // Define valid delivery statuses with their labels
+  const DELIVERY_STATUSES: Record<string, string> = {
+    'order_placed': 'Order Placed',
+    'confirmed': 'Confirmed',
+    'processing': 'Processing',
+    'shipped': 'Shipped',
+    'out_for_delivery': 'Out for Delivery',
+    'delivered': 'Delivered',
+    'cancelled': 'Cancelled',
   }
 
-  const { data, error } = await auth.supabase
+  if (!delivery_status || !DELIVERY_STATUSES[delivery_status]) {
+    return NextResponse.json({ 
+      error: 'Invalid delivery status',
+      validStatuses: Object.keys(DELIVERY_STATUSES)
+    }, { status: 400 })
+  }
+
+  // Map delivery_status to order status
+  const orderStatus = 
+    delivery_status === 'delivered' ? 'fulfilled' :
+    delivery_status === 'cancelled' ? 'cancelled' :
+    'pending'
+
+  // Call the atomic RPC to update status and reduce stock if confirming
+  const { data: rpcData, error: rpcError } = await auth.supabase.rpc('confirm_order_and_reduce_stock', {
+    p_order_id: params.id,
+    p_new_status: delivery_status,
+  })
+
+  if (rpcError) {
+    console.error('RPC Error:', rpcError)
+    return NextResponse.json({ error: rpcError.message }, { status: 500 })
+  }
+
+  // Fetch order details for email notification
+  const { data: order } = await auth.supabase
     .from('orders')
-    .update({ 
-      status: newStatus,
-      delivery_status: newStatus,
-      updated_at: new Date().toISOString()
-    })
+    .select('user_id, total, bkash_invoice')
     .eq('id', params.id)
-    .select()
     .single()
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  // Send email notification to customer
+  if (order?.user_id) {
+    const { data: customerProfile } = await auth.supabase
+      .from('profiles')
+      .select('email, full_name')
+      .eq('id', order.user_id)
+      .single()
+
+    if (customerProfile?.email) {
+      const label = DELIVERY_STATUSES[delivery_status]
+      const orderId = params.id.slice(0, 8).toUpperCase()
+      
+      try {
+        await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+          },
+          body: JSON.stringify({
+            from: 'Bushal <noreply@bushal.com>',
+            to: [customerProfile.email],
+            subject: `Order #${orderId} — Status Updated: ${label}`,
+            html: `
+              <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 32px 24px;">
+                <h1 style="color:#f97316; font-size:24px; margin-bottom:8px;">Bushal</h1>
+                <hr style="border:none; border-top:1px solid #e2e8f0; margin: 16px 0;" />
+                <h2 style="color:#1e293b; font-size:18px;">Order Status Updated</h2>
+                <p style="color:#475569;">Hi ${customerProfile.full_name ?? 'Customer'},</p>
+                <p style="color:#475569;">Your order <strong>#${orderId}</strong> has been updated to:</p>
+                <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:16px 20px; margin:20px 0;">
+                  <p style="font-size:20px; font-weight:bold; color:#1e293b; margin:0;">${label}</p>
+                </div>
+                <p style="color:#475569;">Track your order at <a href="${process.env.NEXT_PUBLIC_SITE_URL ?? 'https://bushal.com'}/orders" style="color:#f97316;">bushal.com/orders</a>.</p>
+                <p style="color:#94a3b8; font-size:13px; margin-top:32px;">— The Bushal Team</p>
+              </div>
+            `,
+          }),
+        })
+      } catch (emailErr) {
+        console.error('Email notification failed:', emailErr)
+      }
+    }
   }
 
-  return NextResponse.json(data)
+  return NextResponse.json({
+    delivery_status,
+    status: orderStatus,
+    inventory_reduced_now: rpcData?.inventory_reduced_now ?? false,
+  })
 }
