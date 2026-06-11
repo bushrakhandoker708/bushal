@@ -1,5 +1,6 @@
-// app/components/admin/AdminOrdersClient.tsx
+// app/components/admin/AdminOrderClient.tsx
 'use client'
+
 import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { formatPrice } from '@/app/lib/utils/formatPrice'
@@ -10,7 +11,7 @@ const DELIVERY_STEPS = [
   { key: 'order_placed',     label: 'Order Placed',      icon: '📋', color: 'bg-bushal-ivoryDeep text-bushal-inkMid border-bushal-border' },
   { key: 'confirmed',        label: 'Confirmed',         icon: '✅', color: 'bg-bushal-copper/10 text-bushal-copper border-bushal-copper/20' },
   { key: 'processing',       label: 'Processing',        icon: '⚙️', color: 'bg-bushal-warningBg text-bushal-warning border-bushal-warning/20' },
-  { key: 'shipped',          label: 'Shipped',           icon: '', color: 'bg-bushal-forest/10 text-bushal-forest border-bushal-forest/20' },
+  { key: 'shipped',          label: 'Shipped',           icon: '📦', color: 'bg-bushal-forest/10 text-bushal-forest border-bushal-forest/20' },
   { key: 'out_for_delivery', label: 'Out for Delivery',  icon: '🚚', color: 'bg-bushal-warningBg text-bushal-warning border-bushal-warning/20' },
   { key: 'delivered',        label: 'Delivered',         icon: '🎉', color: 'bg-bushal-successBg text-bushal-success border-bushal-success/20' },
   { key: 'cancelled',        label: 'Cancelled',         icon: '❌', color: 'bg-bushal-dangerBg text-bushal-danger border-bushal-danger/20' },
@@ -48,6 +49,106 @@ interface Order {
   customer: { full_name: string | null; email: string | null; phone: string | null }
 }
 
+// ─── Order Summary Component ─────────────────────────────────────────────────
+function OrderSummaryPanel({ items, total, paymentMethod }: {
+  items: OrderItem[]
+  total: number
+  paymentMethod: string | null
+}) {
+  const subtotal = items.reduce((sum, item) => sum + item.unit_price * item.quantity, 0)
+  // Infer shipping: difference between order total and items subtotal
+  const shipping = Math.max(0, total - subtotal)
+
+  if (items.length === 0) {
+    return (
+      <div className="bg-bushal-surface rounded-xl border border-bushal-border p-4 text-center text-sm text-bushal-inkSoft">
+        No item data available for this order.
+      </div>
+    )
+  }
+
+  return (
+    <div className="bg-bushal-surface rounded-xl border border-bushal-border overflow-hidden">
+      {/* Items list */}
+      <div className="divide-y divide-bushal-ivoryDeep">
+        {items.map((item) => {
+          const img = item.products
+            ? (Array.isArray(item.products.images) && item.products.images[0]) || item.products.image_url
+            : null
+          const lineTotal = item.unit_price * item.quantity
+
+          return (
+            <div key={item.id} className="flex items-center gap-3 px-4 py-3">
+              {/* Product image */}
+              <div className="w-12 h-12 rounded-lg overflow-hidden bg-bushal-ivoryDeep border border-bushal-border flex-shrink-0">
+                {img ? (
+                  <img src={img} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-bushal-borderMid">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                        d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                )}
+              </div>
+
+              {/* Product info */}
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-bushal-ink truncate">
+                  {item.products?.name ?? 'Unknown Product'}
+                </p>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="text-xs text-bushal-inkSoft">{formatPrice(item.unit_price)} × {item.quantity}</span>
+                  <span className="inline-flex items-center justify-center w-5 h-5 rounded-md bg-bushal-copper/10 text-bushal-copper text-[10px] font-bold">
+                    {item.quantity}
+                  </span>
+                </div>
+              </div>
+
+              {/* Line total */}
+              <p className="text-sm font-bold text-bushal-forest flex-shrink-0">
+                {formatPrice(lineTotal)}
+              </p>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Totals footer */}
+      <div className="border-t border-bushal-border bg-bushal-ivoryDeep/50 px-4 py-3 space-y-1.5">
+        <div className="flex justify-between text-xs text-bushal-inkSoft">
+          <span>Subtotal</span>
+          <span className="font-medium text-bushal-ink">{formatPrice(subtotal)}</span>
+        </div>
+        {shipping > 0 && (
+          <div className="flex justify-between text-xs text-bushal-inkSoft">
+            <span>Shipping</span>
+            <span className="font-medium text-bushal-ink">{formatPrice(shipping)}</span>
+          </div>
+        )}
+        <div className="flex justify-between items-center pt-1.5 border-t border-bushal-border">
+          <span className="text-sm font-bold text-bushal-forest">Total</span>
+          <span className="text-base font-bold text-bushal-copper">{formatPrice(total)}</span>
+        </div>
+        {/* Payment method badge */}
+        <div className="flex items-center justify-between pt-1">
+          <span className="text-xs text-bushal-inkSoft">Payment</span>
+          <span className={cn(
+            'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold',
+            paymentMethod === 'cod'
+              ? 'bg-bushal-forest/10 text-bushal-forest'
+              : 'bg-bushal-copper/10 text-bushal-copper'
+          )}>
+            {paymentMethod === 'cod' ? '💵 Cash on Delivery' : `💳 ${paymentMethod?.toUpperCase() ?? 'Unknown'}`}
+          </span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Status Badge ─────────────────────────────────────────────────────────────
 function StatusBadge({ status }: { status: string }) {
   const step = DELIVERY_STEPS.find((s) => s.key === status)
   if (!step) return <span className="text-xs text-bushal-inkSoft">{status}</span>
@@ -58,6 +159,7 @@ function StatusBadge({ status }: { status: string }) {
   )
 }
 
+// ─── Order Row ────────────────────────────────────────────────────────────────
 interface OrderRowProps {
   order: Order
   onUpdateStatus: (orderId: string, status: string) => Promise<void>
@@ -67,11 +169,11 @@ function OrderRow({ order, onUpdateStatus }: OrderRowProps) {
   const [expanded, setExpanded] = useState(false)
   const [updating, setUpdating] = useState(false)
   const [selectedStatus, setSelectedStatus] = useState(order.delivery_status ?? 'order_placed')
-  
-  // Properly map items with products relation
+
   const items: OrderItem[] = order.order_items ?? []
-  const totalItemsCount = items.reduce((sum, item) => sum + item.quantity, 0)
-  
+  const totalItemsCount = items.reduce((sum, item) => sum + (item.quantity ?? 0), 0)
+  const totalProductLines = items.length
+
   const firstImg = items[0]?.products
     ? (Array.isArray(items[0].products.images) && items[0].products.images[0]) || items[0].products.image_url
     : null
@@ -110,7 +212,11 @@ function OrderRow({ order, onUpdateStatus }: OrderRowProps) {
         </td>
         <td className="px-4 py-3.5">
           <p className="text-sm font-bold text-bushal-forest">{formatPrice(order.total)}</p>
-          <p className="text-[11px] text-bushal-inkSoft">{totalItemsCount} item{totalItemsCount !== 1 ? 's' : ''}</p>
+          <p className="text-[11px] text-bushal-inkSoft">
+            {totalProductLines > 0
+              ? `${totalProductLines} product${totalProductLines !== 1 ? 's' : ''} · ${totalItemsCount} unit${totalItemsCount !== 1 ? 's' : ''}`
+              : 'Loading items...'}
+          </p>
         </td>
         <td className="px-4 py-3.5">
           <StatusBadge status={order.delivery_status ?? 'order_placed'} />
@@ -127,12 +233,14 @@ function OrderRow({ order, onUpdateStatus }: OrderRowProps) {
           </svg>
         </td>
       </tr>
+
       {/* Expanded panel */}
       {expanded && (
         <tr>
           <td colSpan={6} className="px-4 pb-5 pt-0">
             <div className="bg-bushal-ivoryDeep rounded-xl border border-bushal-border p-4 sm:p-5 space-y-5 animate-fade-in">
-              {/* 1. Customer & Payment Info */}
+
+              {/* Top grid: customer + payment + order total */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
                 <div>
                   <p className="text-xs font-semibold text-bushal-inkSoft uppercase tracking-wide mb-1.5">Customer</p>
@@ -143,7 +251,9 @@ function OrderRow({ order, onUpdateStatus }: OrderRowProps) {
                 <div>
                   <p className="text-xs font-semibold text-bushal-inkSoft uppercase tracking-wide mb-1.5">Payment</p>
                   <p className="text-xs text-bushal-ink">
-                    Method: <span className="font-semibold">{order.payment_method === 'cod' ? 'Cash on Delivery' : order.payment_method?.toUpperCase() ?? '—'}</span>
+                    Method: <span className="font-semibold">
+                      {order.payment_method === 'cod' ? 'Cash on Delivery' : order.payment_method?.toUpperCase() ?? '—'}
+                    </span>
                   </p>
                   <p className="text-xs text-bushal-ink mt-0.5">
                     bKash TxID: <span className="font-mono">{order.bkash_trx_id ?? '—'}</span>
@@ -155,11 +265,13 @@ function OrderRow({ order, onUpdateStatus }: OrderRowProps) {
                 <div>
                   <p className="text-xs font-semibold text-bushal-inkSoft uppercase tracking-wide mb-1.5">Order Total</p>
                   <p className="text-lg font-bold text-bushal-forest">{formatPrice(order.total)}</p>
-                  <p className="text-xs text-bushal-inkSoft mt-0.5">{totalItemsCount} item{totalItemsCount !== 1 ? 's' : ''}</p>
+                  <p className="text-xs text-bushal-inkSoft mt-0.5">
+                    {totalProductLines} product{totalProductLines !== 1 ? 's' : ''} · {totalItemsCount} unit{totalItemsCount !== 1 ? 's' : ''}
+                  </p>
                 </div>
               </div>
 
-              {/* 2. Delivery Details */}
+              {/* Delivery info */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm pt-4 border-t border-bushal-border">
                 <div>
                   <p className="text-xs font-semibold text-bushal-inkSoft uppercase tracking-wide mb-1.5">Delivery Address</p>
@@ -167,11 +279,13 @@ function OrderRow({ order, onUpdateStatus }: OrderRowProps) {
                 </div>
                 <div>
                   <p className="text-xs font-semibold text-bushal-inkSoft uppercase tracking-wide mb-1.5">Contact Phone</p>
-                  <p className="text-sm text-bushal-ink font-medium">{order.phone || order.customer.phone || 'No phone provided'}</p>
+                  <p className="text-sm text-bushal-ink font-medium">
+                    {order.phone || order.customer.phone || 'No phone provided'}
+                  </p>
                 </div>
                 {order.customer_note && (
                   <div className="sm:col-span-2">
-                    <p className="text-xs font-semibold text-bushal-inkSoft uppercase tracking-wide mb-1.5">Delivery Instructions</p>
+                    <p className="text-xs font-semibold text-bushal-inkSoft uppercase tracking-wide mb-1.5">Customer Note</p>
                     <p className="text-sm text-bushal-ink italic bg-bushal-surface p-3 rounded-lg border border-bushal-border">
                       "{order.customer_note}"
                     </p>
@@ -179,47 +293,23 @@ function OrderRow({ order, onUpdateStatus }: OrderRowProps) {
                 )}
               </div>
 
-              {/* 3. Order Items - This is the key fix */}
-              <div>
-                <p className="text-xs font-semibold text-bushal-inkSoft uppercase tracking-wide mb-2.5">
-                  Ordered Products ({totalItemsCount} total)
+              {/* ── ORDER SUMMARY ── */}
+              <div className="pt-4 border-t border-bushal-border">
+                <p className="text-xs font-semibold text-bushal-inkSoft uppercase tracking-wide mb-3">
+                  Order Summary
                 </p>
-                {items.length === 0 ? (
-                  <div className="bg-bushal-surface rounded-lg p-4 text-center text-sm text-bushal-inkSoft border border-bushal-border">
-                    No item data available for this order.
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {items.map((item) => {
-                      const img = item.products
-                        ? (Array.isArray(item.products.images) && item.products.images[0]) || item.products.image_url
-                        : null
-                      return (
-                        <div key={item.id} className="flex items-center gap-3 bg-bushal-surface rounded-lg px-3 py-2.5 border border-bushal-border">
-                          <div className="w-10 h-10 rounded-lg overflow-hidden bg-bushal-ivoryDeep flex-shrink-0">
-                            {img ? (
-                              <img src={img} alt="" className="w-full h-full object-cover" />
-                            ) : (
-                              <div className="w-full h-full bg-bushal-ivoryDeep flex items-center justify-center text-bushal-borderMid text-[10px]"></div>
-                            )}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-bushal-ink truncate">{item.products?.name ?? 'Unknown Product'}</p>
-                            <p className="text-xs text-bushal-inkSoft">Qty: {item.quantity} × {formatPrice(item.unit_price)}</p>
-                          </div>
-                          <p className="text-sm font-bold text-bushal-forest flex-shrink-0">
-                            {formatPrice(item.quantity * item.unit_price)}
-                          </p>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
+                <OrderSummaryPanel
+                  items={items}
+                  total={order.total}
+                  paymentMethod={order.payment_method}
+                />
               </div>
 
-              {/* 4. Delivery Status Updater */}
-              <div>
-                <p className="text-xs font-semibold text-bushal-inkSoft uppercase tracking-wide mb-2.5">Update Delivery Status</p>
+              {/* Status updater */}
+              <div className="pt-4 border-t border-bushal-border">
+                <p className="text-xs font-semibold text-bushal-inkSoft uppercase tracking-wide mb-2.5">
+                  Update Delivery Status
+                </p>
                 <div className="flex flex-wrap gap-2 mb-4">
                   {DELIVERY_STEPS.map((step) => (
                     <button
@@ -262,7 +352,7 @@ function OrderRow({ order, onUpdateStatus }: OrderRowProps) {
                 </button>
               </div>
 
-              {/* 5. Delivery Timeline */}
+              {/* Timeline */}
               {Array.isArray(order.delivery_steps) && order.delivery_steps.length > 0 && (
                 <div className="pt-4 border-t border-bushal-border">
                   <p className="text-xs font-semibold text-bushal-inkSoft uppercase tracking-wide mb-2.5">Timeline</p>
@@ -290,6 +380,7 @@ function OrderRow({ order, onUpdateStatus }: OrderRowProps) {
   )
 }
 
+// ─── Main Client Component ────────────────────────────────────────────────────
 interface Props {
   orders: Order[]
 }
@@ -320,21 +411,33 @@ export default function AdminOrdersClient({ orders }: Props) {
   }, [localOrders, search, statusFilter])
 
   const handleUpdateStatus = async (orderId: string, status: string) => {
-    const res = await fetch(`/api/orders/${orderId}/delivery`, {
+    const res = await fetch(`/api/admin/orders/${orderId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ delivery_status: status }),
     })
+
     if (res.ok) {
-      const data = await res.json()
+      const stepConfig = DELIVERY_STEPS.find(s => s.key === status)
+      const newStep = {
+        status,
+        label: stepConfig?.label ?? status,
+        timestamp: new Date().toISOString(),
+      }
       setLocalOrders((prev) =>
-        prev.map((o) =>
-          o.id === orderId
-            ? { ...o, delivery_status: data.delivery_status, delivery_steps: data.delivery_steps }
-            : o
-        )
+        prev.map((o) => {
+          if (o.id !== orderId) return o
+          return {
+            ...o,
+            delivery_status: status,
+            delivery_steps: [...(o.delivery_steps ?? []), newStep],
+          }
+        })
       )
       router.refresh()
+    } else {
+      const body = await res.json().catch(() => ({}))
+      alert(body.error ?? 'Failed to update order status. Please try again.')
     }
   }
 
@@ -349,7 +452,6 @@ export default function AdminOrdersClient({ orders }: Props) {
 
   return (
     <div className="animate-fade-in-up space-y-5">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-bushal-forest">Orders</h1>
@@ -359,7 +461,7 @@ export default function AdminOrdersClient({ orders }: Props) {
         </div>
       </div>
 
-      {/* Status quick-filter pills */}
+      {/* Status filter pills */}
       <div className="flex gap-2 flex-wrap overflow-x-auto pb-1 no-scrollbar">
         <button
           onClick={() => setStatusFilter('all')}

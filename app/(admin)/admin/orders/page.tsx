@@ -4,8 +4,10 @@ import AdminOrdersClient from '@/app/components/admin/AdminOrderClient'
 
 export default async function AdminOrdersPage() {
   const supabase = createServerClient()
-  
-  // Fetch orders with all necessary data including order items and products
+
+  // Fetch orders with nested order_items and products
+  // IMPORTANT: Supabase returns joined 'products' as an ARRAY because of the relationship type.
+  // We must handle this correctly when mapping.
   const { data: orders, error } = await supabase
     .from('orders')
     .select(`
@@ -16,12 +18,12 @@ export default async function AdminOrdersPage() {
       delivery_steps,
       bkash_trx_id,
       bkash_invoice,
+      payment_method,
       created_at,
       user_id,
       delivery_address,
       phone,
       customer_note,
-      payment_method,
       order_items (
         id,
         quantity,
@@ -31,8 +33,7 @@ export default async function AdminOrdersPage() {
           id,
           name,
           image_url,
-          images,
-          price
+          images
         )
       )
     `)
@@ -54,36 +55,53 @@ export default async function AdminOrdersPage() {
 
     profiles?.forEach((p) => {
       profilesMap[p.id] = {
-        full_name: p.full_name,
-        email: p.email,
-        phone: p.phone ?? null
+        full_name: p.full_name ?? null,
+        email: p.email ?? null,
+        phone: p.phone ?? null,
       }
     })
   }
 
-  // Map and shape the data for the client component
+  // Map orders with proper null-checks and product extraction
+  // CRITICAL FIX: Supabase returns 'products' as an array. We extract the first element.
   const enrichedOrders = (orders ?? []).map((o) => {
-    const orderItems = (o.order_items ?? []).map((item: any) => ({
-      id: item.id,
-      quantity: item.quantity,
-      unit_price: item.unit_price,
-      product_id: item.product_id,
-      products: item.products ? {
-        id: item.products.id,
-        name: item.products.name,
-        image_url: item.products.image_url,
-        images: item.products.images ?? [],
-        price: item.products.price
-      } : null
-    }))
+    const orderItems = (o.order_items ?? []).map((item: any) => {
+      // Supabase returns products as an array due to the join structure
+      // It could be: null, [], [product], or {product} depending on version/setup
+      let productData = null
+      
+      if (item.products) {
+        if (Array.isArray(item.products)) {
+          productData = item.products[0] ?? null
+        } else {
+          productData = item.products
+        }
+      }
 
-    const totalItemsCount = orderItems.reduce((sum: number, item: any) => sum + item.quantity, 0)
+      return {
+        id: item.id,
+        quantity: item.quantity ?? 0,
+        unit_price: item.unit_price ?? 0,
+        product_id: item.product_id,
+        products: productData ? {
+          id: productData.id,
+          name: productData.name ?? 'Unknown Product',
+          image_url: productData.image_url ?? null,
+          images: Array.isArray(productData.images) ? productData.images : [],
+        } : null,
+      }
+    })
+
+    const totalItemsCount = orderItems.reduce((sum: number, item: any) => sum + (item.quantity ?? 0), 0)
+    const totalProductLines = orderItems.length
 
     return {
       ...o,
+      payment_method: o.payment_method ?? 'cod',
       order_items: orderItems,
       customer: profilesMap[o.user_id] ?? { full_name: null, email: null, phone: null },
-      total_items_count: totalItemsCount
+      total_items_count: totalItemsCount,
+      total_product_lines: totalProductLines,
     }
   })
 

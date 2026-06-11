@@ -1,8 +1,4 @@
 // app/api/orders/[id]/delivery/route.ts
-// Handles admin updates to order delivery status. 
-// Uses an atomic PostgreSQL function (confirm_order_and_reduce_stock) to ensure 
-// product stock is reduced exactly once when the admin confirms the order.
-
 import { NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/auth'
 
@@ -15,12 +11,17 @@ const DELIVERY_LABELS: Record<string, string> = {
   delivered:        'Delivered',
   cancelled:        'Cancelled',
 }
+
 const VALID_STATUSES = Object.keys(DELIVERY_LABELS)
 
 export async function PATCH(
   request: Request,
-  { params }: { params: { id: string } }
+  context: { params: any }
 ) {
+  // FIX: Await params in Next.js 15
+  const params = await context.params
+  const id = params.id
+
   const auth = await requireAdmin()
   if (!auth.success) return auth.response
 
@@ -32,23 +33,28 @@ export async function PATCH(
   }
 
   // Fetch existing order to get user_id for email notification
-  const { data: existing } = await auth.supabase
+  const { data: existing, error: fetchError } = await auth.supabase
     .from('orders')
     .select('id, user_id')
-    .eq('id', params.id)
+    .eq('id', id)
     .single()
 
-  if (!existing) return NextResponse.json({ error: 'Order not found' }, { status: 404 })
+  if (fetchError || !existing) {
+    return NextResponse.json({ error: 'Order not found' }, { status: 404 })
+  }
 
-  // Call the atomic RPC to update status, append delivery step, and reduce stock (if not already done)
+  // Call the atomic RPC to update status, append delivery step, and reduce stock
   const { data: rpcData, error: rpcError } = await auth.supabase.rpc('confirm_order_and_reduce_stock', {
-    p_order_id: params.id,
+    p_order_id: id,
     p_new_status: delivery_status,
   })
 
   if (rpcError) {
-    console.error('RPC Error:', rpcError)
-    return NextResponse.json({ error: rpcError.message }, { status: 500 })
+    console.error('RPC Error Details:', rpcError)
+    return NextResponse.json({ 
+      error: 'Database function failed', 
+      details: rpcError.message 
+    }, { status: 500 })
   }
 
   // Send email notification to customer via Resend (non-fatal)
@@ -63,8 +69,8 @@ export async function PATCH(
 
       if (customerProfile?.email) {
         const label = DELIVERY_LABELS[delivery_status]
-        const orderId = params.id.slice(0, 8).toUpperCase()
-
+        const orderId = id.slice(0, 8).toUpperCase()
+        
         await fetch('https://api.resend.com/emails', {
           method: 'POST',
           headers: {

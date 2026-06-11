@@ -1,127 +1,162 @@
 // app/api/admin/orders/[id]/route.ts
-import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
+import { NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/auth'
 
-// GET: Fetch full order details for the admin view
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+interface Params {
+  params: { id: string }
+}
+
+// GET - Fetch order details with items and customer info
+export async function GET(_req: Request, { params }: Params) {
   const auth = await requireAdmin()
   if (!auth.success) return auth.response
 
-  const supabase = auth.supabase
-  const { id } = params
-
-  // Fetch order with joined customer profile data
-  const { data: order, error: orderError } = await supabase
+  const { data: order, error } = await auth.supabase
     .from('orders')
     .select(`
-      *,
-      profiles:user_id (full_name, email, phone)
+      id,
+      user_id,
+      total,
+      status,
+      delivery_status,
+      delivery_steps,
+      bkash_trx_id,
+      bkash_invoice,
+      payment_method,
+      delivery_address,
+      phone,
+      customer_note,
+      inventory_reduced,
+      created_at,
+      updated_at,
+      order_items (
+        id,
+        quantity,
+        unit_price,
+        product_id,
+        products (
+          id,
+          name,
+          image_url,
+          images,
+          cost_price,
+          delivery_charge
+        )
+      )
     `)
-    .eq('id', id)
+    .eq('id', params.id)
     .single()
 
-  if (orderError || !order) {
+  if (error || !order) {
     return NextResponse.json({ error: 'Order not found' }, { status: 404 })
   }
 
-  // Fetch order items with full product details (including cost_price for profit calc)
-  const { data: items, error: itemsError } = await supabase
-    .from('order_items')
-    .select(`
-      id,
-      product_id,
-      quantity,
-      unit_price,
-      products (
-        name,
-        image_url,
-        images,
-        cost_price,
-        delivery_charge
-      )
-    `)
-    .eq('order_id', id)
+  // Fetch customer profile
+  const { data: profile } = await auth.supabase
+    .from('profiles')
+    .select('full_name, email, phone')
+    .eq('id', order.user_id)
+    .single()
 
-  if (itemsError) {
-    return NextResponse.json({ error: 'Failed to load order items' }, { status: 500 })
-  }
+  // Transform order_items into the format AdminOrderDetail expects
+  // CRITICAL FIX: Handle products as array from Supabase join
+  const items = (order.order_items ?? []).map((item: any) => {
+    // Extract product data - Supabase returns array for joined relations
+    let product = null
+    if (item.products) {
+      if (Array.isArray(item.products)) {
+        product = item.products[0] ?? null
+      } else {
+        product = item.products
+      }
+    }
 
-  // Transform items to match the AdminOrderDetail component interface
-  const detailedItems = (items ?? []).map((item: any) => {
-    const product = item.products?.[0] ?? {}
-    const subtotal = item.quantity * item.unit_price
-    const cost = (product.cost_price ?? 0) * item.quantity
-    const delivery = (product.delivery_charge ?? 0) * item.quantity
-    
+    const costPrice: number = product?.cost_price ?? 0
+    const deliveryCharge: number = product?.delivery_charge ?? 0
+    const subtotal = item.unit_price * item.quantity
+    const itemProfit = subtotal - (costPrice * item.quantity) - (deliveryCharge * item.quantity)
+
+    const productImage = 
+      (Array.isArray(product?.images) && product.images[0]) ||
+      product?.image_url ||
+      null
+
     return {
       id: item.id,
       product_id: item.product_id,
-      product_name: product.name ?? 'Unknown Product',
-      product_image: product.images?.[0] ?? product.image_url ?? null,
+      product_name: product?.name ?? 'Unknown Product',
+      product_image: productImage,
       quantity: item.quantity,
       unit_price: item.unit_price,
-      cost_price: product.cost_price ?? null,
-      delivery_charge: product.delivery_charge ?? null,
+      cost_price: costPrice || null,
+      delivery_charge: deliveryCharge || null,
       subtotal,
-      item_profit: subtotal - cost - delivery
+      item_profit: itemProfit,
     }
   })
 
-  // Construct the final response object
-  const response = {
+  // Parse delivery address
+  let deliveryAddressObj = null
+  if (order.delivery_address) {
+    try {
+      deliveryAddressObj = JSON.parse(order.delivery_address)
+    } catch {
+      // Keep as null if not JSON
+    }
+  }
+
+  const shapedOrder = {
     id: order.id,
     user_id: order.user_id,
-    customer_name: order.profiles?.full_name ?? null,
-    customer_email: order.profiles?.email ?? null,
-    customer_phone: order.profiles?.phone ?? null,
-    delivery_address: order.delivery_address ?? null,
-    delivery_address_obj: null, // Can be populated if you link addresses table directly to orders
-    customer_note: order.customer_note ?? null,
-    phone: order.phone ?? null,
+    customer_name: profile?.full_name ?? null,
+    customer_email: profile?.email ?? null,
+    customer_phone: profile?.phone ?? null,
+    delivery_address: order.delivery_address,
+    delivery_address_obj: deliveryAddressObj,
+    customer_note: order.customer_note,
+    phone: order.phone,
     payment_method: order.payment_method ?? 'cod',
     bkash_invoice: order.bkash_invoice ?? null,
     total: order.total,
     status: order.status,
-    delivery_status: order.delivery_status,
+    delivery_status: order.delivery_status ?? 'order_placed',
     delivery_steps: order.delivery_steps ?? [],
     inventory_reduced: order.inventory_reduced ?? false,
     created_at: order.created_at,
     updated_at: order.updated_at,
-    items: detailedItems
+    items,
   }
 
-  return NextResponse.json(response)
+  return NextResponse.json(shapedOrder)
 }
 
-// PATCH: Update order status (calls the atomic stock reduction RPC)
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+// PATCH - Update order status
+export async function PATCH(request: Request, { params }: Params) {
   const auth = await requireAdmin()
   if (!auth.success) return auth.response
 
-  const { id } = params
-  const { status } = await request.json()
+  const body = await request.json()
+  const { status, delivery_status } = body
 
-  if (!status) {
-    return NextResponse.json({ error: 'Status is required' }, { status: 400 })
+  const newStatus = delivery_status || status
+
+  if (!newStatus) {
+    return NextResponse.json({ error: 'status or delivery_status is required' }, { status: 400 })
   }
 
-  const supabase = auth.supabase
-
-  // Call the atomic RPC to update status, append timeline step, and reduce stock exactly once
-  const { data, error } = await supabase.rpc('confirm_order_and_reduce_stock', {
-    p_order_id: id,
-    p_new_status: status
-  })
+  const { data, error } = await auth.supabase
+    .from('orders')
+    .update({ 
+      status: newStatus,
+      delivery_status: newStatus,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', params.id)
+    .select()
+    .single()
 
   if (error) {
-    console.error('RPC Error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
