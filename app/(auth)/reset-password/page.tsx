@@ -1,4 +1,3 @@
-// app/(auth)/reset-password/page.tsx
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -6,12 +5,11 @@ import { useRouter } from 'next/navigation'
 import { createBrowserClient } from '@/lib/supabase/client'
 import Link from 'next/link'
 import Button from '@/app/components/ui/Button'
-import Input from '@/app/components/ui/Input'
+import PasswordInput from '@/app/components/ui/PasswordInput'
 
 export default function ResetPasswordPage() {
   const router = useRouter()
   const supabase = createBrowserClient()
-  
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [message, setMessage] = useState('')
@@ -22,7 +20,6 @@ export default function ResetPasswordPage() {
 
   useEffect(() => {
     const initializeSession = async () => {
-      // Supabase redirects here with #access_token=... for password recovery
       const hash = window.location.hash
       const params = new URLSearchParams(hash.substring(1))
       const accessToken = params.get('access_token')
@@ -30,22 +27,19 @@ export default function ResetPasswordPage() {
       const type = params.get('type')
 
       if (accessToken && refreshToken && type === 'recovery') {
-        // Set the session with the tokens provided in the URL
         const { error } = await supabase.auth.setSession({
           access_token: accessToken,
           refresh_token: refreshToken,
         })
-        
+
         if (error) {
           setMessage('Invalid or expired reset link. Please request a new one.')
           setIsValidToken(false)
         } else {
           setIsValidToken(true)
-          // Clean up the URL so the tokens aren't left in the browser history
           window.history.replaceState({}, '', window.location.pathname)
         }
       } else {
-        // If no tokens in URL, check if a valid session already exists
         const { data: { session } } = await supabase.auth.getSession()
         if (session) {
           setIsValidToken(true)
@@ -96,7 +90,6 @@ export default function ResetPasswordPage() {
   return (
     <div className="min-h-screen bg-bushal-ivory flex items-center justify-center px-4 py-12 sm:py-16">
       <div className="w-full max-w-md animate-fade-in-up">
-        {/* Brand Header */}
         <div className="text-center mb-8">
           <Link
             href="/dashboard"
@@ -110,9 +103,7 @@ export default function ResetPasswordPage() {
           </p>
         </div>
 
-        {/* Form Card */}
         <div className="bg-bushal-surface rounded-2xl border border-bushal-border shadow-card p-6 sm:p-8">
-          {/* Feedback Message */}
           {message && (
             <div
               className={`mb-6 flex items-start gap-3 p-4 rounded-xl text-sm animate-fade-in ${
@@ -121,10 +112,10 @@ export default function ResetPasswordPage() {
                   : 'bg-bushal-dangerBg border border-bushal-danger/20 text-bushal-danger'
               }`}
             >
-              <svg 
-                className="w-5 h-5 flex-shrink-0 mt-0.5" 
-                fill="none" 
-                stroke="currentColor" 
+              <svg
+                className="w-5 h-5 flex-shrink-0 mt-0.5"
+                fill="none"
+                stroke="currentColor"
                 viewBox="0 0 24 24"
               >
                 {isSuccess ? (
@@ -144,33 +135,30 @@ export default function ResetPasswordPage() {
             </div>
           ) : isValidToken ? (
             <form onSubmit={handleSubmit} className="space-y-5" noValidate>
-              <Input
+              <PasswordInput
                 id="password"
                 name="password"
-                type="password"
                 label="New Password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="At least 6 characters"
-                required
-                autoComplete="new-password"
-              />
-              <Input
-                id="confirmPassword"
-                name="confirmPassword"
-                type="password"
-                label="Confirm New Password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Repeat password"
                 required
                 autoComplete="new-password"
               />
 
-              <Button 
-                type="submit" 
-                loading={loading} 
-                className="w-full mt-2" 
+              <PasswordInput
+                id="confirmPassword"
+                name="confirmPassword"
+                label="Confirm New Password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+                autoComplete="new-password"
+              />
+
+              <Button
+                type="submit"
+                loading={loading}
+                className="w-full mt-2"
                 size="lg"
                 disabled={!password || !confirmPassword}
               >
@@ -191,12 +179,11 @@ export default function ResetPasswordPage() {
             </div>
           )}
 
-          {/* Back to Login */}
           <div className="mt-8 pt-6 border-t border-bushal-border text-center">
             <p className="text-sm text-bushal-inkSoft">
               Remember your password?{' '}
-              <Link 
-                href="/login" 
+              <Link
+                href="/login"
                 className="text-bushal-copper font-semibold hover:text-bushal-copperLight transition-colors hover:underline"
               >
                 Sign in

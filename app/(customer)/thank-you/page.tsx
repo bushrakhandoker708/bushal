@@ -1,4 +1,3 @@
-// app/(customer)/thank-you/page.tsx
 import { Metadata } from 'next'
 import Link from 'next/link'
 import Navbar from '@/app/components/layout/Navbar'
@@ -23,15 +22,28 @@ export default async function ThankYouPage({ searchParams }: Props) {
 
   if (searchParams.orderId) {
     const supabase = createServerClient()
-    const { data } = await supabase
+    
+    // Fetch the order
+    const { data: orderData } = await supabase
       .from('orders')
-      .select('*, profiles(full_name)')
+      .select('*')
       .eq('id', searchParams.orderId)
       .single()
     
-    order = data
-    if (data?.profiles?.full_name) {
-      customerName = data.profiles.full_name.split(' ')[0] // First name only for intimacy
+    order = orderData
+    
+    // Fetch the customer's profile using the user_id from the order
+    if (orderData?.user_id) {
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', orderData.user_id)
+        .single()
+      
+      if (profileData?.full_name) {
+        // Use first name only for a more personal touch
+        customerName = profileData.full_name.split(' ')[0]
+      }
     }
   }
 
@@ -39,7 +51,6 @@ export default async function ThankYouPage({ searchParams }: Props) {
     <div className="min-h-screen bg-bushal-ivory">
       <Navbar />
       <PageWrapper maxWidth="2xl" withBottomNav={false} className="py-16 md:py-24 text-center">
-        
         {/* Large Taka Sign Decorative Element */}
         <div className="relative mb-8 animate-fade-up">
           <p className="font-heading italic text-[10rem] md:text-[14rem] text-bushal-copper/10 leading-none select-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-0">
@@ -73,14 +84,12 @@ export default async function ThankYouPage({ searchParams }: Props) {
                 #{order.id.slice(0, 8).toUpperCase()}
               </span>
             </div>
-            
             {order.bkash_trx_id && (
               <div className="flex justify-between items-center pb-4 border-b border-bushal-border">
                 <span className="text-xs font-semibold uppercase tracking-wider text-bushal-inkSoft">Transaction</span>
                 <span className="font-mono text-xs text-bushal-inkMid">{order.bkash_trx_id}</span>
               </div>
             )}
-
             <div className="flex justify-between items-center pt-2">
               <span className="text-xs font-semibold uppercase tracking-wider text-bushal-inkSoft">Total Paid</span>
               <span className="font-heading text-2xl font-bold text-bushal-copper">
@@ -103,7 +112,6 @@ export default async function ThankYouPage({ searchParams }: Props) {
             <span className="relative z-10">Continue Shopping</span>
             <div className="absolute inset-0 bg-gradient-to-r from-bushal-forestMid to-bushal-forest opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
           </Link>
-          
           <Link
             href="/orders"
             className="inline-flex items-center gap-2 text-bushal-inkMid hover:text-bushal-forest text-sm font-medium font-body px-6 py-3.5 rounded-xl border border-bushal-border hover:border-bushal-forest/30 hover:bg-bushal-surface transition-all duration-300"

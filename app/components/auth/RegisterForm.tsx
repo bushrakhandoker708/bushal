@@ -1,10 +1,10 @@
-// app/components/auth/RegisterForm.tsx
 'use client'
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createBrowserClient } from '@/lib/supabase/client'
 import Input from '@/app/components/ui/Input'
+import PasswordInput from '@/app/components/ui/PasswordInput'
 import Button from '@/app/components/ui/Button'
 import { useToast } from '@/app/components/ui/Toast'
 
@@ -31,7 +31,6 @@ export default function RegisterForm() {
     e.preventDefault()
     setError('')
 
-    // Client-side validation
     if (form.password !== form.confirmPassword) {
       setError('Passwords do not match')
       return
@@ -49,8 +48,7 @@ export default function RegisterForm() {
       password: form.password,
       options: {
         data: { full_name: form.fullName },
-        // Ensure the email confirmation link redirects to the dashboard
-        emailRedirectTo: `${window.location.origin}/dashboard`, 
+        emailRedirectTo: `${window.location.origin}/dashboard`,
       },
     })
 
@@ -61,17 +59,13 @@ export default function RegisterForm() {
       return
     }
 
-    // Show premium toast notification
     toast('Check your email! A verification link has been sent.', 'success', 6000)
-
-    // Redirect to dashboard
     router.push('/dashboard')
     router.refresh()
   }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5" noValidate>
-      {/* Full Name */}
       <Input
         id="fullName"
         name="fullName"
@@ -82,7 +76,6 @@ export default function RegisterForm() {
         required
       />
 
-      {/* Email */}
       <Input
         id="email"
         name="email"
@@ -95,32 +88,26 @@ export default function RegisterForm() {
         autoComplete="email"
       />
 
-      {/* Password */}
-      <Input
+      <PasswordInput
         id="password"
         name="password"
-        type="password"
         label="Password"
         value={form.password}
         onChange={handleChange}
-        placeholder="At least 6 characters"
         required
         autoComplete="new-password"
       />
 
-      {/* Confirm Password */}
-      <Input
+      <PasswordInput
         id="confirmPassword"
         name="confirmPassword"
-        type="password"
         label="Confirm Password"
         value={form.confirmPassword}
         onChange={handleChange}
-        placeholder="Repeat password"
         required
+        autoComplete="new-password"
       />
 
-      {/* Error Message */}
       {error && (
         <div className="flex items-start gap-2.5 text-sm text-bushal-danger bg-bushal-dangerBg border border-bushal-danger/20 px-4 py-3 rounded-xl animate-fade-in animate-shake">
           <svg className="w-4 h-4 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
@@ -130,12 +117,10 @@ export default function RegisterForm() {
         </div>
       )}
 
-      {/* Submit Button */}
       <Button type="submit" loading={loading} className="w-full mt-2" size="lg">
         Create Account
       </Button>
 
-      {/* Trust Signals */}
       <div className="flex items-center justify-center gap-4 pt-2 text-[11px] text-bushal-inkSoft">
         <span className="flex items-center gap-1">
           <svg className="w-3 h-3 text-bushal-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">

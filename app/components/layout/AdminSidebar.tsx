@@ -83,9 +83,14 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
       {/* Header */}
       <div className="flex items-center justify-between px-5 pt-6 pb-5 border-b border-bushal-ivory/10">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-bushal-copper flex items-center justify-center shadow-lg shadow-bushal-copper/30">
-            <span className="text-white font-heading font-bold text-sm leading-none">B</span>
-          </div>
+          <div className="relative">
+                  <img
+                    src="/logo.png"
+                    alt="Bushal"
+                    className="w-10 h-10 rounded-xl object-cover transition-all duration-300 group-hover:scale-110"
+                  />
+                  <div className="absolute -inset-1 bg-bushal-copper/20 rounded-xl blur-md opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                </div>
           <div>
             <p className="text-base font-semibold text-bushal-ivory" style={{ fontFamily: "'Cormorant Garamond', Georgia, serif" }}>
               Bushal
@@ -162,9 +167,14 @@ export default function AdminSidebar() {
       {/* Mobile Header */}
       <div className="lg:hidden fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4 h-14 bg-bushal-forest border-b border-bushal-ivory/10">
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-bushal-copper flex items-center justify-center">
-            <span className="text-white font-bold text-xs">B</span>
-          </div>
+          <div className="relative">
+                  <img
+                    src="/logo.png"
+                    alt="Bushal"
+                    className="w-10 h-10 rounded-xl object-cover transition-all duration-300 group-hover:scale-110"
+                  />
+                  <div className="absolute -inset-1 bg-bushal-copper/20 rounded-xl blur-md opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                </div>
           <div>
             <p className="text-sm font-semibold text-bushal-ivory" style={{ fontFamily: "'Cormorant Garamond', Georgia, serif" }}>Bushal</p>
             <p className="text-[10px] text-bushal-copper font-medium -mt-0.5">Admin</p>

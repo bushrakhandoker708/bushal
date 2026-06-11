@@ -1,16 +1,15 @@
-// components/auth/LoginForm.tsx
 'use client'
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createBrowserClient } from '@/lib/supabase/client'
 import Input from '@/app/components/ui/Input'
+import PasswordInput from '@/app/components/ui/PasswordInput'
 import Button from '@/app/components/ui/Button'
 
 export default function LoginForm() {
   const router = useRouter()
   const supabase = createBrowserClient()
-  
   const [form, setForm] = useState({ email: '', password: '' })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -43,7 +42,7 @@ export default function LoginForm() {
       .single()
 
     const role = profile?.role ?? 'customer'
-    
+
     if (role === 'admin') {
       window.location.href = '/admin'
     } else {
@@ -64,15 +63,12 @@ export default function LoginForm() {
         required
         autoComplete="email"
       />
-      
-      <Input
+
+      <PasswordInput
         id="password"
-        name="password"
-        type="password"
         label="Password"
         value={form.password}
         onChange={handleChange}
-        placeholder="••••••••"
         required
         autoComplete="current-password"
       />

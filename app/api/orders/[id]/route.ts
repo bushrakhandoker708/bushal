@@ -1,8 +1,10 @@
-// app/api/orders/[id]/route.ts
-
 import { createServerClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/auth'
+import { Resend } from 'resend'
+
+// Initialize Resend SDK (Much more stable than raw fetch)
+const resend = new Resend(process.env.RESEND_API_KEY)
 
 interface Params {
   params: { id: string }
@@ -52,31 +54,23 @@ export async function GET(_req: Request, { params }: Params) {
     return NextResponse.json({ error: 'Order not found' }, { status: 404 })
   }
 
-  // Fetch customer profile
   const { data: profile } = await auth.supabase
     .from('profiles')
     .select('full_name, email, phone')
     .eq('id', order.user_id)
     .single()
 
-  // Transform order_items
   const items = (order.order_items ?? []).map((item: any) => {
     let product = null
     if (item.products) {
-      if (Array.isArray(item.products)) {
-        product = item.products[0] ?? null
-      } else {
-        product = item.products
-      }
+      product = Array.isArray(item.products) ? item.products[0] ?? null : item.products
     }
+    
     const costPrice: number = product?.cost_price ?? 0
     const deliveryCharge: number = product?.delivery_charge ?? 0
     const subtotal = item.unit_price * item.quantity
     const itemProfit = subtotal - (costPrice * item.quantity) - (deliveryCharge * item.quantity)
-    const productImage =
-      (Array.isArray(product?.images) && product.images[0]) ||
-      product?.image_url ||
-      null
+    const productImage = (Array.isArray(product?.images) && product.images[0]) || product?.image_url || null
 
     return {
       id: item.id,
@@ -92,17 +86,12 @@ export async function GET(_req: Request, { params }: Params) {
     }
   })
 
-  // Parse delivery address
   let deliveryAddressObj = null
   if (order.delivery_address) {
-    try {
-      deliveryAddressObj = JSON.parse(order.delivery_address)
-    } catch {
-      // Keep as null if not JSON
-    }
+    try { deliveryAddressObj = JSON.parse(order.delivery_address) } catch {}
   }
 
-  const shapedOrder = {
+  return NextResponse.json({
     id: order.id,
     user_id: order.user_id,
     customer_name: profile?.full_name ?? null,
@@ -121,12 +110,10 @@ export async function GET(_req: Request, { params }: Params) {
     inventory_reduced: order.inventory_reduced ?? false,
     created_at: order.created_at,
     items,
-  }
-
-  return NextResponse.json(shapedOrder)
+  })
 }
 
-// PATCH - Update order status with full delivery workflow
+// PATCH - Update order status
 export async function PATCH(request: Request, { params }: Params) {
   const auth = await requireAdmin()
   if (!auth.success) return auth.response
@@ -134,96 +121,74 @@ export async function PATCH(request: Request, { params }: Params) {
   const body = await request.json()
   const { delivery_status } = body
 
-  // Define valid delivery statuses with their labels
   const DELIVERY_STATUSES: Record<string, string> = {
-    'order_placed': 'Order Placed',
-    'confirmed': 'Confirmed',
-    'processing': 'Processing',
-    'shipped': 'Shipped',
-    'out_for_delivery': 'Out for Delivery',
-    'delivered': 'Delivered',
-    'cancelled': 'Cancelled',
+    'order_placed': 'Order Placed', 'confirmed': 'Confirmed', 'processing': 'Processing',
+    'shipped': 'Shipped', 'out_for_delivery': 'Out for Delivery', 'delivered': 'Delivered', 'cancelled': 'Cancelled',
   }
 
   if (!delivery_status || !DELIVERY_STATUSES[delivery_status]) {
-    return NextResponse.json({ 
-      error: 'Invalid delivery status',
-      validStatuses: Object.keys(DELIVERY_STATUSES)
-    }, { status: 400 })
+    return NextResponse.json({ error: 'Invalid delivery status' }, { status: 400 })
   }
 
-  // Map delivery_status to order status
   const orderStatus = 
     delivery_status === 'delivered' ? 'fulfilled' :
-    delivery_status === 'cancelled' ? 'cancelled' :
-    'pending'
+    delivery_status === 'cancelled' ? 'cancelled' : 'pending'
 
-  // Call the atomic RPC to update status and reduce stock if confirming
-  const { data: rpcData, error: rpcError } = await auth.supabase.rpc('confirm_order_and_reduce_stock', {
-    p_order_id: params.id,
-    p_new_status: delivery_status,
-  })
-
-  if (rpcError) {
-    console.error('RPC Error:', rpcError)
-    return NextResponse.json({ error: rpcError.message }, { status: 500 })
-  }
-
-  // Fetch order details for email notification
-  const { data: order } = await auth.supabase
+  // 1. Update DB (NO updated_at column!)
+  const { data, error } = await auth.supabase
     .from('orders')
-    .select('user_id, total, bkash_invoice')
+    .update({ status: orderStatus, delivery_status: delivery_status })
     .eq('id', params.id)
+    .select()
     .single()
 
-  // Send email notification to customer
-  if (order?.user_id) {
-    const { data: customerProfile } = await auth.supabase
-      .from('profiles')
-      .select('email, full_name')
-      .eq('id', order.user_id)
-      .single()
-
-    if (customerProfile?.email) {
-      const label = DELIVERY_STATUSES[delivery_status]
-      const orderId = params.id.slice(0, 8).toUpperCase()
-      
-      try {
-        await fetch('https://api.resend.com/emails', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
-          },
-          body: JSON.stringify({
-            from: 'Bushal <noreply@bushal.com>',
-            to: [customerProfile.email],
-            subject: `Order #${orderId} — Status Updated: ${label}`,
-            html: `
-              <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 32px 24px;">
-                <h1 style="color:#f97316; font-size:24px; margin-bottom:8px;">Bushal</h1>
-                <hr style="border:none; border-top:1px solid #e2e8f0; margin: 16px 0;" />
-                <h2 style="color:#1e293b; font-size:18px;">Order Status Updated</h2>
-                <p style="color:#475569;">Hi ${customerProfile.full_name ?? 'Customer'},</p>
-                <p style="color:#475569;">Your order <strong>#${orderId}</strong> has been updated to:</p>
-                <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:16px 20px; margin:20px 0;">
-                  <p style="font-size:20px; font-weight:bold; color:#1e293b; margin:0;">${label}</p>
-                </div>
-                <p style="color:#475569;">Track your order at <a href="${process.env.NEXT_PUBLIC_SITE_URL ?? 'https://bushal.com'}/orders" style="color:#f97316;">bushal.com/orders</a>.</p>
-                <p style="color:#94a3b8; font-size:13px; margin-top:32px;">— The Bushal Team</p>
-              </div>
-            `,
-          }),
-        })
-      } catch (emailErr) {
-        console.error('Email notification failed:', emailErr)
-      }
-    }
+  if (error) {
+    console.error('DB Update Error:', error)
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  return NextResponse.json({
-    delivery_status,
-    status: orderStatus,
-    inventory_reduced_now: rpcData?.inventory_reduced_now ?? false,
-  })
+  // 2. Send Email (Fire-and-forget so it doesn't block the response or cause timeouts)
+  sendCustomerStatusEmail(params.id, delivery_status, DELIVERY_STATUSES[delivery_status])
+
+  // Return immediately to the client
+  return NextResponse.json({ success: true, delivery_status })
+}
+
+// Helper function to handle email safely using the Resend SDK
+async function sendCustomerStatusEmail(orderId: string, status: string, label: string) {
+  try {
+    if (!process.env.RESEND_API_KEY) return
+
+    const supabase = createServerClient()
+    const { data: order } = await supabase.from('orders').select('user_id').eq('id', orderId).single()
+    if (!order?.user_id) return
+
+    const { data: profile } = await supabase
+      .from('profiles').select('email, full_name').eq('id', order.user_id).single()
+    if (!profile?.email) return
+
+    // Use Resend SDK instead of raw fetch
+    await resend.emails.send({
+      from: 'Bushal <noreply@bushal.com>',
+      to: [profile.email],
+      subject: `Order #${orderId.slice(0, 8).toUpperCase()} — Status Updated: ${label}`,
+      html: `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 32px 24px;">
+          <h1 style="color:#f97316; font-size:24px; margin-bottom:8px;">Bushal</h1>
+          <hr style="border:none; border-top:1px solid #e2e8f0; margin: 16px 0;" />
+          <h2 style="color:#1e293b; font-size:18px;">Order Status Updated</h2>
+          <p style="color:#475569;">Hi ${profile.full_name ?? 'Customer'},</p>
+          <p style="color:#475569;">Your order <strong>#${orderId.slice(0, 8).toUpperCase()}</strong> has been updated to:</p>
+          <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:16px 20px; margin:20px 0;">
+            <p style="font-size:20px; font-weight:bold; color:#1e293b; margin:0;">${label}</p>
+          </div>
+          <p style="color:#475569;">Track your order at <a href="${process.env.NEXT_PUBLIC_SITE_URL ?? 'https://bushal.com'}/orders" style="color:#f97316;">bushal.com/orders</a>.</p>
+          <p style="color:#94a3b8; font-size:13px; margin-top:32px;">— The Bushal Team</p>
+        </div>
+      `,
+    })
+  } catch (err) {
+    // Catch any email errors so they never crash the app
+    console.error('Email notification failed:', err)
+  }
 }
