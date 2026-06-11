@@ -1,6 +1,5 @@
 // app/components/admin/AdminOrderClient.tsx
 'use client'
-
 import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { formatPrice } from '@/app/lib/utils/formatPrice'
@@ -49,37 +48,34 @@ interface Order {
   customer: { full_name: string | null; email: string | null; phone: string | null }
 }
 
-// ─── Order Summary Component ─────────────────────────────────────────────────
+// Order Summary Component
 function OrderSummaryPanel({ items, total, paymentMethod }: {
   items: OrderItem[]
   total: number
   paymentMethod: string | null
 }) {
   const subtotal = items.reduce((sum, item) => sum + item.unit_price * item.quantity, 0)
-  // Infer shipping: difference between order total and items subtotal
   const shipping = Math.max(0, total - subtotal)
-
-  if (items.length === 0) {
+  
+  if (!items || items.length === 0) {
     return (
       <div className="bg-bushal-surface rounded-xl border border-bushal-border p-4 text-center text-sm text-bushal-inkSoft">
         No item data available for this order.
       </div>
     )
   }
-
+  
   return (
     <div className="bg-bushal-surface rounded-xl border border-bushal-border overflow-hidden">
-      {/* Items list */}
       <div className="divide-y divide-bushal-ivoryDeep">
         {items.map((item) => {
           const img = item.products
             ? (Array.isArray(item.products.images) && item.products.images[0]) || item.products.image_url
             : null
           const lineTotal = item.unit_price * item.quantity
-
+          
           return (
             <div key={item.id} className="flex items-center gap-3 px-4 py-3">
-              {/* Product image */}
               <div className="w-12 h-12 rounded-lg overflow-hidden bg-bushal-ivoryDeep border border-bushal-border flex-shrink-0">
                 {img ? (
                   <img src={img} alt="" className="w-full h-full object-cover" />
@@ -92,8 +88,6 @@ function OrderSummaryPanel({ items, total, paymentMethod }: {
                   </div>
                 )}
               </div>
-
-              {/* Product info */}
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-bushal-ink truncate">
                   {item.products?.name ?? 'Unknown Product'}
@@ -105,8 +99,6 @@ function OrderSummaryPanel({ items, total, paymentMethod }: {
                   </span>
                 </div>
               </div>
-
-              {/* Line total */}
               <p className="text-sm font-bold text-bushal-forest flex-shrink-0">
                 {formatPrice(lineTotal)}
               </p>
@@ -114,8 +106,7 @@ function OrderSummaryPanel({ items, total, paymentMethod }: {
           )
         })}
       </div>
-
-      {/* Totals footer */}
+      
       <div className="border-t border-bushal-border bg-bushal-ivoryDeep/50 px-4 py-3 space-y-1.5">
         <div className="flex justify-between text-xs text-bushal-inkSoft">
           <span>Subtotal</span>
@@ -131,7 +122,6 @@ function OrderSummaryPanel({ items, total, paymentMethod }: {
           <span className="text-sm font-bold text-bushal-forest">Total</span>
           <span className="text-base font-bold text-bushal-copper">{formatPrice(total)}</span>
         </div>
-        {/* Payment method badge */}
         <div className="flex items-center justify-between pt-1">
           <span className="text-xs text-bushal-inkSoft">Payment</span>
           <span className={cn(
@@ -148,7 +138,6 @@ function OrderSummaryPanel({ items, total, paymentMethod }: {
   )
 }
 
-// ─── Status Badge ─────────────────────────────────────────────────────────────
 function StatusBadge({ status }: { status: string }) {
   const step = DELIVERY_STEPS.find((s) => s.key === status)
   if (!step) return <span className="text-xs text-bushal-inkSoft">{status}</span>
@@ -159,7 +148,6 @@ function StatusBadge({ status }: { status: string }) {
   )
 }
 
-// ─── Order Row ────────────────────────────────────────────────────────────────
 interface OrderRowProps {
   order: Order
   onUpdateStatus: (orderId: string, status: string) => Promise<void>
@@ -169,24 +157,23 @@ function OrderRow({ order, onUpdateStatus }: OrderRowProps) {
   const [expanded, setExpanded] = useState(false)
   const [updating, setUpdating] = useState(false)
   const [selectedStatus, setSelectedStatus] = useState(order.delivery_status ?? 'order_placed')
-
+  
   const items: OrderItem[] = order.order_items ?? []
   const totalItemsCount = items.reduce((sum, item) => sum + (item.quantity ?? 0), 0)
   const totalProductLines = items.length
-
+  
   const firstImg = items[0]?.products
     ? (Array.isArray(items[0].products.images) && items[0].products.images[0]) || items[0].products.image_url
     : null
-
+  
   const handleUpdate = async () => {
     setUpdating(true)
     await onUpdateStatus(order.id, selectedStatus)
     setUpdating(false)
   }
-
+  
   return (
     <>
-      {/* Main row */}
       <tr
         className="hover:bg-bushal-ivoryDeep/50 transition-colors cursor-pointer"
         onClick={() => setExpanded((v) => !v)}
@@ -233,14 +220,11 @@ function OrderRow({ order, onUpdateStatus }: OrderRowProps) {
           </svg>
         </td>
       </tr>
-
-      {/* Expanded panel */}
+      
       {expanded && (
         <tr>
           <td colSpan={6} className="px-4 pb-5 pt-0">
             <div className="bg-bushal-ivoryDeep rounded-xl border border-bushal-border p-4 sm:p-5 space-y-5 animate-fade-in">
-
-              {/* Top grid: customer + payment + order total */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
                 <div>
                   <p className="text-xs font-semibold text-bushal-inkSoft uppercase tracking-wide mb-1.5">Customer</p>
@@ -270,8 +254,7 @@ function OrderRow({ order, onUpdateStatus }: OrderRowProps) {
                   </p>
                 </div>
               </div>
-
-              {/* Delivery info */}
+              
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm pt-4 border-t border-bushal-border">
                 <div>
                   <p className="text-xs font-semibold text-bushal-inkSoft uppercase tracking-wide mb-1.5">Delivery Address</p>
@@ -292,8 +275,7 @@ function OrderRow({ order, onUpdateStatus }: OrderRowProps) {
                   </div>
                 )}
               </div>
-
-              {/* ── ORDER SUMMARY ── */}
+              
               <div className="pt-4 border-t border-bushal-border">
                 <p className="text-xs font-semibold text-bushal-inkSoft uppercase tracking-wide mb-3">
                   Order Summary
@@ -304,8 +286,7 @@ function OrderRow({ order, onUpdateStatus }: OrderRowProps) {
                   paymentMethod={order.payment_method}
                 />
               </div>
-
-              {/* Status updater */}
+              
               <div className="pt-4 border-t border-bushal-border">
                 <p className="text-xs font-semibold text-bushal-inkSoft uppercase tracking-wide mb-2.5">
                   Update Delivery Status
@@ -351,8 +332,7 @@ function OrderRow({ order, onUpdateStatus }: OrderRowProps) {
                   )}
                 </button>
               </div>
-
-              {/* Timeline */}
+              
               {Array.isArray(order.delivery_steps) && order.delivery_steps.length > 0 && (
                 <div className="pt-4 border-t border-bushal-border">
                   <p className="text-xs font-semibold text-bushal-inkSoft uppercase tracking-wide mb-2.5">Timeline</p>
@@ -380,7 +360,6 @@ function OrderRow({ order, onUpdateStatus }: OrderRowProps) {
   )
 }
 
-// ─── Main Client Component ────────────────────────────────────────────────────
 interface Props {
   orders: Order[]
 }
@@ -390,7 +369,7 @@ export default function AdminOrdersClient({ orders }: Props) {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [localOrders, setLocalOrders] = useState(orders)
-
+  
   const filtered = useMemo(() => {
     let list = [...localOrders]
     if (search.trim()) {
@@ -409,14 +388,13 @@ export default function AdminOrdersClient({ orders }: Props) {
     }
     return list
   }, [localOrders, search, statusFilter])
-
+  
   const handleUpdateStatus = async (orderId: string, status: string) => {
     const res = await fetch(`/api/admin/orders/${orderId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ delivery_status: status }),
     })
-
     if (res.ok) {
       const stepConfig = DELIVERY_STEPS.find(s => s.key === status)
       const newStep = {
@@ -440,7 +418,7 @@ export default function AdminOrdersClient({ orders }: Props) {
       alert(body.error ?? 'Failed to update order status. Please try again.')
     }
   }
-
+  
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = {}
     for (const o of localOrders) {
@@ -449,7 +427,7 @@ export default function AdminOrdersClient({ orders }: Props) {
     }
     return counts
   }, [localOrders])
-
+  
   return (
     <div className="animate-fade-in-up space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -460,8 +438,7 @@ export default function AdminOrdersClient({ orders }: Props) {
           </p>
         </div>
       </div>
-
-      {/* Status filter pills */}
+      
       <div className="flex gap-2 flex-wrap overflow-x-auto pb-1 no-scrollbar">
         <button
           onClick={() => setStatusFilter('all')}
@@ -493,8 +470,7 @@ export default function AdminOrdersClient({ orders }: Props) {
           )
         })}
       </div>
-
-      {/* Search */}
+      
       <div className="relative">
         <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-bushal-inkSoft" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -507,8 +483,7 @@ export default function AdminOrdersClient({ orders }: Props) {
           className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-bushal-border bg-bushal-surface text-sm text-bushal-ink placeholder-bushal-inkSoft/60 focus:outline-none focus:border-bushal-copper focus:ring-2 focus:ring-bushal-copper/20 transition-all"
         />
       </div>
-
-      {/* Table */}
+      
       <div className="bg-bushal-surface rounded-2xl border border-bushal-border overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full">

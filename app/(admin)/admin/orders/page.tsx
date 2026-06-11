@@ -4,10 +4,8 @@ import AdminOrdersClient from '@/app/components/admin/AdminOrderClient'
 
 export default async function AdminOrdersPage() {
   const supabase = createServerClient()
-
-  // Fetch orders with nested order_items and products
-  // IMPORTANT: Supabase returns joined 'products' as an ARRAY because of the relationship type.
-  // We must handle this correctly when mapping.
+  
+  // Fetch orders with properly nested order_items and products
   const { data: orders, error } = await supabase
     .from('orders')
     .select(`
@@ -38,21 +36,21 @@ export default async function AdminOrdersPage() {
       )
     `)
     .order('created_at', { ascending: false })
-
+  
   if (error) {
     console.error('Orders fetch error:', error)
   }
-
-  // Enrich orders with customer profile data
+  
+  // Fetch customer profiles
   const userIds = Array.from(new Set((orders ?? []).map((o) => o.user_id)))
   let profilesMap: Record<string, { full_name: string | null; email: string | null; phone: string | null }> = {}
-
+  
   if (userIds.length > 0) {
     const { data: profiles } = await supabase
       .from('profiles')
       .select('id, full_name, email, phone')
       .in('id', userIds)
-
+    
     profiles?.forEach((p) => {
       profilesMap[p.id] = {
         full_name: p.full_name ?? null,
@@ -61,23 +59,21 @@ export default async function AdminOrdersPage() {
       }
     })
   }
-
-  // Map orders with proper null-checks and product extraction
-  // CRITICAL FIX: Supabase returns 'products' as an array. We extract the first element.
+  
+  // Properly map orders with items
   const enrichedOrders = (orders ?? []).map((o) => {
     const orderItems = (o.order_items ?? []).map((item: any) => {
-      // Supabase returns products as an array due to the join structure
-      // It could be: null, [], [product], or {product} depending on version/setup
+      // Handle products - Supabase returns it as an array or object
       let productData = null
       
       if (item.products) {
-        if (Array.isArray(item.products)) {
-          productData = item.products[0] ?? null
-        } else {
+        if (Array.isArray(item.products) && item.products.length > 0) {
+          productData = item.products[0]
+        } else if (!Array.isArray(item.products)) {
           productData = item.products
         }
       }
-
+      
       return {
         id: item.id,
         quantity: item.quantity ?? 0,
@@ -91,10 +87,10 @@ export default async function AdminOrdersPage() {
         } : null,
       }
     })
-
+    
     const totalItemsCount = orderItems.reduce((sum: number, item: any) => sum + (item.quantity ?? 0), 0)
     const totalProductLines = orderItems.length
-
+    
     return {
       ...o,
       payment_method: o.payment_method ?? 'cod',
@@ -104,6 +100,6 @@ export default async function AdminOrdersPage() {
       total_product_lines: totalProductLines,
     }
   })
-
+  
   return <AdminOrdersClient orders={enrichedOrders} />
 }
