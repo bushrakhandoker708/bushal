@@ -1,6 +1,4 @@
-// app/components/home/HeroBanner.tsx
 'use client'
-
 import Link from 'next/link'
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { createBrowserClient } from '@/lib/supabase/client'
@@ -26,7 +24,6 @@ const HEADLINES = [
   { eyebrow: 'Shop with', word: 'Transparency.' },
 ]
 
-
 // Deterministic — no SSR/hydration mismatch
 const PARTICLES = Array.from({ length: 32 }, (_, i) => ({
   id: i,
@@ -48,7 +45,7 @@ export default function HeroBanner() {
   const targetPos = useRef({ x: 0.5, y: 0.5 })
   const smoothPos = useRef({ x: 0.5, y: 0.5 })
   const trailPts = useRef<{ x: number; y: number; op: number }[]>([])
-
+  
   const [mousePos, setMousePos] = useState({ x: 0.5, y: 0.5 })
   const [isHovering, setIsHovering] = useState(false)
   const [topProduct, setTopProduct] = useState<TopProduct | null>(null)
@@ -64,6 +61,12 @@ export default function HeroBanner() {
   const [primaryDown, setPrimaryDown] = useState(false)
   const [secondaryDown, setSecondaryDown] = useState(false)
   const [orbOffset, setOrbOffset] = useState({ x: 0, y: 0 })
+
+  // FIX: This useEffect MUST be present to trigger animations
+  useEffect(() => {
+    setMounted(true)
+    setIsTouchDevice('ontouchstart' in window || navigator.maxTouchPoints > 0)
+  }, [])
 
   // ── smooth cursor loop
   const animateCursor = useCallback(() => {
@@ -116,8 +119,6 @@ export default function HeroBanner() {
     trailRafRef.current = requestAnimationFrame(drawTrail)
   }, [isHovering])
 
-
-
   // ── count-up
   const countUp = useCallback((target: number) => {
     const start = Date.now()
@@ -145,8 +146,6 @@ export default function HeroBanner() {
       el.style.transform = ''
     }
   }, [])
-
-
 
   useEffect(() => {
     if (isTouchDevice) return
@@ -251,7 +250,6 @@ export default function HeroBanner() {
     return () => clearInterval(t)
   }, [hlIndex])
 
-
   const rotX = (mousePos.y - 0.5) * -9
   const rotY = (mousePos.x - 0.5) * 9
   const productImage = topProduct && !imageError
@@ -273,7 +271,6 @@ export default function HeroBanner() {
         className="absolute inset-0 pointer-events-none z-[1]"
         style={{ mixBlendMode: 'screen' }}
       />
-
       {/* Grain */}
       <div
         className="absolute inset-0 pointer-events-none z-0"
@@ -283,7 +280,6 @@ export default function HeroBanner() {
           backgroundSize: '160px 160px',
         }}
       />
-
       {/* Morphing orbs */}
       <div className="absolute inset-0 pointer-events-none z-0 overflow-hidden">
         <div
@@ -321,7 +317,6 @@ export default function HeroBanner() {
           }}
         />
       </div>
-
       {/* Grid lines */}
       <div
         className="absolute inset-0 pointer-events-none z-0"
@@ -334,7 +329,6 @@ export default function HeroBanner() {
           backgroundSize: '80px 80px',
         }}
       />
-
       {/* Spotlight */}
       {!isTouchDevice && mounted && (
         <div
@@ -345,13 +339,10 @@ export default function HeroBanner() {
           }}
         />
       )}
-
       {/* ════════════ LAYOUT ════════════ */}
       <div className="relative z-10 flex flex-col md:flex-row h-full">
-
         {/* ── Left copy column ── */}
         <div className="flex-1 px-6 sm:px-10 md:px-12 lg:px-16 py-10 md:py-16 lg:py-20 flex flex-col justify-center pr-[clamp(120px,28vw,160px)] md:pr-0" >
-
           {/* Eyebrow */}
           <div
             className="flex items-center gap-3 mb-6 md:mb-8"
@@ -379,7 +370,6 @@ export default function HeroBanner() {
             </span>
             <div className="h-px w-8 flex-shrink-0" style={{ background: 'linear-gradient(to right, #B87333, transparent)' }} />
           </div>
-
           {/* Headline block */}
           <div
             className="mb-6 md:mb-8 lg:mb-10"
@@ -403,7 +393,6 @@ export default function HeroBanner() {
                 </p>
               ))}
             </div>
-
             {/* Main hero word — NO gradient text, uses text-shadow instead */}
             <div
               className="relative overflow-hidden"
@@ -424,8 +413,8 @@ export default function HeroBanner() {
                     transform: i === hlIndex
                       ? 'translateY(0) skewY(0deg)'
                       : i === prevHlIndex
-                      ? 'translateY(-115%) skewY(-1.5deg)'
-                      : 'translateY(115%) skewY(1.5deg)',
+                        ? 'translateY(-115%) skewY(-1.5deg)'
+                        : 'translateY(115%) skewY(1.5deg)',
                     transition: 'opacity 0.6s ease, transform 0.6s cubic-bezier(0.76,0,0.24,1), text-shadow 0.3s ease',
                   }}
                 >
@@ -433,7 +422,6 @@ export default function HeroBanner() {
                 </h1>
               ))}
             </div>
-
             {/* Underline */}
             <div
               className="mt-3 h-px"
@@ -444,7 +432,6 @@ export default function HeroBanner() {
               }}
             />
           </div>
-
           {/* Body */}
           <p
             className="text-sm sm:text-[15px] leading-[1.8] mb-8 md:mb-10 font-sans max-w-[400px]"
@@ -459,7 +446,6 @@ export default function HeroBanner() {
               Transparent pricing. Genuine care. Every single detail.
             </span>
           </p>
-
           {/* CTA buttons */}
           <div
             className="flex flex-col sm:flex-row flex-wrap items-start sm:items-center gap-3 mb-10 md:mb-12"
@@ -479,7 +465,6 @@ export default function HeroBanner() {
                   ? 'linear-gradient(135deg, #9a5820, #7a4018)'
                   : 'linear-gradient(135deg, #C8823A, #A05E28)',
                 color: '#F8EDD8',
-
                 transform: primaryDown ? 'scale(0.96)' : 'scale(1)',
                 transition: 'box-shadow 0.15s ease, transform 0.12s ease, background 0.15s ease',
                 letterSpacing: '0.02em',
@@ -506,7 +491,6 @@ export default function HeroBanner() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17 8l4 4m0 0l-4 4m4-4H3" />
               </svg>
             </Link>
-
             {/* Secondary */}
             <Link
               ref={secondaryBtnRef}
@@ -547,7 +531,6 @@ export default function HeroBanner() {
               Track Order
             </Link>
           </div>
-
           {/* Trust strip */}
           <div
             className="flex flex-wrap items-center gap-4 sm:gap-6 md:gap-8 pt-5 md:pt-6"
@@ -593,7 +576,6 @@ export default function HeroBanner() {
             ))}
           </div>
         </div>
-
         {/* ── Right — product visual — desktop ── */}
         <div
           className="hidden md:flex items-center justify-center flex-shrink-0 pointer-events-none overflow-visible"
@@ -619,7 +601,6 @@ export default function HeroBanner() {
                   style={{ animation: `pPulse ${p.dur}s ease-in-out ${p.delay}s infinite alternate` }} />
               ))}
             </svg>
-
             {/* Outer orbit */}
             <div
               className="absolute inset-0 rounded-full"
@@ -628,7 +609,6 @@ export default function HeroBanner() {
               <div className="absolute" style={{ top: '3%', left: '50%', transform: 'translate(-50%,-50%)', width: 10, height: 10, borderRadius: '50%', background: 'radial-gradient(circle, #F5C878, #C07840)', boxShadow: '0 0 14px 5px rgba(240,185,106,0.55)' }} />
               <div className="absolute" style={{ bottom: '3%', left: '50%', transform: 'translate(-50%,50%)', width: 6, height: 6, borderRadius: '50%', background: 'rgba(184,115,51,0.45)' }} />
             </div>
-
             {/* Mid orbit */}
             <div
               className="absolute inset-[7%] rounded-full"
@@ -636,13 +616,11 @@ export default function HeroBanner() {
             >
               <div className="absolute" style={{ top: '2%', right: '11%', width: 5, height: 5, borderRadius: '50%', background: 'rgba(240,185,106,0.45)', boxShadow: '0 0 7px 2px rgba(240,185,106,0.3)' }} />
             </div>
-
             {/* Inner glow ring */}
             <div
               className="absolute inset-[11%] rounded-full"
               style={{ border: '1px solid rgba(184,115,51,0.05)', transform: 'translateZ(15px)', animation: 'spin 28s linear infinite' }}
             />
-
             {/* Central image */}
             <div
               className="absolute inset-[13%] rounded-full overflow-hidden"
@@ -654,7 +632,6 @@ export default function HeroBanner() {
             >
               {/* top sheen */}
               <div className="absolute top-0 left-0 right-0 h-1/2 pointer-events-none z-10" style={{ background: 'linear-gradient(180deg, rgba(240,185,106,0.09) 0%, transparent 100%)', borderRadius: '50% 50% 0 0 / 100% 100% 0 0' }} />
-
               {productImage ? (
                 <Link href={`/product/${topProduct!.id}`} className="block w-full h-full relative group/img pointer-events-auto">
                   <img
@@ -699,7 +676,6 @@ export default function HeroBanner() {
                 </div>
               )}
             </div>
-
             {/* Float Card A — Premium (top-left) */}
             <FloatCard
               style={{
@@ -718,7 +694,6 @@ export default function HeroBanner() {
               </div>
               <p className="text-[10px] leading-snug font-sans" style={{ color: 'rgba(240,232,210,0.38)' }}>Heritage-grade goods</p>
             </FloatCard>
-
             {/* Float Card B — Live Status (bottom-right) */}
             <FloatCard
               style={{
@@ -736,7 +711,6 @@ export default function HeroBanner() {
               </div>
               <p className="text-[10px] font-sans" style={{ color: 'rgba(240,232,210,0.35)' }}>Orders shipping now</p>
             </FloatCard>
-
             {/* Float Card C — bKash (top-right) */}
             <div
               className="absolute pointer-events-none"
@@ -752,7 +726,6 @@ export default function HeroBanner() {
                 <p className="text-[8px] font-sans text-center mt-0.5" style={{ color: 'rgba(240,232,210,0.4)' }}>Secure Pay</p>
               </div>
             </div>
-
             {/* Float Card D — Delivery (bottom-left) */}
             <FloatCard
               style={{
@@ -773,7 +746,6 @@ export default function HeroBanner() {
           </div>
         </div>
       </div>
-
       {/* ════ Mobile product circle ════ */}
       <div
         className="md:hidden absolute right-2 top-6 pointer-events-none"
@@ -826,7 +798,6 @@ export default function HeroBanner() {
           </div>
         )}
       </div>
-
       {/* Keyframes */}
       <style>{`
         @keyframes fadeUp {

@@ -1,6 +1,5 @@
-// components/product/ProductCard.tsx
+// app/components/product/ProductCard.tsx
 'use client'
-
 import Link from 'next/link'
 import { useState } from 'react'
 import { formatPrice } from '@/app/lib/utils/formatPrice'
@@ -8,6 +7,7 @@ import { Product } from '@/app/types/product'
 import { useCart } from '@/app/hooks/useCart'
 import { cn } from '@/app/lib/utils/cn'
 import ProductQuickView from './ProductQuickView'
+import { getStockStatus } from '@/app/lib/utils/stockStatus'
 
 interface Props {
   product: Product
@@ -20,12 +20,15 @@ export default function ProductCard({ product, index = 0 }: Props) {
   const [imgIndex, setImgIndex] = useState(0)
   const [isWished, setIsWished] = useState(false)
   const [quickViewOpen, setQuickViewOpen] = useState(false)
-
+  
   const discountedPrice = product.discount_percent
     ? product.price * (1 - product.discount_percent / 100)
     : null
-
+    
   const images = product.images?.length ? product.images : product.image_url ? [product.image_url] : []
+  
+  // Get dynamic stock status
+  const stockDisplay = getStockStatus(product.stock_quantity)
 
   const handleAdd = (e: React.MouseEvent) => {
     e.preventDefault()
@@ -42,8 +45,8 @@ export default function ProductCard({ product, index = 0 }: Props) {
       style={{ animationDelay: `${index * 60}ms` }}
     >
       {/* Image Container - Editorial 3:4 Portrait Ratio */}
-      <Link 
-        href={`/product/${product.id}`} 
+      <Link
+        href={`/product/${product.id}`}
         className="block relative overflow-hidden rounded-2xl bg-bushal-ivoryDeep aspect-[3/4] shadow-card hover:shadow-cardHover transition-all duration-500 ease-out"
       >
         <div
@@ -92,12 +95,16 @@ export default function ProductCard({ product, index = 0 }: Props) {
           </div>
         )}
 
-        {/* Sold Out Badge */}
-        {!product.in_stock && (
-          <div className="absolute top-4 left-4 z-10 bg-bushal-ivory/90 backdrop-blur-md text-bushal-inkMid text-[10px] font-bold tracking-[0.15em] uppercase px-3 py-1.5 border border-bushal-border">
+        {/* Dynamic Stock Status Badge */}
+        {product.stock_quantity === 0 ? (
+          <div className="absolute top-4 left-4 z-10 bg-bushal-dangerBg/90 backdrop-blur-md text-bushal-danger text-[10px] font-bold tracking-[0.15em] uppercase px-3 py-1.5 border border-bushal-danger/20">
             Sold Out
           </div>
-        )}
+        ) : product.stock_quantity <= 5 ? (
+          <div className="absolute top-4 left-4 z-10 bg-bushal-warningBg/90 backdrop-blur-md text-bushal-warning text-[10px] font-bold tracking-[0.15em] uppercase px-3 py-1.5 border border-bushal-warning/20">
+            Only {product.stock_quantity} left
+          </div>
+        ) : null}
 
         {/* Wishlist Button */}
         <button
@@ -157,7 +164,7 @@ export default function ProductCard({ product, index = 0 }: Props) {
 
         {/* Product Name - Italic for luxury signal if discounted */}
         <Link href={`/product/${product.id}`} className="group/link block">
-          <h3 
+          <h3
             className={cn(
               "font-heading text-xl leading-tight mb-2 transition-colors duration-300 line-clamp-2",
               product.discount_percent ? "italic text-bushal-forest group-hover/link:text-bushal-copper" : "text-bushal-forest group-hover/link:text-bushal-copper"

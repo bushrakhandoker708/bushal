@@ -1,6 +1,5 @@
 // app/components/layout/Navbar.tsx
 'use client'
-
 import { useAuth } from '@/app/hooks/useAuth'
 import { useCart } from '@/app/hooks/useCart'
 import Link from 'next/link'
@@ -59,12 +58,10 @@ export default function Navbar() {
   const { items } = useCart()
   const { user, signOut } = useAuth()
   const supabase = createBrowserClient()
-  
   const [cartOpen, setCartOpen] = useState(false)
   const [prevCount, setPrevCount] = useState(0)
   const [cartBump, setCartBump] = useState(false)
   const cartCount = items.reduce((sum, item) => sum + item.quantity, 0)
-  
   const [scrolled, setScrolled] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -72,20 +69,17 @@ export default function Navbar() {
   const [searching, setSearching] = useState(false)
   const [showResults, setShowResults] = useState(false)
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false)
-  
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [notifOpen, setNotifOpen] = useState(false)
   const [userRole, setUserRole] = useState<string | null>(null)
   const [notifLoading, setNotifLoading] = useState(true)
   const [searchFocused, setSearchFocused] = useState(false)
-  
   const notifRef = useRef<HTMLDivElement>(null)
   const debouncedQuery = useDebounce(query, 280)
   const searchRef = useRef<HTMLDivElement>(null)
   const mobileSearchRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const mobileInputRef = useRef<HTMLInputElement>(null)
-  
   const unreadCount = notifications.filter((n) => !n.read).length
   const isAdmin = userRole === 'admin'
 
@@ -130,19 +124,16 @@ export default function Navbar() {
         .eq('id', user.id)
         .single()
       const admin = profile?.role === 'admin'
-      
       let q = supabase
         .from('notifications')
         .select('id, type, title, body, read, created_at, order_id, comment_id')
         .order('created_at', { ascending: false })
         .limit(20)
-        
       if (admin) {
         q = q.is('user_id', null)
       } else {
         q = q.eq('user_id', user.id)
       }
-      
       const { data, error } = await q
       if (error) {
         console.error('Error fetching notifications:', error)
@@ -351,73 +342,87 @@ export default function Navbar() {
   }
 
   const NotificationPanel = () => (
-    <div className="absolute right-0 top-full mt-3 w-96 bg-bushal-surface rounded-2xl border border-bushal-border shadow-2xl z-50 overflow-hidden animate-scale-in">
-      <div className="flex items-center justify-between px-5 py-4 border-b border-bushal-border">
+    <div className={cn(
+      "absolute right-0 top-full mt-2 bg-bushal-surface rounded-2xl border border-bushal-border shadow-2xl z-50 overflow-hidden animate-scale-in",
+      // FIXED: Proper width constraints
+      "w-[calc(100vw-5rem)] max-w-[calc(100vw-2rem)] sm:w-96",
+      // FIXED: Height constraint using viewport height
+      "max-h-[calc(100vh-300px)]",
+      "flex flex-col"
+    )}>
+      <div className="flex items-center justify-between px-4 py-3 border-b border-bushal-border flex-shrink-0">
         <p className="text-sm font-semibold text-bushal-ink">
           {isAdmin ? 'Admin Notifications' : 'Notifications'}
         </p>
         {unreadCount > 0 && (
           <button
             onClick={markAllRead}
-            className="text-xs text-bushal-copper font-semibold hover:text-bushal-copperLight transition-colors"
+            className="text-xs text-bushal-copper font-semibold hover:text-bushal-copperLight transition-colors px-2 py-1 rounded-lg hover:bg-bushal-ivoryDeep"
           >
             Mark all read
           </button>
         )}
       </div>
-      {notifLoading ? (
-        <div className="px-5 py-12 text-center">
-          <div className="w-8 h-8 border-2 border-bushal-copper border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-          <p className="text-sm text-bushal-inkSoft">Loading...</p>
-        </div>
-      ) : notifications.length === 0 ? (
-        <div className="px-5 py-14 text-center">
-          <div className="w-14 h-14 bg-bushal-ivoryDeep rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg className="w-7 h-7 text-bushal-inkSoft" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-            </svg>
+      
+      {/* FIXED: Scrollable content area */}
+      <div className="overflow-y-auto flex-1 min-h-0 no-scrollbar">
+        {notifLoading ? (
+          <div className="px-4 py-10 text-center">
+            <div className="w-7 h-7 border-2 border-bushal-copper border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+            <p className="text-xs text-bushal-inkSoft">Loading...</p>
           </div>
-          <p className="text-sm text-bushal-inkSoft">No notifications yet</p>
-        </div>
-      ) : (
-        <div className="max-h-96 overflow-y-auto divide-y divide-bushal-ivory no-scrollbar">
-          {notifications.map((n) => (
-            <div
-              key={n.id}
-              className={cn('px-5 py-4 transition-colors', !n.read ? 'bg-bushal-ivoryDeep' : 'hover:bg-bushal-ivoryDeep')}
-            >
-              <div className="flex items-start gap-3">
-                <div className={cn('w-2 h-2 rounded-full mt-2 flex-shrink-0', !n.read ? 'bg-bushal-copper' : 'bg-transparent')} />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-bushal-ink leading-snug">{n.title}</p>
-                  <p className="text-xs text-bushal-inkSoft mt-1 leading-relaxed">{n.body}</p>
-                  {n.order_id && (
-                    <Link
-                      href={isAdmin ? '/admin/orders' : '/orders'}
-                      className="text-xs text-bushal-copper font-semibold mt-2 inline-block hover:underline"
-                    >
-                      View order →
-                    </Link>
-                  )}
-                  {n.comment_id && isAdmin && (
-                    <Link
-                      href="/admin/comments"
-                      className="text-xs text-bushal-copper font-semibold mt-2 inline-block hover:underline"
-                    >
-                      View comment →
-                    </Link>
-                  )}
-                  <p className="text-[10px] text-bushal-inkSoft mt-2">
-                    {new Date(n.created_at).toLocaleDateString('en-BD', {
-                      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
-                    })}
-                  </p>
+        ) : notifications.length === 0 ? (
+          <div className="px-4 py-12 text-center">
+            <div className="w-12 h-12 bg-bushal-ivoryDeep rounded-full flex items-center justify-center mx-auto mb-3">
+              <svg className="w-6 h-6 text-bushal-inkSoft" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+              </svg>
+            </div>
+            <p className="text-xs text-bushal-inkSoft">No notifications yet</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-bushal-ivory">
+            {notifications.map((n) => (
+              <div
+                key={n.id}
+                className={cn(
+                  'px-4 py-3 transition-colors',
+                  !n.read ? 'bg-bushal-ivoryDeep/60' : 'hover:bg-bushal-ivoryDeep/40'
+                )}
+              >
+                <div className="flex items-start gap-2.5">
+                  <div className={cn('w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0', !n.read ? 'bg-bushal-copper' : 'bg-transparent')} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-bushal-ink leading-snug">{n.title}</p>
+                    <p className="text-xs text-bushal-inkSoft mt-0.5 leading-relaxed line-clamp-2">{n.body}</p>
+                    {n.order_id && (
+                      <Link
+                        href={isAdmin ? '/admin/orders' : '/orders'}
+                        className="text-xs text-bushal-copper font-semibold mt-1.5 inline-block hover:underline"
+                      >
+                        View order →
+                      </Link>
+                    )}
+                    {n.comment_id && isAdmin && (
+                      <Link
+                        href="/admin/comments"
+                        className="text-xs text-bushal-copper font-semibold mt-1.5 inline-block hover:underline"
+                      >
+                        View comment →
+                      </Link>
+                    )}
+                    <p className="text-[10px] text-bushal-inkSoft/70 mt-1.5">
+                      {new Date(n.created_at).toLocaleDateString('en-BD', {
+                        month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+                      })}
+                    </p>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
-      )}
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 
@@ -500,109 +505,136 @@ export default function Navbar() {
 
               {/* Right Actions */}
               <div className="flex items-center gap-2">
-                <button
-                  onClick={() => { setMobileSearchOpen((v) => !v); setTimeout(() => mobileInputRef.current?.focus(), 50) }}
-                  className="lg:hidden p-2.5 rounded-xl transition-all duration-200 hover:scale-110 text-white/70 hover:text-white hover:bg-white/10"
-                  aria-label="Search"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                  </svg>
-                </button>
-                
-                {/* Cart Icon - Hidden for Admins */}
-                {!isAdmin && (
+                {/* MOBILE: Minimal top bar - only search, notif, hamburger */}
+                <div className="flex items-center gap-1 md:hidden">
                   <button
-                    onClick={() => setCartOpen(true)}
-                    className="relative p-2.5 rounded-xl transition-all duration-200 hover:scale-110 text-white/70 hover:text-white hover:bg-white/10"
-                    aria-label="Cart"
+                    onClick={() => { setMobileSearchOpen((v) => !v); setTimeout(() => mobileInputRef.current?.focus(), 50) }}
+                    className="p-2.5 rounded-xl transition-all duration-200 hover:scale-110 text-white/70 hover:text-white hover:bg-white/10"
+                    aria-label="Search"
                   >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13l-1.5 6h13M7 13L5.4 5M10 21a1 1 0 100-2 1 1 0 000 2zm7 0a1 1 0 100-2 1 1 0 000 2z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                     </svg>
-                    {cartCount > 0 && (
-                      <span className={cn(
-                        'absolute -top-1 -right-1 min-w-[20px] h-5 bg-gradient-to-r from-bushal-copper to-bushal-copperLight text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1.5 leading-none shadow-lg shadow-bushal-copper/40',
-                        cartBump && 'animate-bounce-pop'
-                      )}>
-                        {cartCount > 99 ? '99+' : cartCount}
-                      </span>
-                    )}
                   </button>
-                )}
+                  
+                  {/* Only notifications in top bar on mobile */}
+                  {user && (
+                    <div className="relative" ref={notifRef}>
+                      <button
+                        onClick={handleNotifToggle}
+                        className="relative p-2.5 rounded-xl transition-all duration-200 hover:scale-110 text-white/70 hover:text-white hover:bg-white/10"
+                        aria-label="Notifications"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                        </svg>
+                        {unreadCount > 0 && (
+                          <span className="absolute -top-1 -right-1 min-w-[20px] h-5 bg-gradient-to-r from-bushal-danger to-rose-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1.5 leading-none shadow-lg shadow-rose-500/40 animate-bounce-pop">
+                            {unreadCount > 9 ? '9+' : unreadCount}
+                          </span>
+                        )}
+                      </button>
+                      {notifOpen && <NotificationPanel />}
+                    </div>
+                  )}
+                  
+                  {/* Hamburger for mobile menu */}
+                  <button
+                    onClick={() => setMobileMenuOpen((v) => !v)}
+                    className="p-2.5 rounded-xl transition-all duration-200 hover:scale-110 text-white/70 hover:text-white hover:bg-white/10"
+                    aria-label="Menu"
+                  >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      {mobileMenuOpen
+                        ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />}
+                    </svg>
+                  </button>
+                </div>
 
-                {user && (
-                  <div className="relative" ref={notifRef}>
+                {/* DESKTOP: Full navigation */}
+                <div className="hidden md:flex items-center gap-2">
+                  {/* Cart Icon - Hidden for Admins */}
+                  {!isAdmin && (
                     <button
-                      onClick={handleNotifToggle}
+                      onClick={() => setCartOpen(true)}
                       className="relative p-2.5 rounded-xl transition-all duration-200 hover:scale-110 text-white/70 hover:text-white hover:bg-white/10"
-                      aria-label="Notifications"
+                      aria-label="Cart"
                     >
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13l-1.5 6h13M7 13L5.4 5M10 21a1 1 0 100-2 1 1 0 000 2zm7 0a1 1 0 100-2 1 1 0 000 2z" />
                       </svg>
-                      {unreadCount > 0 && (
-                        <span className="absolute -top-1 -right-1 min-w-[20px] h-5 bg-gradient-to-r from-bushal-danger to-rose-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1.5 leading-none shadow-lg shadow-rose-500/40 animate-bounce-pop">
-                          {unreadCount > 9 ? '9+' : unreadCount}
+                      {cartCount > 0 && (
+                        <span className={cn(
+                          'absolute -top-1 -right-1 min-w-[20px] h-5 bg-gradient-to-r from-bushal-copper to-bushal-copperLight text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1.5 leading-none shadow-lg shadow-bushal-copper/40',
+                          cartBump && 'animate-bounce-pop'
+                        )}>
+                          {cartCount > 99 ? '99+' : cartCount}
                         </span>
                       )}
                     </button>
-                    {notifOpen && <NotificationPanel />}
-                  </div>
-                )}
-
-                {/* Desktop Auth Links */}
-                <div className="hidden md:flex items-center gap-2 ml-2">
-                  {user ? (
-                    <>
-                      <Link href="/orders" className="text-sm text-white/70 hover:text-white px-3 py-2 rounded-lg hover:bg-white/10 transition-all duration-200">
-                        Orders
-                      </Link>
-                      <Link
-                        href={isAdmin ? '/admin' : '/profile'}
-                        className="flex items-center gap-2 text-sm text-white/70 hover:text-white px-3 py-2 rounded-lg hover:bg-white/10 transition-all duration-200"
-                      >
-                        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-bushal-copper/30 to-bushal-copperLight/30 border border-bushal-copper/50 flex items-center justify-center">
-                          <svg className="w-4 h-4 text-bushal-copper" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                          </svg>
-                        </div>
-                        <span className="font-medium">{isAdmin ? 'Analytics' : 'Profile'}</span>
-                      </Link>
-                      <button
-                        onClick={signOut}
-                        className="text-sm text-white/50 hover:text-white px-3 py-2 rounded-lg hover:bg-white/10 transition-all duration-200"
-                      >
-                        Sign out
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <Link href="/login" className="text-sm text-bushal-copper hover:text-bushal-copperLight px-4 py-2 rounded-lg hover:bg-white/10 transition-all duration-200 font-medium">
-                        Sign in
-                      </Link>
-                      <Link
-                        href="/register"
-                        className="text-sm bg-gradient-to-r from-bushal-copper to-bushal-copperLight text-white px-5 py-2.5 rounded-lg font-semibold hover:shadow-lg hover:shadow-bushal-copper/30 hover:-translate-y-0.5 transition-all duration-300 active:scale-95"
-                      >
-                        Register
-                      </Link>
-                    </>
                   )}
-                </div>
 
-                {/* Mobile Menu Toggle */}
-                <button
-                  onClick={() => setMobileMenuOpen((v) => !v)}
-                  className="md:hidden p-2.5 rounded-xl transition-all duration-200 hover:scale-110 text-white/70 hover:text-white hover:bg-white/10"
-                  aria-label="Toggle menu"
-                >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    {mobileMenuOpen
-                      ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />}
-                  </svg>
-                </button>
+                  {user && (
+                    <div className="relative" ref={notifRef}>
+                      <button
+                        onClick={handleNotifToggle}
+                        className="relative p-2.5 rounded-xl transition-all duration-200 hover:scale-110 text-white/70 hover:text-white hover:bg-white/10"
+                        aria-label="Notifications"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                        </svg>
+                        {unreadCount > 0 && (
+                          <span className="absolute -top-1 -right-1 min-w-[20px] h-5 bg-gradient-to-r from-bushal-danger to-rose-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1.5 leading-none shadow-lg shadow-rose-500/40 animate-bounce-pop">
+                            {unreadCount > 9 ? '9+' : unreadCount}
+                          </span>
+                        )}
+                      </button>
+                      {notifOpen && <NotificationPanel />}
+                    </div>
+                  )}
+
+                  {/* Desktop Auth Links */}
+                  <div className="flex items-center gap-2 ml-2">
+                    {user ? (
+                      <>
+                        <Link href="/orders" className="text-sm text-white/70 hover:text-white px-3 py-2 rounded-lg hover:bg-white/10 transition-all duration-200">
+                          Orders
+                        </Link>
+                        <Link
+                          href={isAdmin ? '/admin' : '/profile'}
+                          className="flex items-center gap-2 text-sm text-white/70 hover:text-white px-3 py-2 rounded-lg hover:bg-white/10 transition-all duration-200"
+                        >
+                          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-bushal-copper/30 to-bushal-copperLight/30 border border-bushal-copper/50 flex items-center justify-center">
+                            <svg className="w-4 h-4 text-bushal-copper" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                            </svg>
+                          </div>
+                          <span className="font-medium">{isAdmin ? 'Analytics' : 'Profile'}</span>
+                        </Link>
+                        <button
+                          onClick={signOut}
+                          className="text-sm text-white/50 hover:text-white px-3 py-2 rounded-lg hover:bg-white/10 transition-all duration-200"
+                        >
+                          Sign out
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <Link href="/login" className="text-sm text-bushal-copper hover:text-bushal-copperLight px-4 py-2 rounded-lg hover:bg-white/10 transition-all duration-200 font-medium">
+                          Sign in
+                        </Link>
+                        <Link
+                          href="/register"
+                          className="text-sm bg-gradient-to-r from-bushal-copper to-bushal-copperLight text-white px-5 py-2.5 rounded-lg font-semibold hover:shadow-lg hover:shadow-bushal-copper/30 hover:-translate-y-0.5 transition-all duration-300 active:scale-95"
+                        >
+                          Register
+                        </Link>
+                      </>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -669,7 +701,6 @@ export default function Navbar() {
 
       {/* Spacer to prevent content from hiding behind fixed navbar */}
       <div className="h-16 lg:h-20" />
-      
       <CartDrawer isOpen={cartOpen} onClose={() => setCartOpen(false)} />
     </>
   )

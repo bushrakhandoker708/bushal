@@ -1,19 +1,18 @@
-'use client'
-
 // app/components/product/ProductDetail.tsx
 
+'use client'
 import { useCart } from '@/app/hooks/useCart'
 import { Product } from '@/app/types/product'
 import { useState, useCallback, useRef } from 'react'
 import { formatPrice } from '@/app/lib/utils/formatPrice'
 import { cn } from '@/app/lib/utils/cn'
+import { getStockStatus } from '@/app/lib/utils/stockStatus'
 
 interface Props {
   product: Product
 }
 
 // ─── Image Gallery ────────────────────────────────────────────────────────────
-
 function ImageGallery({ images, name }: { images: string[]; name: string }) {
   const [active, setActive] = useState(0)
   const [zoomed, setZoomed] = useState(false)
@@ -179,7 +178,6 @@ function ImageGallery({ images, name }: { images: string[]; name: string }) {
 }
 
 // ─── Rating Stars ─────────────────────────────────────────────────────────────
-
 function RatingStars({ rating, size = 'sm' }: { rating: number; size?: 'sm' | 'md' }) {
   const filled = Math.round(rating)
   const px = size === 'md' ? 'w-5 h-5' : 'w-4 h-4'
@@ -195,7 +193,6 @@ function RatingStars({ rating, size = 'sm' }: { rating: number; size?: 'sm' | 'm
 }
 
 // ─── Trust Badge ──────────────────────────────────────────────────────────────
-
 function TrustBadge({ icon, label, sub }: { icon: React.ReactNode; label: string; sub: string }) {
   return (
     <div className="flex flex-col items-center text-center gap-1.5 px-2">
@@ -210,8 +207,7 @@ function TrustBadge({ icon, label, sub }: { icon: React.ReactNode; label: string
   )
 }
 
-// ─── Quantity Stepper ─────────────────────────────────────────────────────────
-
+// ── Quantity Stepper ─────────────────────────────────────────────────────────
 function QuantityStepper({
   value,
   onDecrement,
@@ -256,7 +252,6 @@ function QuantityStepper({
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
-
 export default function ProductDetail({ product }: Props) {
   const { addItem } = useCart()
   const [quantity, setQuantity] = useState(1)
@@ -265,7 +260,6 @@ export default function ProductDetail({ product }: Props) {
   const discountedPrice = product.discount_percent
     ? product.price * (1 - product.discount_percent / 100)
     : null
-
   const finalPrice = discountedPrice ?? product.price
   const savingsAmount = discountedPrice ? product.price - discountedPrice : 0
 
@@ -274,6 +268,9 @@ export default function ProductDetail({ product }: Props) {
     ratingsOnly.length > 0
       ? ratingsOnly.reduce((sum: number, c: any) => sum + (c.rating ?? 0), 0) / ratingsOnly.length
       : 0
+
+  // Get dynamic stock status
+  const stockDisplay = getStockStatus(product.stock_quantity)
 
   const handleAddToCart = () => {
     for (let i = 0; i < quantity; i++) addItem(product)
@@ -367,16 +364,13 @@ export default function ProductDetail({ product }: Props) {
           <span
             className={cn(
               'w-2 h-2 rounded-full flex-shrink-0',
-              product.in_stock ? 'bg-bushal-success animate-pulse' : 'bg-bushal-danger'
+              stockDisplay.dotColor,
+              product.stock_quantity > 0 && 'animate-pulse'
             )}
           />
-          <span
-            className={cn(
-              'text-sm font-semibold',
-              product.in_stock ? 'text-bushal-forest' : 'text-bushal-danger'
-            )}
-          >
-            {product.in_stock ? 'In stock — ships within 24 hours' : 'Currently out of stock'}
+          <span className={cn('text-sm font-semibold', stockDisplay.color)}>
+            {stockDisplay.label}
+            {product.stock_quantity > 5 && ' — ships within 24 hours'}
           </span>
         </div>
 
@@ -460,15 +454,12 @@ export default function ProductDetail({ product }: Props) {
           <span className="font-heading text-xl text-bushal-copper font-semibold">
             {formatPrice(finalPrice)}
           </span>
-          {product.in_stock ? (
-            <span className="flex items-center gap-1.5 text-xs text-bushal-success font-semibold">
-              <span className="w-1.5 h-1.5 rounded-full bg-bushal-success animate-pulse" />
-              In stock
-            </span>
-          ) : (
-            <span className="text-xs text-bushal-danger font-semibold">Out of stock</span>
-          )}
+          <span className={cn("flex items-center gap-1.5 text-xs font-semibold", stockDisplay.color)}>
+            {product.stock_quantity > 0 && <span className={cn('w-1.5 h-1.5 rounded-full', stockDisplay.dotColor, 'animate-pulse')} />}
+            {stockDisplay.status === 'out_of_stock' ? 'Out of stock' : stockDisplay.status === 'low_stock' ? `Only ${product.stock_quantity} left` : 'In stock'}
+          </span>
         </div>
+
         <div className="flex items-center gap-3">
           <QuantityStepper
             value={quantity}

@@ -1,12 +1,12 @@
 // app/components/product/ProductForm.tsx
 'use client'
-
 import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Product } from '@/app/types/product'
 import { createBrowserClient } from '@/lib/supabase/client'
 import Input from '@/app/components/ui/Input'
 import Button from '@/app/components/ui/Button'
+import { getStockStatus } from '@/app/lib/utils/stockStatus'
 
 interface Category {
   id: string
@@ -24,12 +24,10 @@ export default function ProductForm({ mode, product, categories }: Props) {
   const router = useRouter()
   const supabase = createBrowserClient()
   const fileInputRef = useRef<HTMLInputElement>(null)
-  
   const [loading, setLoading] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState('')
   const [uploadProgress, setUploadProgress] = useState(0)
-  
   const [form, setForm] = useState({
     name: product?.name ?? '',
     description: product?.description ?? '',
@@ -38,14 +36,14 @@ export default function ProductForm({ mode, product, categories }: Props) {
     stock_quantity: product?.stock_quantity?.toString() ?? '0',
     category: product?.category ?? (categories[0]?.name ?? 'General'),
   })
-  
+
   const resolveImages = (p?: Product): string[] => {
     if (!p) return []
     if (Array.isArray(p.images) && p.images.length > 0) return p.images
     if (p.image_url) return [p.image_url]
     return []
   }
-  
+
   const [images, setImages] = useState<string[]>(() => resolveImages(product))
   const [previews, setPreviews] = useState<string[]>(() => resolveImages(product))
   const [dragOver, setDragOver] = useState(false)
@@ -68,39 +66,31 @@ export default function ProductForm({ mode, product, categories }: Props) {
     setUploading(true)
     setError('')
     setUploadProgress(0)
-    
     const newUrls: string[] = []
     const newPreviews: string[] = []
-    
     for (let i = 0; i < files.length; i++) {
       const file = files[i]
       const localPreview = URL.createObjectURL(file)
       newPreviews.push(localPreview)
-      
       const ext = file.name.split('.').pop()
       const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
       const path = `products/${fileName}`
-      
       const { error: uploadError } = await supabase.storage
         .from('product-images')
         .upload(path, file, { cacheControl: '3600', upsert: false })
-        
       if (uploadError) {
         setError(`Upload failed: ${uploadError.message}`)
         setUploading(false)
         return
       }
-      
       const { data } = supabase.storage.from('product-images').getPublicUrl(path)
       newUrls.push(data.publicUrl)
       setUploadProgress(Math.round(((i + 1) / files.length) * 100))
     }
-    
     setImages((prev) => [...prev, ...newUrls])
     setPreviews((prev) => [...prev, ...newPreviews])
     setUploading(false)
     setUploadProgress(0)
-    
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
@@ -134,7 +124,6 @@ export default function ProductForm({ mode, product, categories }: Props) {
     e.preventDefault()
     setLoading(true)
     setError('')
-    
     const qty = parseInt(form.stock_quantity) || 0
     const payload = {
       name: form.name.trim(),
@@ -147,31 +136,27 @@ export default function ProductForm({ mode, product, categories }: Props) {
       discount_percent: form.discount_percent ? parseInt(form.discount_percent) : null,
       category: form.category || 'General',
     }
-
     if (!payload.name) { setError('Product name is required'); setLoading(false); return }
     if (isNaN(payload.price) || payload.price <= 0) { setError('Enter a valid price'); setLoading(false); return }
-
     const url = mode === 'create' ? '/api/products' : `/api/products/${product?.id}`
     const method = mode === 'create' ? 'POST' : 'PUT'
-    
     const res = await fetch(url, {
       method,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     })
-    
     setLoading(false)
     if (!res.ok) {
       const data = await res.json()
       setError(data.error ?? 'Something went wrong')
       return
     }
-    
     router.push('/admin/products')
     router.refresh()
   }
 
   const stockQty = parseInt(form.stock_quantity) || 0
+  const stockDisplay = getStockStatus(stockQty)
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6" noValidate>
@@ -265,12 +250,17 @@ export default function ProductForm({ mode, product, categories }: Props) {
           {stockQty === 0 ? (
             <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-bushal-danger bg-bushal-dangerBg border border-bushal-danger/20 px-2.5 py-1 rounded-full">
               <span className="w-1.5 h-1.5 rounded-full bg-bushal-danger" />
-              Out of Stock — will be hidden from customers
+              {stockDisplay.label} — will be hidden from customers
+            </span>
+          ) : stockQty <= 5 ? (
+            <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-bushal-warning bg-bushal-warningBg border border-bushal-warning/20 px-2.5 py-1 rounded-full">
+              <span className="w-1.5 h-1.5 rounded-full bg-bushal-warning animate-pulse" />
+              {stockDisplay.label}!
             </span>
           ) : (
             <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-bushal-success bg-bushal-successBg border border-bushal-success/20 px-2.5 py-1 rounded-full">
               <span className="w-1.5 h-1.5 rounded-full bg-bushal-success" />
-              In Stock — {stockQty} unit{stockQty !== 1 ? 's' : ''} available
+              {stockDisplay.label} — {stockQty} units available
             </span>
           )}
         </div>
@@ -279,7 +269,6 @@ export default function ProductForm({ mode, product, categories }: Props) {
       {/* Image Upload */}
       <div>
         <label className="block text-sm font-semibold text-bushal-inkMid mb-1.5">Product Images</label>
-        
         {/* Drop zone */}
         <div
           onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
@@ -331,7 +320,6 @@ export default function ProductForm({ mode, product, categories }: Props) {
             )}
           </div>
         </div>
-
         {/* Image previews */}
         {previews.length > 0 && (
           <div className="mt-3 grid grid-cols-3 sm:grid-cols-4 gap-2">
