@@ -13,7 +13,7 @@ interface Props {
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const supabase = createServerClient()
+  const supabase =  await createServerClient()
   const { data: product } = await supabase
     .from('products')
     .select('name, description, images, image_url')
@@ -46,7 +46,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 export default async function ProductPage({ params }: Props) {
-  const supabase = createServerClient()
+  const supabase =  await createServerClient()
   
   const { data: product, error: productError } = await supabase
     .from('products')

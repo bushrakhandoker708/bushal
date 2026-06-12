@@ -3,7 +3,7 @@ import { createServerClient } from '@/lib/supabase/server'
 import AdminCategoriesClient from '@/app/components/admin/AdminCategoriesClient'
 
 export default async function AdminCategoriesPage() {
-  const supabase = createServerClient()
+  const supabase =  await createServerClient()
 
   const { data: categories } = await supabase
     .from('categories')

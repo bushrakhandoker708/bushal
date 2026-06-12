@@ -21,10 +21,10 @@ export default async function ThankYouPage({ searchParams }: Props) {
   let customerName = 'Valued Customer'
 
   if (searchParams.orderId) {
-    const supabase = createServerClient()
+    const supabase = await createServerClient()
     
     // Fetch the order
-    const { data: orderData } = await supabase
+    const { data: orderData } = await (await supabase)
       .from('orders')
       .select('*')
       .eq('id', searchParams.orderId)
@@ -34,7 +34,7 @@ export default async function ThankYouPage({ searchParams }: Props) {
     
     // Fetch the customer's profile using the user_id from the order
     if (orderData?.user_id) {
-      const { data: profileData } = await supabase
+      const { data: profileData } = await (await supabase)
         .from('profiles')
         .select('full_name')
         .eq('id', orderData.user_id)

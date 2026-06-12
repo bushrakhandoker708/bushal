@@ -6,7 +6,7 @@ export default async function AdminOrdersPage() {
   const supabase = createServerClient()
   
   // Fetch orders with properly nested order_items and products
-  const { data: orders, error } = await supabase
+  const { data: orders, error } = await (await supabase)
     .from('orders')
     .select(`
       id,
@@ -46,7 +46,7 @@ export default async function AdminOrdersPage() {
   let profilesMap: Record<string, { full_name: string | null; email: string | null; phone: string | null }> = {}
   
   if (userIds.length > 0) {
-    const { data: profiles } = await supabase
+    const { data: profiles } = await (await supabase)
       .from('profiles')
       .select('id, full_name, email, phone')
       .in('id', userIds)

@@ -33,7 +33,7 @@ export async function PATCH(
   }
 
   // Fetch existing order to get user_id for email notification
-  const { data: existing, error: fetchError } = await auth.supabase
+  const { data: existing, error: fetchError } = await (await auth.supabase)
     .from('orders')
     .select('id, user_id')
     .eq('id', id)
@@ -44,7 +44,7 @@ export async function PATCH(
   }
 
   // Call the atomic RPC to update status, append delivery step, and reduce stock
-  const { data: rpcData, error: rpcError } = await auth.supabase.rpc('confirm_order_and_reduce_stock', {
+  const { data: rpcData, error: rpcError } = await (await auth.supabase).rpc('confirm_order_and_reduce_stock', {
     p_order_id: id,
     p_new_status: delivery_status,
   })
@@ -61,7 +61,7 @@ export async function PATCH(
   try {
     const resendKey = process.env.RESEND_API_KEY
     if (resendKey) {
-      const { data: customerProfile } = await auth.supabase
+      const { data: customerProfile } = await (await auth.supabase)
         .from('profiles')
         .select('email, full_name')
         .eq('id', existing.user_id)

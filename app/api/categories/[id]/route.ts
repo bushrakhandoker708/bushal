@@ -10,7 +10,7 @@ export async function DELETE(
   const auth = await requireAdmin()
   if (!auth.success) return auth.response
 
-  const { error } = await auth.supabase
+  const { error } = await (await auth.supabase)
     .from('categories')
     .delete()
     .eq('id', params.id)

@@ -8,7 +8,7 @@ interface Props {
 }
 
 export default async function EditProductPage({ params }: Props) {
-  const supabase = createServerClient()
+  const supabase =  await createServerClient()
   
   // Fetch the specific product to edit
   const { data: product } = await supabase

@@ -15,7 +15,7 @@ export async function GET(_req: Request, { params }: Params) {
   const auth = await requireAdmin()
   if (!auth.success) return auth.response
 
-  const { data: order, error } = await auth.supabase
+  const { data: order, error } = await (await auth.supabase)
     .from('orders')
     .select(`
       id,
@@ -54,7 +54,7 @@ export async function GET(_req: Request, { params }: Params) {
     return NextResponse.json({ error: 'Order not found' }, { status: 404 })
   }
 
-  const { data: profile } = await auth.supabase
+  const { data: profile } = await (await auth.supabase)
     .from('profiles')
     .select('full_name, email, phone')
     .eq('id', order.user_id)
@@ -135,7 +135,7 @@ export async function PATCH(request: Request, { params }: Params) {
     delivery_status === 'cancelled' ? 'cancelled' : 'pending'
 
   // 1. Update DB (NO updated_at column!)
-  const { data, error } = await auth.supabase
+  const { data, error } = await(await auth.supabase)
     .from('orders')
     .update({ status: orderStatus, delivery_status: delivery_status })
     .eq('id', params.id)
@@ -159,7 +159,7 @@ async function sendCustomerStatusEmail(orderId: string, status: string, label: s
   try {
     if (!process.env.RESEND_API_KEY) return
 
-    const supabase = createServerClient()
+    const supabase = await createServerClient()
     const { data: order } = await supabase.from('orders').select('user_id').eq('id', orderId).single()
     if (!order?.user_id) return
 

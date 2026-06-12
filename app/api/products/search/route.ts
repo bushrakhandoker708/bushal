@@ -1,3 +1,5 @@
+// app/api/products/search/route.ts
+
 import { createServerClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
@@ -8,7 +10,7 @@ export async function GET(request: Request) {
 
   if (q.length < 2) return NextResponse.json([])
 
-  const supabase = createServerClient()
+  const supabase = await createServerClient()
 
   // ── DEBUG MODE: visit /api/products/search?q=hello+world&debug=1 ──
   if (debug) {
@@ -71,7 +73,10 @@ export async function GET(request: Request) {
   }
 }
 
-async function fallbackSearch(supabase: ReturnType<typeof createServerClient>, query: string) {
+async function fallbackSearch(
+  supabase: Awaited<ReturnType<typeof createServerClient>>,
+  query: string
+) {
   const { data, error } = await supabase
     .from('products')
     .select('id, name, description, price, image_url, images, discount_percent, in_stock, stock_quantity, created_at, updated_at')

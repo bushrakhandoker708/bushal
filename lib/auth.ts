@@ -8,7 +8,7 @@ export type AuthResult =
 
 export async function requireAuth(): Promise<AuthResult> {
   const supabase = createServerClient()
-  const { data: { user }, error } = await supabase.auth.getUser()
+  const { data: { user }, error } =  await (await supabase).auth.getUser()
 
   if (error || !user) {
     return {
@@ -22,7 +22,7 @@ export async function requireAuth(): Promise<AuthResult> {
 
 export async function requireAdmin(): Promise<AuthResult> {
   const supabase = createServerClient()
-  const { data: { user }, error } = await supabase.auth.getUser()
+  const { data: { user }, error } = await (await supabase).auth.getUser()
 
   if (error || !user) {
     return {
@@ -31,7 +31,7 @@ export async function requireAdmin(): Promise<AuthResult> {
     }
   }
 
-  const { data: profile } = await supabase
+  const { data: profile } = await (await supabase)
     .from('profiles')
     .select('role')
     .eq('id', user.id)

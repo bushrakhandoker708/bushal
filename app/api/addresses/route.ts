@@ -8,7 +8,7 @@ export async function GET() {
   if (!auth.success) return auth.response
 
   // Fetch addresses, putting the default address at the top
-  const { data, error } = await auth.supabase
+  const { data, error } = await (await auth.supabase)
     .from('addresses')
     .select('*')
     .eq('user_id', auth.userId)
@@ -39,7 +39,7 @@ export async function POST(request: Request) {
   // Insert the new address. 
   // Note: The DB trigger `trg_ensure_single_default_address` will automatically 
   // handle un-setting other default addresses if `is_default` is true.
-  const { data, error } = await auth.supabase
+  const { data, error } = await (await auth.supabase)
     .from('addresses')
     .insert({
       user_id: auth.userId,

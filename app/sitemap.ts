@@ -1,4 +1,3 @@
-// app/sitemap.ts
 import { MetadataRoute } from 'next'
 import { createServerClient } from '@/lib/supabase/server'
 
@@ -13,7 +12,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   let productRoutes: MetadataRoute.Sitemap = []
   try {
-    const supabase = createServerClient()
+    const supabase = await createServerClient() // FIX: Added await here
     // Only index products that are actually in stock
     const { data: products } = await supabase
       .from('products')
@@ -21,7 +20,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       .eq('in_stock', true)
 
     if (products) {
-      productRoutes = products.map((product) => ({
+      productRoutes = products.map((product: { id: string; updated_at: string | null }) => ({
         url: `${baseUrl}/product/${product.id}`,
         lastModified: product.updated_at ? new Date(product.updated_at) : new Date(),
         changeFrequency: 'weekly',

@@ -9,7 +9,7 @@ export async function GET() {
   const auth = await requireAuth()
   if (!auth.success) return auth.response
   
-  const { data, error } = await auth.supabase
+  const { data, error } = await (await auth.supabase)
     .from('orders')
     .select('*, order_items(*, products(name, image_url, price))')
     .eq('user_id', auth.userId)
@@ -57,7 +57,7 @@ export async function POST(request: Request) {
   const roundedTotal = Math.round((total ?? 0) * 100) / 100
   
   // Create order
-  const { data: orderId, error: rpcError } = await auth.supabase.rpc('create_order_with_stock_check', {
+  const { data: orderId, error: rpcError } = await (await auth.supabase).rpc('create_order_with_stock_check', {
     p_user_id: auth.userId,
     p_items: rpcItems,
     p_total: roundedTotal,
@@ -76,7 +76,7 @@ export async function POST(request: Request) {
   }
   
   // Attach delivery details
-  const { error: updateError } = await auth.supabase
+  const { error: updateError } = await (await auth.supabase)
     .from('orders')
     .update({
       delivery_address: delivery_address.trim(),
@@ -93,7 +93,7 @@ export async function POST(request: Request) {
   // Fetch order details for emails
   console.log('📦 Fetching order details for order:', orderId)
   
-  const { data: orderItems, error: itemsError } = await auth.supabase
+  const { data: orderItems, error: itemsError } = await( await auth.supabase)
     .from('order_items')
     .select(`
       id,
@@ -110,7 +110,7 @@ export async function POST(request: Request) {
   
   console.log('📦 Order items fetched:', orderItems?.length ?? 0)
   
-  const { data: profile, error: profileError } = await auth.supabase
+  const { data: profile, error: profileError } = await (await auth.supabase)
     .from('profiles')
     .select('full_name, email, phone')
     .eq('id', auth.userId)

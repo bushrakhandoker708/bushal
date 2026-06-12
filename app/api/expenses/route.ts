@@ -14,7 +14,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'label and amount are required' }, { status: 400 })
   }
 
-  const { data, error } = await auth.supabase
+  const { data, error } = await (await auth.supabase)
     .from('product_expenses')
     .insert({ label: label.trim(), amount: Number(amount), product_id: product_id ?? null })
     .select()

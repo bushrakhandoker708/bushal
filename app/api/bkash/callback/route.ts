@@ -16,7 +16,7 @@ export async function GET(request: Request) {
 
   if (status === 'cancel' || status === 'failure') {
     if (orderId) {
-      const supabase = createServerClient()
+      const supabase = await createServerClient()
       await supabase.from('order_items').delete().eq('order_id', orderId)
       await supabase.from('orders').delete().eq('id', orderId)
     }
@@ -25,7 +25,7 @@ export async function GET(request: Request) {
 
   if (!paymentID || !orderId) return NextResponse.redirect(`${origin}/cart?bkash=failed&reason=missing`)
 
-  const supabase = createServerClient()
+  const supabase = await createServerClient()
   
   const { data: existingOrder } = await supabase
     .from('orders')

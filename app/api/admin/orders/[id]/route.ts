@@ -13,7 +13,7 @@ export async function GET(_req: Request, { params }: Params) {
   const auth = await requireAdmin()
   if (!auth.success) return auth.response
 
-  const { data: order, error } = await auth.supabase
+  const { data: order, error } = await (await auth.supabase)
     .from('orders')
     .select(`
       id,
@@ -54,7 +54,7 @@ export async function GET(_req: Request, { params }: Params) {
   }
 
   // Fetch customer profile
-  const { data: profile } = await auth.supabase
+  const { data: profile } = await (await auth.supabase)
     .from('profiles')
     .select('full_name, email, phone')
     .eq('id', order.user_id)
@@ -161,7 +161,7 @@ export async function PATCH(request: Request, { params }: Params) {
     'pending'
 
   // Call the atomic RPC to update status and reduce stock if confirming
-  const { data: rpcData, error: rpcError } = await auth.supabase.rpc('confirm_order_and_reduce_stock', {
+  const { data: rpcData, error: rpcError } = await (await auth.supabase).rpc('confirm_order_and_reduce_stock', {
     p_order_id: params.id,
     p_new_status: delivery_status,
   })
@@ -172,7 +172,7 @@ export async function PATCH(request: Request, { params }: Params) {
   }
 
   // Fetch order details for email notification
-  const { data: order } = await auth.supabase
+  const { data: order } =  await (await auth.supabase)
     .from('orders')
     .select('user_id, total, bkash_invoice')
     .eq('id', params.id)
@@ -180,7 +180,7 @@ export async function PATCH(request: Request, { params }: Params) {
 
   // Send email notification to customer
   if (order?.user_id) {
-    const { data: customerProfile } = await auth.supabase
+    const { data: customerProfile } = await (await auth.supabase)
       .from('profiles')
       .select('email, full_name')
       .eq('id', order.user_id)

@@ -4,7 +4,7 @@ import { formatDate } from '@/app/lib/utils/formatDate'
 import AdminReplyForm from '@/app/components/comments/AdminReplyForm'
 
 export default async function AdminCommentsPage() {
-  const supabase = createServerClient()
+  const supabase =  await createServerClient()
 
   const { data: allComments } = await supabase
     .from('comments')

@@ -29,7 +29,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; 
 }
 
 export default async function OrderDetailPage({ params }: { params: { id: string } }) {
-  const supabase = createServerClient()
+  const supabase =  await createServerClient()
   const { data: { session } } = await supabase.auth.getSession()
   if (!session) redirect('/login')
 

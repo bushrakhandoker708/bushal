@@ -8,7 +8,7 @@ interface CartItem {
 }
 
 export async function POST(request: Request) {
-  const supabase = createServerClient()
+  const supabase = await createServerClient()
   const body: { items: CartItem[] } = await request.json()
 
   if (!body.items || body.items.length === 0) {
@@ -17,7 +17,7 @@ export async function POST(request: Request) {
 
   const productIds = body.items.map((i) => i.id)
 
-  const { data: products, error } = await supabase
+  const { data: products, error } = await (await supabase)
     .from('products')
     .select('id, name, price, in_stock, stock_quantity, discount_percent')
     .in('id', productIds)

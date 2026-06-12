@@ -5,7 +5,7 @@ import { productSchema } from '@/lib/validations/productSchema'
 import { requireAdmin } from '@/lib/auth'
 
 export async function GET() {
-  const supabase = createServerClient()
+  const supabase = await createServerClient()
   const { data, error } = await supabase
     .from('products')
     .select('*')
@@ -27,7 +27,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 })
   }
 
-  const { data, error } = await auth.supabase
+  const { data, error } = await (await auth.supabase)
     .from('products')
     .insert({
       ...parsed.data,

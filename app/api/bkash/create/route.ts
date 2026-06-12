@@ -6,7 +6,7 @@ import { CartItem } from '@/app/types/cart'
 import { bkashCreatePayment } from '@/app/lib/bkash'
 
 export async function POST(request: Request) {
-  const supabase = createServerClient()
+  const supabase =  await createServerClient()
 
   const { data: { user }, error: authError } = await supabase.auth.getUser()
   if (authError || !user) {

@@ -10,7 +10,7 @@ interface Params {
 }
 
 export async function GET(_req: Request, { params }: Params) {
-  const supabase = createServerClient()
+  const supabase = await createServerClient()
   const { data, error } = await supabase
     .from('products')
     .select(`*, comments (*)`)
@@ -41,7 +41,7 @@ export async function PUT(request: Request, { params }: Params) {
     image_url: body.image_url ?? null,
   }
 
-  const { data, error } = await auth.supabase
+  const { data, error } = await (await auth.supabase)
     .from('products')
     .update(updatePayload)
     .eq('id', params.id)
@@ -59,7 +59,7 @@ export async function DELETE(_req: Request, { params }: Params) {
   const auth = await requireAdmin()
   if (!auth.success) return auth.response
 
-  const { error } = await auth.supabase
+  const { error } = await (await auth.supabase)
     .from('products')
     .update({ 
       is_deleted: true, 

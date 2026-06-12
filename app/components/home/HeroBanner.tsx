@@ -38,10 +38,11 @@ const PARTICLES = Array.from({ length: 32 }, (_, i) => ({
 export default function HeroBanner() {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  // FIX: Added null initial value
   const primaryBtnRef = useRef<HTMLAnchorElement>(null)
   const secondaryBtnRef = useRef<HTMLAnchorElement>(null)
-  const rafRef = useRef<number>()
-  const trailRafRef = useRef<number>()
+  const rafRef = useRef<number | null>(null)
+  const trailRafRef = useRef<number | null>(null)
   const targetPos = useRef({ x: 0.5, y: 0.5 })
   const smoothPos = useRef({ x: 0.5, y: 0.5 })
   const trailPts = useRef<{ x: number; y: number; op: number }[]>([])
@@ -133,7 +134,8 @@ export default function HeroBanner() {
   }, [])
 
   // ── magnetic buttons
-  const applyMagnetic = useCallback((e: MouseEvent, ref: React.RefObject<HTMLAnchorElement>) => {
+  // FIX: Updated type to accept nullable ref
+  const applyMagnetic = useCallback((e: MouseEvent, ref: React.RefObject<HTMLAnchorElement | null>) => {
     const el = ref.current; if (!el) return
     const r = el.getBoundingClientRect()
     const dx = e.clientX - (r.left + r.width / 2)

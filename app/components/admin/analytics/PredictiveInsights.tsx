@@ -35,7 +35,7 @@ export interface ForecastData {
 // ─── Animated counter ─────────────────────────────────────────────────────────
 function useCounter(target: number, ms = 1200): number {
   const [val, setVal] = useState(0)
-  const rafRef = useRef<number>()
+  const rafRef = useRef<number>(0)
   const t0 = useRef<number | null>(null)
 
   useEffect(() => {

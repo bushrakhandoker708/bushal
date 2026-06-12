@@ -102,7 +102,7 @@ interface Props {
 // ─── Animated counter ─────────────────────────────────────────────────────────
 function useCounter(target: number, duration = 1200, delay = 0): number {
   const [val, setVal] = useState(0)
-  const rafRef = useRef<number>()
+  const rafRef = useRef<number>(0)
   const t0 = useRef<number | null>(null)
   const started = useRef(false)
 

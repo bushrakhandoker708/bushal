@@ -12,7 +12,7 @@ export async function POST(request: Request) {
 
   if (!name?.trim()) return NextResponse.json({ error: 'Name is required' }, { status: 400 })
 
-  const { data: category, error } = await auth.supabase
+  const { data: category, error } = await (await auth.supabase)
     .from('categories')
     .insert({
       name: name.trim(),

@@ -23,7 +23,7 @@ export const metadata: Metadata = {
 }
 
 export default async function DashboardPage() {
-  const supabase = createServerClient()
+  const supabase =  await createServerClient()
   
   const { data: products, error } = await supabase
     .from('products')

@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 export default async function AdminDashboardPage() {
-  const supabase = createServerClient()
+  const supabase =  await createServerClient()
 
   const [
     productsResult,

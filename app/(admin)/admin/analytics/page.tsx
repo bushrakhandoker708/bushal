@@ -12,7 +12,7 @@ import type { CLVData, ForecastData } from '@/app/components/admin/analytics/Pre
 export const dynamic = 'force-dynamic'
 
 export default async function AnalyticsPage() {
-  const supabase = createServerClient()
+  const supabase =  await createServerClient()
 
   const [
     { data: summaryRaw },

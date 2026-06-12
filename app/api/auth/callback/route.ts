@@ -10,10 +10,10 @@ export async function GET(request: Request) {
 
   if (code) {
     const cookieStore = cookies()
-    const supabase = createServerClient()
-    await supabase.auth.exchangeCodeForSession(code)
+    const supabase = await createServerClient()
+     await supabase.auth.exchangeCodeForSession(code)
   }
 
-  // Redirect to dashboard after successful auth
+  // Redirect to  dashboard after successful auth
   return NextResponse.redirect(new URL('/dashboard', requestUrl.origin))
 }
