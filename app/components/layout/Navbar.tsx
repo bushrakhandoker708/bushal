@@ -1,5 +1,12 @@
 // app/components/layout/Navbar.tsx
+
+// Updated Navbar to integrate the new premium SearchDropdown component.
+// Replaces the inline search dropdown with the Framer Motion-enhanced,
+// standalone SearchDropdown component for better code organization and
+// smoother animations.
+
 'use client'
+
 import { useAuth } from '@/app/hooks/useAuth'
 import { useCart } from '@/app/hooks/useCart'
 import Link from 'next/link'
@@ -8,17 +15,8 @@ import { cn } from '@/app/lib/utils/cn'
 import CartDrawer from '@/app/components/cart/CardDrawer'
 import { formatPrice } from '@/app/lib/utils/formatPrice'
 import { createBrowserClient } from '@/lib/supabase/client'
-
-interface SearchResult {
-  id: string
-  name: string
-  price: number
-  image_url: string | null
-  images: string[]
-  discount_percent: number | null
-  in_stock: boolean
-  matchType?: 'exact' | 'partial' | 'fuzzy'
-}
+// Import the new premium SearchDropdown component
+import SearchDropdown, { SearchResult } from '@/app/components/layout/SearchDropdown'
 
 interface Notification {
   id: string
@@ -40,46 +38,38 @@ function useDebounce<T>(value: T, delay: number): T {
   return debounced
 }
 
-function highlightMatch(text: string, query: string) {
-  if (!query.trim()) return text
-  const safe = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const regex = new RegExp(`(${safe})`, 'gi')
-  const parts = text.split(regex)
-  return parts.map((part, i) =>
-    regex.test(part) ? (
-      <mark key={i} className="bg-bushal-copper/20 text-bushal-forest rounded px-0.5 font-semibold">
-        {part}
-      </mark>
-    ) : part
-  )
-}
-
 export default function Navbar() {
   const { items } = useCart()
   const { user, signOut } = useAuth()
   const supabase = createBrowserClient()
+  
   const [cartOpen, setCartOpen] = useState(false)
   const [prevCount, setPrevCount] = useState(0)
   const [cartBump, setCartBump] = useState(false)
   const cartCount = items.reduce((sum, item) => sum + item.quantity, 0)
+  
   const [scrolled, setScrolled] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<SearchResult[]>([])
   const [searching, setSearching] = useState(false)
   const [showResults, setShowResults] = useState(false)
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false)
+  
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [notifOpen, setNotifOpen] = useState(false)
   const [userRole, setUserRole] = useState<string | null>(null)
   const [notifLoading, setNotifLoading] = useState(true)
   const [searchFocused, setSearchFocused] = useState(false)
+  
   const notifRef = useRef<HTMLDivElement>(null)
   const debouncedQuery = useDebounce(query, 280)
   const searchRef = useRef<HTMLDivElement>(null)
   const mobileSearchRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const mobileInputRef = useRef<HTMLInputElement>(null)
+  
   const unreadCount = notifications.filter((n) => !n.read).length
   const isAdmin = userRole === 'admin'
 
@@ -123,17 +113,20 @@ export default function Navbar() {
         .select('role')
         .eq('id', user.id)
         .single()
+      
       const admin = profile?.role === 'admin'
       let q = supabase
         .from('notifications')
         .select('id, type, title, body, read, created_at, order_id, comment_id')
         .order('created_at', { ascending: false })
         .limit(20)
+      
       if (admin) {
         q = q.is('user_id', null)
       } else {
         q = q.eq('user_id', user.id)
       }
+      
       const { data, error } = await q
       if (error) {
         console.error('Error fetching notifications:', error)
@@ -266,87 +259,10 @@ export default function Navbar() {
     setResults([])
   }, [])
 
-  const SearchDropdown = () => {
-    if (!showResults) return null
-    return (
-      <div className="absolute z-50 bg-bushal-surface rounded-2xl border border-bushal-border shadow-2xl top-full left-0 right-0 mt-3 overflow-hidden animate-scale-in">
-        {results.length === 0 ? (
-          <div className="px-6 py-10 text-center">
-            <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-bushal-ivoryDeep flex items-center justify-center">
-              <svg className="w-6 h-6 text-bushal-inkSoft" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-            </div>
-            <p className="text-sm font-medium text-bushal-ink mb-1">No results for "{query}"</p>
-            <p className="text-xs text-bushal-inkSoft">Try different keywords or browse all products</p>
-            <Link href="/dashboard" onClick={handleResultClick} className="inline-flex items-center gap-1 mt-4 text-xs font-semibold text-bushal-copper hover:text-bushal-copperLight">
-              Browse all →
-            </Link>
-          </div>
-        ) : (
-          <>
-            <div className="px-4 pt-3 pb-2 border-b border-bushal-border">
-              <p className="text-[11px] text-bushal-inkSoft font-semibold uppercase tracking-wide">
-                {results.length} result{results.length !== 1 ? 's' : ''}
-              </p>
-            </div>
-            <div className="divide-y divide-bushal-ivory max-h-[420px] overflow-y-auto no-scrollbar">
-              {results.map((product) => {
-                const cover = (Array.isArray(product.images) && product.images[0]) || product.image_url
-                const dp = product.discount_percent ? product.price * (1 - product.discount_percent / 100) : null
-                return (
-                  <Link
-                    key={product.id}
-                    href={`/product/${product.id}`}
-                    onClick={handleResultClick}
-                    className="flex items-center gap-4 px-4 py-3 hover:bg-bushal-ivoryDeep transition-colors group"
-                  >
-                    <div className="w-12 h-12 rounded-xl overflow-hidden bg-bushal-ivoryDeep border border-bushal-border flex-shrink-0">
-                      {cover ? (
-                        <img src={cover} alt="" className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-bushal-borderMid">
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                          </svg>
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-bushal-ink group-hover:text-bushal-forest transition-colors line-clamp-1">
-                        {highlightMatch(product.name, query)}
-                      </p>
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className="text-xs font-bold text-bushal-copper">{formatPrice(dp ?? product.price)}</span>
-                        {dp && <span className="text-[11px] text-bushal-inkSoft line-through">{formatPrice(product.price)}</span>}
-                      </div>
-                    </div>
-                    <svg className="w-4 h-4 text-bushal-borderMid group-hover:text-bushal-copper transition-colors flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  </Link>
-                )
-              })}
-            </div>
-            <Link
-              href={`/dashboard?q=${encodeURIComponent(query)}`}
-              onClick={handleResultClick}
-              className="flex items-center justify-center gap-1.5 px-4 py-3 text-xs font-semibold text-bushal-copper hover:bg-bushal-ivoryDeep transition-colors border-t border-bushal-border"
-            >
-              See all results →
-            </Link>
-          </>
-        )}
-      </div>
-    )
-  }
-
   const NotificationPanel = () => (
     <div className={cn(
       "absolute right-0 top-full mt-2 bg-bushal-surface rounded-2xl border border-bushal-border shadow-2xl z-50 overflow-hidden animate-scale-in",
-      // FIXED: Proper width constraints
       "w-[calc(100vw-5rem)] max-w-[calc(100vw-2rem)] sm:w-96",
-      // FIXED: Height constraint using viewport height
       "max-h-[calc(100vh-300px)]",
       "flex flex-col"
     )}>
@@ -363,8 +279,6 @@ export default function Navbar() {
           </button>
         )}
       </div>
-      
-      {/* FIXED: Scrollable content area */}
       <div className="overflow-y-auto flex-1 min-h-0 no-scrollbar">
         {notifLoading ? (
           <div className="px-4 py-10 text-center">
@@ -499,13 +413,20 @@ export default function Navbar() {
                       </svg>
                     </button>
                   )}
-                  <SearchDropdown />
+                  {/* Integrated Premium SearchDropdown */}
+                  <SearchDropdown 
+                    results={results}
+                    query={query}
+                    showResults={showResults}
+                    searching={searching}
+                    onResultClick={handleResultClick}
+                  />
                 </div>
               </div>
 
               {/* Right Actions */}
               <div className="flex items-center gap-2">
-                {/* MOBILE: Minimal top bar - only search, notif, hamburger */}
+                {/* MOBILE: Minimal top bar */}
                 <div className="flex items-center gap-1 md:hidden">
                   <button
                     onClick={() => { setMobileSearchOpen((v) => !v); setTimeout(() => mobileInputRef.current?.focus(), 50) }}
@@ -516,8 +437,6 @@ export default function Navbar() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                     </svg>
                   </button>
-                  
-                  {/* Only notifications in top bar on mobile */}
                   {user && (
                     <div className="relative" ref={notifRef}>
                       <button
@@ -537,8 +456,6 @@ export default function Navbar() {
                       {notifOpen && <NotificationPanel />}
                     </div>
                   )}
-                  
-                  {/* Hamburger for mobile menu */}
                   <button
                     onClick={() => setMobileMenuOpen((v) => !v)}
                     className="p-2.5 rounded-xl transition-all duration-200 hover:scale-110 text-white/70 hover:text-white hover:bg-white/10"
@@ -554,7 +471,6 @@ export default function Navbar() {
 
                 {/* DESKTOP: Full navigation */}
                 <div className="hidden md:flex items-center gap-2">
-                  {/* Cart Icon - Hidden for Admins */}
                   {!isAdmin && (
                     <button
                       onClick={() => setCartOpen(true)}
@@ -574,7 +490,6 @@ export default function Navbar() {
                       )}
                     </button>
                   )}
-
                   {user && (
                     <div className="relative" ref={notifRef}>
                       <button
@@ -594,8 +509,6 @@ export default function Navbar() {
                       {notifOpen && <NotificationPanel />}
                     </div>
                   )}
-
-                  {/* Desktop Auth Links */}
                   <div className="flex items-center gap-2 ml-2">
                     {user ? (
                       <>
@@ -662,7 +575,14 @@ export default function Navbar() {
               </div>
             )}
           </div>
-          <SearchDropdown />
+          {/* Integrated Premium SearchDropdown for Mobile */}
+          <SearchDropdown 
+            results={results}
+            query={query}
+            showResults={showResults}
+            searching={searching}
+            onResultClick={handleResultClick}
+          />
         </div>
       )}
 

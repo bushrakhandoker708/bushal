@@ -1,4 +1,9 @@
 // app/components/admin/AdminProductsClient.tsx
+// Updated the Admin Products client component to integrate 
+// the new DeleteConfirmationModal. Replaced the native 
+// browser confirm() dialog with a premium, accessible modal 
+// that allows admins to choose what related data to keep 
+// or delete.
 
 'use client'
 
@@ -9,6 +14,8 @@ import { Product } from '@/app/types/product'
 import { cn } from '@/app/lib/utils/cn'
 import { useRouter } from 'next/navigation'
 import { useToast } from '@/app/components/ui/Toast'
+// Import the new modal and its options type
+import DeleteConfirmationModal, { DeleteOptions } from '@/app/components/ui/DeleteConfirmationModal'
 
 interface Props {
   products: Product[]
@@ -22,6 +29,7 @@ type SortDir = 'asc' | 'desc'
 export default function AdminProductsClient({ products, categories }: Props) {
   const router = useRouter()
   const { toast } = useToast()
+  
   const [search, setSearch] = useState('')
   const [stockFilter, setStockFilter] = useState<StockFilter>('all')
   const [categoryFilter, setCategoryFilter] = useState('all')
@@ -29,9 +37,12 @@ export default function AdminProductsClient({ products, categories }: Props) {
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [deleting, setDeleting] = useState<string | null>(null)
 
+  // New state for the custom delete modal
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [productToDelete, setProductToDelete] = useState<{ id: string; name: string } | null>(null)
+
   const filtered = useMemo(() => {
     let list = [...products]
-    
     if (search.trim()) {
       const q = search.trim().toLowerCase()
       list = list.filter(
@@ -41,26 +52,22 @@ export default function AdminProductsClient({ products, categories }: Props) {
           (p.description ?? '').toLowerCase().includes(q)
       )
     }
-
     if (stockFilter === 'in_stock') list = list.filter((p) => p.in_stock && (p.stock_quantity ?? 0) > 5)
     if (stockFilter === 'out_of_stock') list = list.filter((p) => !p.in_stock)
     if (stockFilter === 'low_stock') list = list.filter((p) => p.in_stock && (p.stock_quantity ?? 0) > 0 && (p.stock_quantity ?? 0) <= 5)
     if (categoryFilter !== 'all') list = list.filter((p) => p.category === categoryFilter)
-
+    
     list.sort((a, b) => {
       let va: any = a[sortKey as keyof Product]
       let vb: any = b[sortKey as keyof Product]
-      
       if (sortKey === 'name' || sortKey === 'category') {
         va = (va ?? '').toLowerCase()
         vb = (vb ?? '').toLowerCase()
       }
-      
       if (va < vb) return sortDir === 'asc' ? -1 : 1
       if (va > vb) return sortDir === 'asc' ? 1 : -1
       return 0
     })
-
     return list
   }, [products, search, stockFilter, categoryFilter, sortKey, sortDir])
 
@@ -69,18 +76,28 @@ export default function AdminProductsClient({ products, categories }: Props) {
     else { setSortKey(key); setSortDir('asc') }
   }
 
-  const handleDelete = async (id: string, productName: string) => {
-    if (!confirm(`Delete "${productName}"? This cannot be undone.`)) return
-    
-    setDeleting(id)
-    
-    try {
-      const res = await fetch(`/api/products/${id}`, { method: 'DELETE' })
-      const data = await res.json()
+  // Updated handleDelete: Opens the modal instead of using native confirm()
+  const handleDelete = (id: string, productName: string) => {
+    setProductToDelete({ id, name: productName })
+    setDeleteModalOpen(true)
+  }
 
+  // New confirmDelete function: Handles the actual API call with the selected options
+  const confirmDelete = async (options: DeleteOptions) => {
+    if (!productToDelete) return
+    
+    setDeleting(productToDelete.id)
+    try {
+      const res = await fetch(`/api/products/${productToDelete.id}`, { 
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(options) // Pass the admin's choices to the API
+      })
+      
+      const data = await res.json()
+      
       if (!res.ok) {
         if (res.status === 409) {
-          // Product has orders - show friendly message
           toast('Cannot delete product', 'warning', 5000)
           setTimeout(() => {
             toast('This product has been ordered. Set stock to 0 instead.', 'info', 4000)
@@ -90,7 +107,7 @@ export default function AdminProductsClient({ products, categories }: Props) {
         }
         return
       }
-
+      
       toast('Product deleted successfully', 'success', 3000)
       router.refresh()
     } catch (err) {
@@ -98,6 +115,8 @@ export default function AdminProductsClient({ products, categories }: Props) {
       toast('Failed to delete product', 'error', 4000)
     } finally {
       setDeleting(null)
+      setDeleteModalOpen(false)
+      setProductToDelete(null)
     }
   }
 
@@ -237,7 +256,6 @@ export default function AdminProductsClient({ products, categories }: Props) {
                   const isOut = qty === 0
                   const isLow = qty > 0 && qty <= 5
                   const cover = (Array.isArray(product.images) && product.images[0]) || product.image_url
-                  
                   return (
                     <tr key={product.id} className="hover:bg-bushal-ivoryDeep/50 transition-colors">
                       <td className="px-4 py-3.5">
@@ -335,7 +353,6 @@ export default function AdminProductsClient({ products, categories }: Props) {
             const isOut = qty === 0
             const isLow = qty > 0 && qty <= 5
             const cover = (Array.isArray(product.images) && product.images[0]) || product.image_url
-            
             return (
               <div key={product.id} className="bg-bushal-surface rounded-2xl border border-bushal-border p-4">
                 <div className="flex items-start gap-3">
@@ -384,6 +401,18 @@ export default function AdminProductsClient({ products, categories }: Props) {
           })
         )}
       </div>
+
+      {/* Custom Delete Confirmation Modal */}
+      <DeleteConfirmationModal
+        isOpen={deleteModalOpen}
+        onClose={() => {
+          setDeleteModalOpen(false)
+          setProductToDelete(null)
+        }}
+        onConfirm={confirmDelete}
+        productName={productToDelete?.name || ''}
+        loading={deleting !== null}
+      />
     </div>
   )
 }

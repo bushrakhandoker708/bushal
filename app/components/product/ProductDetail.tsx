@@ -1,12 +1,25 @@
 // app/components/product/ProductDetail.tsx
+// Updated ProductDetail to integrate the new premium features:
+// 1. Replaced the custom CSS zoom with the new 'ImageZoom' component 
+//    for a buttery-smooth, Apple-like magnification experience.
+// 2. Integrated the 'useRecentlyViewed' hook to automatically track 
+//    product views in localStorage for the recommendation engine.
+// 3. Added the 'RecentlyViewedCarousel' at the bottom of the page 
+//    to encourage continued browsing and increase session duration.
 
 'use client'
+
 import { useCart } from '@/app/hooks/useCart'
+import { useRecentlyViewed } from '@/app/hooks/useRecentlyViewed'
 import { Product } from '@/app/types/product'
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { formatPrice } from '@/app/lib/utils/formatPrice'
 import { cn } from '@/app/lib/utils/cn'
 import { getStockStatus } from '@/app/lib/utils/stockStatus'
+
+// Import new premium components
+import ImageZoom from './ImageZoom'
+import RecentlyViewedCarousel from './RecentlyViewedCarousel'
 
 interface Props {
   product: Product
@@ -15,20 +28,7 @@ interface Props {
 // ─── Image Gallery ────────────────────────────────────────────────────────────
 function ImageGallery({ images, name }: { images: string[]; name: string }) {
   const [active, setActive] = useState(0)
-  const [zoomed, setZoomed] = useState(false)
-  const [mousePos, setMousePos] = useState({ x: 50, y: 50 })
   const imgRef = useRef<HTMLDivElement>(null)
-
-  const handleMouseMove = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
-      if (!zoomed || !imgRef.current) return
-      const rect = imgRef.current.getBoundingClientRect()
-      const x = ((e.clientX - rect.left) / rect.width) * 100
-      const y = ((e.clientY - rect.top) / rect.height) * 100
-      setMousePos({ x, y })
-    },
-    [zoomed]
-  )
 
   const prev = () => setActive((a) => (a - 1 + images.length) % images.length)
   const next = () => setActive((a) => (a + 1) % images.length)
@@ -37,12 +37,7 @@ function ImageGallery({ images, name }: { images: string[]; name: string }) {
     return (
       <div className="rounded-2xl bg-bushal-ivoryDeep aspect-[4/5] flex flex-col items-center justify-center gap-3 border border-bushal-border text-bushal-borderMid">
         <svg className="w-16 h-16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={1}
-            d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-          />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
         </svg>
         <span className="text-sm text-bushal-inkSoft">No image available</span>
       </div>
@@ -75,46 +70,24 @@ function ImageGallery({ images, name }: { images: string[]; name: string }) {
         </div>
       )}
 
-      {/* Main image */}
+      {/* Main image with Premium Zoom */}
       <div className="flex-1 flex flex-col gap-3">
         <div
           ref={imgRef}
-          className={cn(
-            'relative rounded-2xl overflow-hidden bg-bushal-ivoryDeep aspect-[4/5] border border-bushal-border/60',
-            zoomed ? 'cursor-crosshair' : 'cursor-zoom-in'
-          )}
-          onMouseMove={handleMouseMove}
-          onClick={() => setZoomed((z) => !z)}
-          onMouseLeave={() => setZoomed(false)}
+          className="relative rounded-2xl overflow-hidden bg-bushal-ivoryDeep aspect-[4/5] border border-bushal-border/60 group"
         >
-          <img
-            src={images[active]}
-            alt={`${name} — view ${active + 1}`}
-            className={cn(
-              'w-full h-full object-cover transition-transform duration-100',
-              zoomed ? 'scale-[2]' : 'scale-100 hover:scale-[1.03] transition-transform duration-700 ease-out'
-            )}
-            style={
-              zoomed
-                ? { transformOrigin: `${mousePos.x}% ${mousePos.y}%` }
-                : undefined
-            }
-            draggable={false}
+          {/* Replaced custom zoom logic with the new ImageZoom component */}
+          <ImageZoom 
+            src={images[active]} 
+            alt={`${name} — view ${active + 1}`} 
           />
-
-          {/* Zoom hint */}
-          {!zoomed && (
-            <div className="absolute bottom-3 left-3 bg-bushal-forest/70 backdrop-blur-sm text-bushal-ivory text-[10px] font-semibold tracking-widest uppercase px-2.5 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none">
-              Click to zoom
-            </div>
-          )}
 
           {/* Nav arrows */}
           {images.length > 1 && (
             <>
               <button
                 onClick={(e) => { e.stopPropagation(); prev() }}
-                className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-bushal-surface/90 backdrop-blur-sm shadow-md flex items-center justify-center text-bushal-forest hover:bg-bushal-surface hover:scale-110 transition-all active:scale-95 opacity-0 [.group:hover_&]:opacity-100"
+                className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-bushal-surface/90 backdrop-blur-sm shadow-md flex items-center justify-center text-bushal-forest hover:bg-bushal-surface hover:scale-110 transition-all active:scale-95 opacity-0 group-hover:opacity-100"
                 aria-label="Previous image"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -123,7 +96,7 @@ function ImageGallery({ images, name }: { images: string[]; name: string }) {
               </button>
               <button
                 onClick={(e) => { e.stopPropagation(); next() }}
-                className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-bushal-surface/90 backdrop-blur-sm shadow-md flex items-center justify-center text-bushal-forest hover:bg-bushal-surface hover:scale-110 transition-all active:scale-95 opacity-0 [.group:hover_&]:opacity-100"
+                className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-bushal-surface/90 backdrop-blur-sm shadow-md flex items-center justify-center text-bushal-forest hover:bg-bushal-surface hover:scale-110 transition-all active:scale-95 opacity-0 group-hover:opacity-100"
                 aria-label="Next image"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -207,7 +180,7 @@ function TrustBadge({ icon, label, sub }: { icon: React.ReactNode; label: string
   )
 }
 
-// ── Quantity Stepper ─────────────────────────────────────────────────────────
+// ─ Quantity Stepper ─────────────────────────────────────────────────────────
 function QuantityStepper({
   value,
   onDecrement,
@@ -224,7 +197,6 @@ function QuantityStepper({
       ? 'w-9 h-9 text-base'
       : 'w-11 h-11 text-lg'
   const numClass = size === 'sm' ? 'w-8 text-sm' : 'w-10 text-base'
-
   return (
     <div className="flex items-center border border-bushal-border rounded-xl overflow-hidden bg-bushal-surface">
       <button
@@ -251,11 +223,20 @@ function QuantityStepper({
   )
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────────
+// ─── Main Component ──────────────────────────────────────────────────────────
 export default function ProductDetail({ product }: Props) {
   const { addItem } = useCart()
+  const { addProduct } = useRecentlyViewed()
+  
   const [quantity, setQuantity] = useState(1)
   const [added, setAdded] = useState(false)
+
+  // Track this product in the Recently Viewed history
+  useEffect(() => {
+    if (product) {
+      addProduct(product)
+    }
+  }, [product.id, addProduct])
 
   const discountedPrice = product.discount_percent
     ? product.price * (1 - product.discount_percent / 100)
@@ -459,7 +440,6 @@ export default function ProductDetail({ product }: Props) {
             {stockDisplay.status === 'out_of_stock' ? 'Out of stock' : stockDisplay.status === 'low_stock' ? `Only ${product.stock_quantity} left` : 'In stock'}
           </span>
         </div>
-
         <div className="flex items-center gap-3">
           <QuantityStepper
             value={quantity}
@@ -492,6 +472,12 @@ export default function ProductDetail({ product }: Props) {
             )}
           </button>
         </div>
+      </div>
+
+      {/* ── Recently Viewed Carousel ─ */}
+      {/* Placed at the bottom to encourage continued browsing */}
+      <div className="col-span-1 lg:col-span-2 mt-16 lg:mt-24">
+        <RecentlyViewedCarousel currentProductId={product.id} />
       </div>
     </div>
   )

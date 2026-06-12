@@ -1,10 +1,19 @@
 // app/components/product/ProductCard.tsx
+
+// Updated ProductCard to integrate the new Wishlist and Compare 
+// Zustand hooks. Replaces the local `isWished` state with 
+// persistent global state. Adds a premium "Compare" toggle 
+// button and ensures smooth micro-interactions.
+
 'use client'
+
 import Link from 'next/link'
 import { useState } from 'react'
 import { formatPrice } from '@/app/lib/utils/formatPrice'
 import { Product } from '@/app/types/product'
 import { useCart } from '@/app/hooks/useCart'
+import { useWishlist } from '@/app/hooks/useWishList'
+import { useCompare } from '@/app/hooks/useCompare'
 import { cn } from '@/app/lib/utils/cn'
 import ProductQuickView from './ProductQuickView'
 import { getStockStatus } from '@/app/lib/utils/stockStatus'
@@ -16,18 +25,22 @@ interface Props {
 
 export default function ProductCard({ product, index = 0 }: Props) {
   const { addItem } = useCart()
+  const { toggleItem: toggleWishlist, isInWishlist } = useWishlist()
+  const { toggleItem: toggleCompare, isInCompare } = useCompare()
+  
   const [added, setAdded] = useState(false)
   const [imgIndex, setImgIndex] = useState(0)
-  const [isWished, setIsWished] = useState(false)
   const [quickViewOpen, setQuickViewOpen] = useState(false)
   
+  // Derive state from global stores
+  const isWished = isInWishlist(product.id)
+  const isCompared = isInCompare(product.id)
+
   const discountedPrice = product.discount_percent
     ? product.price * (1 - product.discount_percent / 100)
     : null
-    
   const images = product.images?.length ? product.images : product.image_url ? [product.image_url] : []
   
-  // Get dynamic stock status
   const stockDisplay = getStockStatus(product.stock_quantity)
 
   const handleAdd = (e: React.MouseEvent) => {
@@ -37,6 +50,18 @@ export default function ProductCard({ product, index = 0 }: Props) {
     addItem(product)
     setAdded(true)
     setTimeout(() => setAdded(false), 2000)
+  }
+
+  const handleWishlistToggle = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    toggleWishlist(product)
+  }
+
+  const handleCompareToggle = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    toggleCompare(product)
   }
 
   return (
@@ -57,7 +82,7 @@ export default function ProductCard({ product, index = 0 }: Props) {
           {images.length > 0 ? (
             <>
               <img
-                src={images[0]}
+                src={images[0] ?? undefined}
                 alt={product.name}
                 className={cn(
                   'absolute inset-0 w-full h-full object-cover transition-all duration-1000 ease-out',
@@ -66,7 +91,7 @@ export default function ProductCard({ product, index = 0 }: Props) {
               />
               {images.length > 1 && (
                 <img
-                  src={images[1]}
+                  src={images[1] ?? undefined}
                   alt={product.name}
                   className={cn(
                     'absolute inset-0 w-full h-full object-cover transition-all duration-1000 ease-out',
@@ -106,26 +131,42 @@ export default function ProductCard({ product, index = 0 }: Props) {
           </div>
         ) : null}
 
-        {/* Wishlist Button */}
+        {/* Wishlist Button (Top Right) */}
         <button
-          onClick={(e) => { e.preventDefault(); e.stopPropagation(); setIsWished(!isWished) }}
+          onClick={handleWishlistToggle}
           className={cn(
             "absolute top-4 right-4 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 z-10 backdrop-blur-md",
             isWished
               ? "bg-bushal-copper text-white scale-110 shadow-lg shadow-bushal-copper/30"
               : "bg-bushal-ivory/80 text-bushal-forest hover:bg-bushal-ivory hover:scale-110"
           )}
-          aria-label="Add to wishlist"
+          aria-label={isWished ? "Remove from wishlist" : "Add to wishlist"}
         >
           <svg className="w-4 h-4" fill={isWished ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
           </svg>
         </button>
 
-        {/* Quick View Button */}
+        {/* Compare Button (Bottom Left) */}
+        <button
+          onClick={handleCompareToggle}
+          className={cn(
+            "absolute bottom-5 left-4 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 z-10 backdrop-blur-md",
+            isCompared 
+              ? "bg-bushal-forest text-white scale-110 shadow-lg shadow-bushal-forest/30"
+              : "bg-bushal-ivory/90 text-bushal-forest hover:bg-bushal-ivory hover:scale-110 opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 shadow-lg"
+          )}
+          aria-label={isCompared ? "Remove from compare" : "Add to compare"}
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
+          </svg>
+        </button>
+
+        {/* Quick View Button (Bottom Right) */}
         <button
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); setQuickViewOpen(true) }}
-          className="absolute bottom-5 left-4 w-10 h-10 rounded-full flex items-center justify-center bg-bushal-ivory/90 backdrop-blur-md text-bushal-forest hover:bg-bushal-ivory hover:scale-110 transition-all duration-300 z-10 opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 shadow-lg"
+          className="absolute bottom-5 right-4 w-10 h-10 rounded-full flex items-center justify-center bg-bushal-ivory/90 backdrop-blur-md text-bushal-forest hover:bg-bushal-ivory hover:scale-110 transition-all duration-300 z-10 opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 shadow-lg"
           aria-label="Quick view"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
