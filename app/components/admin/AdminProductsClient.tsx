@@ -1,9 +1,9 @@
 // app/components/admin/AdminProductsClient.tsx
+
 // Updated the Admin Products client component to integrate 
-// the new DeleteConfirmationModal. Replaced the native 
-// browser confirm() dialog with a premium, accessible modal 
-// that allows admins to choose what related data to keep 
-// or delete.
+// the new DeleteConfirmationModal with the "Keep Rating" option.
+// It also ensures that soft-deleted products are filtered out 
+// from the admin view so they don't appear after deletion.
 
 'use client'
 
@@ -41,8 +41,14 @@ export default function AdminProductsClient({ products, categories }: Props) {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [productToDelete, setProductToDelete] = useState<{ id: string; name: string } | null>(null)
 
+  // Filter out soft-deleted products from the admin view
+  // FIX: Use type assertion to handle is_deleted property
+  const activeProducts = useMemo(() => {
+    return products.filter(p => !(p as any).is_deleted)
+  }, [products])
+
   const filtered = useMemo(() => {
-    let list = [...products]
+    let list = [...activeProducts]
     if (search.trim()) {
       const q = search.trim().toLowerCase()
       list = list.filter(
@@ -69,7 +75,7 @@ export default function AdminProductsClient({ products, categories }: Props) {
       return 0
     })
     return list
-  }, [products, search, stockFilter, categoryFilter, sortKey, sortDir])
+  }, [activeProducts, search, stockFilter, categoryFilter, sortKey, sortDir])
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
@@ -133,10 +139,10 @@ export default function AdminProductsClient({ products, categories }: Props) {
     )
 
   const stockCounts = {
-    all: products.length,
-    in_stock: products.filter((p) => p.in_stock && (p.stock_quantity ?? 0) > 5).length,
-    low_stock: products.filter((p) => p.in_stock && (p.stock_quantity ?? 0) > 0 && (p.stock_quantity ?? 0) <= 5).length,
-    out_of_stock: products.filter((p) => !p.in_stock).length,
+    all: activeProducts.length,
+    in_stock: activeProducts.filter((p) => p.in_stock && (p.stock_quantity ?? 0) > 5).length,
+    low_stock: activeProducts.filter((p) => p.in_stock && (p.stock_quantity ?? 0) > 0 && (p.stock_quantity ?? 0) <= 5).length,
+    out_of_stock: activeProducts.filter((p) => !p.in_stock).length,
   }
 
   const stockFilterOptions: { value: StockFilter; label: string; color: string; activeColor: string }[] = [
@@ -153,7 +159,7 @@ export default function AdminProductsClient({ products, categories }: Props) {
         <div>
           <h1 className="text-2xl font-bold text-bushal-forest">Products</h1>
           <p className="text-sm text-bushal-inkSoft mt-0.5">
-            Showing {filtered.length} of {products.length}
+            Showing {filtered.length} of {activeProducts.length}
           </p>
         </div>
         <Link
@@ -360,7 +366,7 @@ export default function AdminProductsClient({ products, categories }: Props) {
                     {cover ? (
                       <img src={cover} alt="" className="w-full h-full object-cover" />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center text-bushal-borderMid text-sm">📦</div>
+                      <div className="w-full h-full flex items-center justify-center text-bushal-borderMid text-sm"></div>
                     )}
                   </div>
                   <div className="flex-1 min-w-0">

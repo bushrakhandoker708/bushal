@@ -1,7 +1,7 @@
 // app/api/products/[id]/route.ts
 // Handles GET, PUT, and DELETE for a specific product.
 // The DELETE method now accepts options to keep or remove 
-// related sales data, analytics, and reviews. It soft-deletes 
+// related sales data, analytics, and ratings. It soft-deletes 
 // the product to preserve referential integrity with orders, 
 // and anonymizes the product details if the admin chooses 
 // not to keep sales/analytics data.
@@ -22,6 +22,7 @@ export async function GET(_req: Request, { params }: Params) {
     .from('products')
     .select(`*, comments (*)`)
     .eq('id', params.id)
+    .is('is_deleted', false) // Ensure we don't fetch deleted products
     .single()
 
   if (error || !data) return NextResponse.json({ error: 'Product not found' }, { status: 404 })
@@ -76,23 +77,13 @@ export async function DELETE(_req: Request, { params }: Params) {
   const { 
     keepSalesData = true, 
     keepAnalytics = true, 
-    keepReviews = true 
+    keepRating = true // Changed from keepReviews
   } = body
 
   try {
-    // 2. Fetch the product to get its original name for the audit log
-    const { data: product, error: fetchError } = await supabase
-      .from('products')
-      .select('name')
-      .eq('id', params.id)
-      .single()
-
-    if (fetchError || !product) {
-      return NextResponse.json({ error: 'Product not found' }, { status: 404 })
-    }
-
-    // 3. Handle Reviews/Comments deletion
-    if (!keepReviews) {
+    // 2. Handle Ratings (Comments) deletion
+    if (!keepRating) {
+      // Delete all comments/ratings associated with this product
       const { error: commentsError } = await supabase
         .from('comments')
         .delete()
@@ -103,17 +94,14 @@ export async function DELETE(_req: Request, { params }: Params) {
       }
     }
 
-    // 4. Determine if we need to anonymize the product
-    // Since order_items has a foreign key to products, we cannot hard delete 
-    // the product if it has been ordered. We must soft-delete it.
-    // If the admin chose NOT to keep sales data/analytics, we anonymize the product 
-    // so it doesn't skew future reports or appear in search.
+    // 3. Determine if we need to anonymize the product
+    // If the admin chose NOT to keep sales data or analytics, we anonymize the product 
+    // so it doesn't skew future reports or appear in search/analytics.
     const shouldAnonymize = !keepSalesData || !keepAnalytics
     
     const updatePayload: any = {
       is_deleted: true,
       deleted_at: new Date().toISOString(),
-      deleted_by: auth.userId,
       in_stock: false,
       stock_quantity: 0,
     }
@@ -127,7 +115,7 @@ export async function DELETE(_req: Request, { params }: Params) {
       updatePayload.category = null
     }
 
-    // 5. Execute the soft-delete update
+    // 4. Execute the soft-delete update
     const { error: updateError } = await supabase
       .from('products')
       .update(updatePayload)
@@ -136,23 +124,6 @@ export async function DELETE(_req: Request, { params }: Params) {
     if (updateError) {
       console.error('Error soft-deleting product:', updateError)
       return NextResponse.json({ error: updateError.message }, { status: 500 })
-    }
-
-    // 6. Log the deletion action for audit purposes
-    const { error: logError } = await supabase
-      .from('product_deletion_log')
-      .insert({
-        product_id: params.id,
-        product_name: product.name,
-        deleted_by: auth.userId,
-        keep_sales_data: keepSalesData,
-        keep_analytics: keepAnalytics,
-        keep_reviews: keepReviews,
-      })
-
-    if (logError) {
-      console.error('Error logging deletion:', logError)
-      // Don't fail the request if logging fails, just warn
     }
 
     return NextResponse.json({ 
@@ -167,3 +138,4 @@ export async function DELETE(_req: Request, { params }: Params) {
     return NextResponse.json({ error: 'Failed to delete product' }, { status: 500 })
   }
 }
+

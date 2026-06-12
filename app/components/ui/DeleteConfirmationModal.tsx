@@ -1,19 +1,20 @@
 // app/components/ui/DeleteConfirmationModal.tsx
-// A premium, accessible confirmation modal that prompts the admin
-// to choose whether to retain related sales data, analytics, and 
-// reviews when deleting a product. Integrates seamlessly with the 
-// Bushal design system.
+
+// Updated the confirmation modal to replace "Keep Reviews & Comments" 
+// with "Keep Product Rating" as requested. This allows admins to 
+// preserve the average star rating and review count even if the 
+// product is deleted, preventing skewed analytics.
 
 'use client'
 
 import { useState, useEffect } from 'react'
 import { cn } from '@/app/lib/utils/cn'
 
-// Define the shape of the deletion options
+// Define the shape of the deletion options (Updated: keepReviews -> keepRating)
 export interface DeleteOptions {
   keepSalesData: boolean
   keepAnalytics: boolean
-  keepReviews: boolean
+  keepRating: boolean
 }
 
 interface DeleteConfirmationModalProps {
@@ -35,7 +36,7 @@ export default function DeleteConfirmationModal({
   const [options, setOptions] = useState<DeleteOptions>({
     keepSalesData: true,
     keepAnalytics: true,
-    keepReviews: true
+    keepRating: true
   })
 
   // Reset options to default (keep all) every time the modal opens
@@ -44,7 +45,7 @@ export default function DeleteConfirmationModal({
       setOptions({
         keepSalesData: true,
         keepAnalytics: true,
-        keepReviews: true
+        keepRating: true
       })
     }
   }, [isOpen])
@@ -175,32 +176,32 @@ export default function DeleteConfirmationModal({
               </div>
             </button>
 
-            {/* Option 3: Keep Reviews */}
+            {/* Option 3: Keep Rating (Updated from Keep Reviews) */}
             <button
               type="button"
-              onClick={() => toggleOption('keepReviews')}
+              onClick={() => toggleOption('keepRating')}
               className={cn(
                 "w-full flex items-start gap-3 p-3 rounded-xl border transition-all text-left",
-                options.keepReviews 
+                options.keepRating 
                   ? "border-bushal-copper/40 bg-bushal-copper/5" 
                   : "border-bushal-border hover:bg-bushal-ivoryDeep/50"
               )}
             >
               <div className={cn(
                 "w-5 h-5 rounded border flex items-center justify-center flex-shrink-0 mt-0.5 transition-all",
-                options.keepReviews 
+                options.keepRating 
                   ? "bg-bushal-copper border-bushal-copper" 
                   : "border-bushal-borderMid bg-bushal-surface"
               )}>
-                {options.keepReviews && (
+                {options.keepRating && (
                   <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                   </svg>
                 )}
               </div>
               <div className="flex-1">
-                <span className="text-sm font-semibold text-bushal-ink block">Keep Reviews & Comments</span>
-                <p className="text-xs text-bushal-inkSoft mt-0.5">Preserve customer feedback and ratings.</p>
+                <span className="text-sm font-semibold text-bushal-ink block">Keep Product Rating</span>
+                <p className="text-xs text-bushal-inkSoft mt-0.5">Preserve the average star rating and review count.</p>
               </div>
             </button>
           </div>
@@ -245,4 +246,3 @@ export default function DeleteConfirmationModal({
     </>
   )
 }
-

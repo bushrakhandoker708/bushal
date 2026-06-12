@@ -1,143 +1,132 @@
 // app/(admin)/admin/page.tsx
+
+// Server component for the Admin Overview page.
+// Computes all complex metrics (daily trends, chart segments, stats)
+// and passes them to the AdminOverviewClient.
+
 import { createServerClient } from '@/lib/supabase/server'
+import { requireAdmin } from '@/lib/auth'
 import AdminOverviewClient from '@/app/components/admin/AdminOverviewClient'
 
-export const dynamic = 'force-dynamic'
-export const revalidate = 0
+export default async function AdminOverviewPage() {
+  // 1. Ensure the user is an admin
+  const auth = await requireAdmin()
+  if (!auth.success) return auth.response
 
-export default async function AdminDashboardPage() {
-  const supabase =  await createServerClient()
+  const supabase = await auth.supabase
 
-  const [
-    productsResult,
-    ordersResult,
-    usersResult,
-    recentOrdersResult,
-  ] = await Promise.all([
-    supabase
-      .from('products')
-      .select('id, name, price, stock_quantity, in_stock, images, image_url, category, created_at'),
-    supabase
-      .from('orders')
-      .select('id, total, status, delivery_status, created_at, user_id'),
-    supabase
-      .from('profiles')
-      .select('id', { count: 'exact', head: true }),
-    supabase
-      .from('orders')
-      .select(`
-        id,
-        total,
-        status,
-        delivery_status,
-        created_at,
-        user_id,
-        profiles (full_name, email)
-      `)
-      .order('created_at', { ascending: false })
-      .limit(8),
-  ])
+  // 2. Fetch orders cleanly (NO profile joins to prevent visibility bugs)
+  const { data: orders } = await supabase
+    .from('orders')
+    .select('*')
+    .order('created_at', { ascending: false })
 
-  const products = productsResult.data ?? []
-  const orders   = ordersResult.data ?? []
-  const recent   = recentOrdersResult.data ?? []
+  // 3. Fetch products (strictly excluding soft-deleted ones)
+  const { data: products } = await supabase
+    .from('products')
+    .select('*')
+    .is('is_deleted', false)
 
-  // ── Revenue ─────────────────────────────────────────────────────────────────
-  const fulfilledOrders = orders.filter(
-    o => o.delivery_status === 'delivered' || o.status === 'fulfilled'
-  )
-  const totalRevenue = fulfilledOrders.reduce((s, o) => s + Number(o.total), 0)
+  // 4. Fetch user count
+  const { count: userCount } = await supabase
+    .from('profiles')
+    .select('*', { count: 'exact', head: true })
+    .eq('role', 'customer')
 
-  const pendingOrders = orders.filter(o =>
-    ['order_placed', 'confirmed', 'processing'].includes(o.delivery_status ?? o.status ?? '')
-  ).length
+  const allOrders = orders || []
+  const allProducts = products || []
 
-  const cancelledOrders = orders.filter(o =>
-    o.status === 'cancelled' || o.delivery_status === 'cancelled'
-  ).length
+  // ─── Compute Stats ─────────────────────────────────────────────────────────
+  const totalRevenue = allOrders
+    .filter(o => o.status === 'fulfilled' || o.status === 'confirmed' || o.status === 'delivered')
+    .reduce((sum, o) => sum + (o.total || 0), 0)
+  
+  const fulfilledOrdersCount = allOrders.filter(o => o.status === 'fulfilled' || o.status === 'delivered').length
+  const pendingOrders = allOrders.filter(o => o.status === 'pending' || o.status === 'confirmed' || o.status === 'processing').length
+  const cancelledOrders = allOrders.filter(o => o.status === 'cancelled').length
 
-  // ── Stock ────────────────────────────────────────────────────────────────────
-  const outOfStock  = products.filter(p => !p.in_stock || p.stock_quantity === 0).length
-  const lowStock    = products.filter(p => p.in_stock && p.stock_quantity > 0 && p.stock_quantity <= 5).length
-  const healthyStock = products.length - outOfStock - lowStock
+  const healthyStock = allProducts.filter(p => p.stock_quantity > 5).length
+  const lowStock = allProducts.filter(p => p.in_stock && p.stock_quantity > 0 && p.stock_quantity <= 5).length
+  const outOfStock = allProducts.filter(p => !p.in_stock).length
 
-  // ── Categories ───────────────────────────────────────────────────────────────
-  const catMap: Record<string, number> = {}
-  for (const p of products) {
-    const cat = p.category ?? 'General'
-    catMap[cat] = (catMap[cat] ?? 0) + 1
+  const stats = {
+    productCount: allProducts.length,
+    orderCount: allOrders.length,
+    userCount: userCount || 0,
+    totalRevenue,
+    fulfilledOrdersCount,
+    pendingOrders,
+    cancelledOrders,
+    outOfStock,
+    lowStock,
+    healthyStock,
   }
-  const catColors = ['#B87333', '#1B3A2D', '#2D5A42', '#3D7A5A', '#D4954A', '#6B6B65', '#8B5CF6']
-  const catEntries = Object.entries(catMap)
-    .sort(([, a], [, b]) => b - a)
-    .map(([label, value], i) => ({ label, value, color: catColors[i % catColors.length] }))
 
-  // ── Daily Metrics — last 7 days ──────────────────────────────────────────────
-  const dailyMetrics = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date()
-    d.setDate(d.getDate() - (6 - i))
-    const key   = d.toISOString().slice(0, 10)
-    const label = d.toLocaleDateString('en-BD', { weekday: 'short' })
+  // ─── Compute Daily Metrics (Last 7 days) ───────────────────────────────────
+  const dailyMetrics = []
+  for (let i = 6; i >= 0; i--) {
+    const date = new Date()
+    date.setDate(date.getDate() - i)
+    const dateStr = date.toISOString().split('T')[0]
+    const label = date.toLocaleDateString('en-BD', { weekday: 'short' })
+    
+    const dayOrders = allOrders.filter(o => o.created_at.startsWith(dateStr))
+    const revenue = dayOrders.reduce((sum, o) => sum + (o.total || 0), 0)
+    const ordersCount = dayOrders.length
+    const avgOrderValue = ordersCount > 0 ? revenue / ordersCount : 0
 
-    const dayOrders  = orders.filter(o => o.created_at.slice(0, 10) === key)
-    const dayRevenue = dayOrders
-      .filter(o => o.status === 'fulfilled' || o.delivery_status === 'delivered')
-      .reduce((s, o) => s + Number(o.total), 0)
-    const dayCount   = dayOrders.length
-    const avgOrderValue = dayCount > 0 ? dayRevenue / dayCount : 0
+    dailyMetrics.push({ label, revenue, orders: ordersCount, avgOrderValue })
+  }
 
-    return { label, revenue: dayRevenue, orders: dayCount, avgOrderValue }
-  })
-
-  // ── Order sparkline points ───────────────────────────────────────────────────
-  const orderPoints = dailyMetrics.map(d => d.orders)
-
-  // ── Donut segments ───────────────────────────────────────────────────────────
+  // ─── Compute Order Segments (for Donut Chart) ──────────────────────────────
+  // FIX: Correct colors for Order Status (Green for Fulfilled, Copper for Pending, Red for Cancelled)
   const orderSegments = [
-    { value: fulfilledOrders.length, color: '#1B3A2D', label: 'Fulfilled' },
-    { value: pendingOrders,          color: '#D4954A', label: 'Pending'   },
-    { value: cancelledOrders,        color: '#C0392B', label: 'Cancelled' },
-  ]
+    { value: fulfilledOrdersCount, color: '#2A7A4E', label: 'Fulfilled' }, // Green
+    { value: pendingOrders, color: '#B07D2A', label: 'Pending' },         // Copper/Warning
+    { value: cancelledOrders, color: '#C0392B', label: 'Cancelled' },     // Red
+  ].filter(s => s.value > 0)
 
+  // ─── Compute Category Entries (for Horizontal Bar Chart) ───────────────────
+  const catMap: Record<string, number> = {}
+  allProducts.forEach(p => {
+    const cat = p.category || 'Uncategorized'
+    catMap[cat] = (catMap[cat] || 0) + 1
+  })
+  const catColors = ['#B87333', '#1B3A2D', '#3B82F6', '#8B5CF6', '#F43F5E', '#10B981']
+  const catEntries = Object.entries(catMap)
+    .map(([label, value], i) => ({ label, value, color: catColors[i % catColors.length] }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 5)
+
+  // ─── Compute Inventory Segments ────────────────────────────────────────────
   const inventorySegments = [
-    { value: healthyStock, color: '#1B3A2D', label: 'Healthy' },
-    { value: lowStock,     color: '#D4954A', label: 'Low'     },
-    { value: outOfStock,   color: '#C0392B', label: 'Out'     },
-  ]
+    { value: healthyStock, color: '#2A7A4E', label: 'Healthy' },
+    { value: lowStock, color: '#B07D2A', label: 'Low' },
+    { value: outOfStock, color: '#C0392B', label: 'Out' },
+  ].filter(s => s.value > 0)
 
-  // ── Top products by stock value ──────────────────────────────────────────────
-  const topByValue = [...products]
-    .sort((a, b) => b.price * b.stock_quantity - a.price * a.stock_quantity)
-    .slice(0, 8)
+  // ─── Compute Top By Value ──────────────────────────────────────────────────
+  const topByValue = [...allProducts]
+    .map(p => ({ ...p, totalValue: (p.price || 0) * (p.stock_quantity || 0) }))
+    .sort((a, b) => b.totalValue - a.totalValue)
+    .slice(0, 6)
 
-  // ── Format recent orders ─────────────────────────────────────────────────────
-  const recentOrders = recent.map(o => ({
-    id:         o.id,
-    total:      o.total,
-    status:     o.delivery_status ?? o.status,
+  // ─── Compute Recent Orders ─────────────────────────────────────────────────
+  // FIX: Map orders directly. We set customer name to 'Guest' to avoid 
+  // rendering errors if the profile join was removed.
+  const recentOrders = allOrders.slice(0, 8).map(o => ({
+    id: o.id,
     created_at: o.created_at,
-    customer: {
-      name:  (o.profiles as any)?.full_name ?? 'Guest',
-      email: (o.profiles as any)?.email ?? '',
-    },
+    total: o.total,
+    status: o.status,
+    customer: { name: 'Guest' } 
   }))
 
   return (
     <AdminOverviewClient
-      stats={{
-        productCount:        products.length,
-        orderCount:          orders.length,
-        userCount:           usersResult.count ?? 0,
-        totalRevenue,
-        fulfilledOrdersCount: fulfilledOrders.length,
-        pendingOrders,
-        cancelledOrders,
-        outOfStock,
-        lowStock,
-        healthyStock,
-      }}
+      stats={stats}
       dailyMetrics={dailyMetrics}
-      orderPoints={orderPoints}
+      orderPoints={[]}
       orderSegments={orderSegments}
       catEntries={catEntries}
       inventorySegments={inventorySegments}

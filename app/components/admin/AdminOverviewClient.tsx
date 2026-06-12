@@ -1,7 +1,11 @@
-'use client'
 // app/components/admin/AdminOverviewClient.tsx
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+// Premium Admin Overview Client with animated counters, sparklines, 
+// revenue charts, donut charts, and business insights.
+
+'use client'
+
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { formatPrice } from '@/app/lib/utils/formatPrice'
 import { cn } from '@/app/lib/utils/cn'
@@ -155,7 +159,6 @@ function KPICard({
       )}
       style={{ animationDelay: `${delay}ms`, animationFillMode: 'both' }}
     >
-      {/* subtle background pattern */}
       <div className="absolute inset-0 opacity-[0.03] pointer-events-none"
         style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, currentColor 1px, transparent 0)', backgroundSize: '24px 24px' }} />
 
@@ -233,7 +236,6 @@ function RevenueChart({ data }: { data: DailyMetric[] }) {
 
   return (
     <div>
-      {/* Series toggles */}
       <div className="flex flex-wrap items-center gap-2 mb-5">
         {[
           { key: 'revenue' as const, label: 'Revenue', color: '#B87333' },
@@ -257,7 +259,6 @@ function RevenueChart({ data }: { data: DailyMetric[] }) {
         ))}
       </div>
 
-      {/* SVG chart */}
       <div className="relative w-full" style={{ paddingBottom: '31%' }}>
         <svg viewBox={`0 0 ${W} ${H}`} className="absolute inset-0 w-full h-full" preserveAspectRatio="xMidYMid meet">
           <defs>
@@ -278,7 +279,6 @@ function RevenueChart({ data }: { data: DailyMetric[] }) {
             </clipPath>
           </defs>
 
-          {/* Y-axis grid */}
           {yGridVals.map((t, i) => {
             const y = PAD.top + CH * (1 - t)
             const val = maxRev * t
@@ -293,25 +293,20 @@ function RevenueChart({ data }: { data: DailyMetric[] }) {
             )
           })}
 
-          {/* Clipped content */}
           <g clipPath="url(#chartClip)">
-            {/* Area fills */}
             {active.revenue && <path d={`${revPath} L ${px(data.length - 1)} ${PAD.top + CH} L ${px(0)} ${PAD.top + CH} Z`} fill="url(#gRev)" />}
             {active.orders && <path d={`${ordPath} L ${px(data.length - 1)} ${PAD.top + CH} L ${px(0)} ${PAD.top + CH} Z`} fill="url(#gOrd)" />}
             {active.aov && <path d={`${aovPath} L ${px(data.length - 1)} ${PAD.top + CH} L ${px(0)} ${PAD.top + CH} Z`} fill="url(#gAov)" />}
 
-            {/* Lines */}
             {active.revenue && <path d={revPath} fill="none" stroke="#B87333" strokeWidth="2.5" strokeLinecap="round" />}
             {active.orders && <path d={ordPath} fill="none" stroke="#1B3A2D" strokeWidth="2.5" strokeLinecap="round" />}
             {active.aov && <path d={aovPath} fill="none" stroke="#8B5CF6" strokeWidth="2.5" strokeLinecap="round" />}
 
-            {/* Hover vertical line */}
             {hovered !== null && (
               <line x1={px(hovered)} y1={PAD.top} x2={px(hovered)} y2={PAD.top + CH}
                 stroke="#6B6B65" strokeWidth="1" strokeDasharray="4 4" opacity="0.5" />
             )}
 
-            {/* Hit areas + dots */}
             {data.map((d, i) => (
               <g key={i}>
                 <rect
@@ -335,7 +330,6 @@ function RevenueChart({ data }: { data: DailyMetric[] }) {
             ))}
           </g>
 
-          {/* X-axis labels */}
           {data.map((d, i) => (
             <text key={i} x={px(i)} y={H - 10} textAnchor="middle" fontSize="10" fill="#6B6B65" fontWeight="600">
               {d.label}
@@ -343,7 +337,6 @@ function RevenueChart({ data }: { data: DailyMetric[] }) {
           ))}
         </svg>
 
-        {/* Tooltip */}
         {hovered !== null && (
           <div className="absolute z-20 pointer-events-none animate-scale-in"
             style={{
@@ -622,26 +615,24 @@ function RecentOrdersTable({ orders }: { orders: any[] }) {
                 onMouseLeave={() => setHovered(null)}
                 style={{ animationDelay: `${i * 40}ms` }}
               >
-                {/* Order ID */}
                 <div className="min-w-0 flex-1">
                   <p className="text-[11px] font-bold text-bushal-ink font-mono">
                     #{o.id.slice(0, 8).toUpperCase()}
                   </p>
                   <p className="text-[10px] text-bushal-inkSoft mt-0.5 truncate">
                     {new Date(o.created_at).toLocaleDateString('en-BD', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    {/* FIX: Gracefully handles missing customer data to ensure orders are always visible */}
                     {o.customer?.name && o.customer.name !== 'Guest' && (
                       <span className="ml-1.5 text-bushal-inkMid">· {o.customer.name}</span>
                     )}
                   </p>
                 </div>
 
-                {/* Status badge */}
                 <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 flex items-center gap-1', cfg.pill)}>
                   <span className={cn('w-1.5 h-1.5 rounded-full animate-pulse-soft', cfg.dot)} />
                   {cfg.label}
                 </span>
 
-                {/* Amount */}
                 <span className="text-xs font-extrabold text-bushal-forest flex-shrink-0 tabular-nums">
                   {formatPrice(o.total)}
                 </span>
@@ -755,8 +746,6 @@ function InsightRow({
   )
 }
 
-
-
 // ─── Main Export ─────────────────────────────────────────────────────────────
 export default function AdminOverviewClient({
   stats, dailyMetrics, orderPoints, orderSegments, catEntries,
@@ -846,7 +835,6 @@ export default function AdminOverviewClient({
 
       {/* ── Middle Row: Orders + Stock + Categories ──────────────────── */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Order Status Donut */}
         <div className="bg-bushal-surface rounded-2xl border border-bushal-border p-5 shadow-sm hover:shadow-md transition-shadow duration-300">
           <h2 className="text-sm font-bold text-bushal-forest mb-0.5">Order Status</h2>
           <p className="text-[11px] text-bushal-inkSoft mb-4">Hover to inspect</p>
@@ -858,7 +846,6 @@ export default function AdminOverviewClient({
           />
         </div>
 
-        {/* Stock Health */}
         <div className="bg-bushal-surface rounded-2xl border border-bushal-border p-5 shadow-sm hover:shadow-md transition-shadow duration-300">
           <h2 className="text-sm font-bold text-bushal-forest mb-0.5">Inventory Health</h2>
           <p className="text-[11px] text-bushal-inkSoft mb-4">Stock status across all products</p>
@@ -872,7 +859,6 @@ export default function AdminOverviewClient({
           )}
         </div>
 
-        {/* Categories */}
         <div className="bg-bushal-surface rounded-2xl border border-bushal-border p-5 shadow-sm hover:shadow-md transition-shadow duration-300">
           <h2 className="text-sm font-bold text-bushal-forest mb-0.5">By Category</h2>
           <p className="text-[11px] text-bushal-inkSoft mb-4">Product distribution</p>
@@ -882,19 +868,15 @@ export default function AdminOverviewClient({
 
       {/* ── Bottom Row: Recent Orders + Top Products + Quick Actions ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Recent Orders */}
         <div className="lg:col-span-1 bg-bushal-surface rounded-2xl border border-bushal-border p-5 shadow-sm hover:shadow-md transition-shadow duration-300">
           <RecentOrdersTable orders={recentOrders} />
         </div>
 
-        {/* Top Products */}
         <div className="lg:col-span-1 bg-bushal-surface rounded-2xl border border-bushal-border p-5 shadow-sm hover:shadow-md transition-shadow duration-300">
           <TopProductsTable products={topByValue} />
         </div>
 
-        {/* Right Column: Quick Actions + Business Insights */}
         <div className="flex flex-col gap-4">
-          {/* Quick Actions */}
           <div className="bg-bushal-surface rounded-2xl border border-bushal-border p-5 shadow-sm hover:shadow-md transition-shadow duration-300">
             <h2 className="text-sm font-bold text-bushal-forest mb-3">Quick Actions</h2>
             <div className="space-y-1.5">
@@ -904,12 +886,9 @@ export default function AdminOverviewClient({
                 icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>} />
               <QuickAction label="Manage Products" href="/admin/products" color="#3B82F6"
                 icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" /></svg>} />
-              <QuickAction label="Categories" href="/admin/categories" color="#8B5CF6"
-                icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>} />
             </div>
           </div>
 
-          {/* Business Insights */}
           <div className="bg-gradient-to-br from-bushal-forest to-bushal-forestMid rounded-2xl p-5 text-white shadow-lg flex-1">
             <div className="flex items-center gap-2 mb-4">
               <svg className="w-4 h-4 text-bushal-copperGlow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
