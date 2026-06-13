@@ -40,16 +40,13 @@ BEGIN
   SELECT COUNT(*) INTO v_pending_count FROM orders WHERE status = 'pending';
   SELECT COUNT(*) INTO v_cancelled_count FROM orders WHERE status = 'cancelled';
 
-  -- COGS & Delivery (from fulfilled orders)
-  SELECT COALESCE(SUM(
-    (SELECT COALESCE(cost_price, 0) FROM products p WHERE p.id = oi.product_id) * oi.quantity
-  ), 0),
-  COALESCE(SUM(
-    (SELECT COALESCE(delivery_charge, 0) FROM products p WHERE p.id = oi.product_id) * oi.quantity
-  ), 0)
+  -- COGS & Delivery (Fixed: using JOIN instead of correlated subqueries for performance and correctness)
+  SELECT COALESCE(SUM(oi.quantity * COALESCE(p.cost_price, 0)), 0),
+         COALESCE(SUM(oi.quantity * COALESCE(p.delivery_charge, 0)), 0)
   INTO v_total_cogs, v_total_delivery
   FROM order_items oi
   JOIN orders o ON o.id = oi.order_id
+  LEFT JOIN products p ON p.id = oi.product_id
   WHERE o.status = 'fulfilled';
 
   v_total_profit := v_total_revenue - v_total_cogs - v_total_delivery;
@@ -151,6 +148,7 @@ END;
 $$;
 
 -- ─── 2. Daily Revenue (last 30 days) ─────────────────────────────────────────
+-- FIXED: Replaced broken correlated subquery with proper JOINs
 CREATE OR REPLACE FUNCTION get_daily_revenue(days int DEFAULT 30)
 RETURNS TABLE (
   date text,
@@ -173,14 +171,11 @@ AS $$
     SELECT 
       o.created_at::date AS order_date,
       SUM(o.total) AS revenue,
-      COUNT(*) AS orders,
-      SUM(o.total) - COALESCE(SUM(
-        (SELECT COALESCE(p.cost_price, 0) * oi.quantity 
-         FROM order_items oi 
-         JOIN products p ON p.id = oi.product_id 
-         WHERE oi.order_id = o.id)
-      ), 0) AS profit
+      COUNT(DISTINCT o.id) AS orders,
+      SUM(o.total) - COALESCE(SUM(oi.quantity * COALESCE(p.cost_price, 0)), 0) AS profit
     FROM orders o
+    LEFT JOIN order_items oi ON oi.order_id = o.id
+    LEFT JOIN products p ON p.id = oi.product_id
     WHERE o.status = 'fulfilled'
       AND o.created_at >= (CURRENT_DATE - (days - 1))::date
     GROUP BY o.created_at::date
@@ -244,7 +239,6 @@ BEGIN
   END IF;
 
   -- Simple linear regression: y = mx + b
-  -- x = 1, 2, 3, ..., n
   sum_x := n * (n + 1) / 2.0;
   sum_x2 := n * (n + 1) * (2 * n + 1) / 6.0;
   
@@ -254,10 +248,8 @@ BEGIN
   slope := (n * sum_xy - sum_x * sum_y) / (n * sum_x2 - sum_x * sum_x);
   intercept := (sum_y - slope * sum_x) / n;
 
-  -- Predict next month (x = n + 1)
   next_month_pred := GREATEST(slope * (n + 1) + intercept, 0);
 
-  -- Growth rate: compare last 3 months avg vs previous 3 months avg
   IF n >= 6 THEN
     avg_last := (last_6_months[4] + last_6_months[5] + last_6_months[6]) / 3.0;
     avg_prev := (last_6_months[1] + last_6_months[2] + last_6_months[3]) / 3.0;
@@ -283,7 +275,7 @@ BEGIN
 END;
 $$;
 
--- ─── 4. Products to Restock Soon (based on sales velocity) ───────────────────
+-- ─── 4. Products to Restock Soon ─────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION get_restock_recommendations(limit_count int DEFAULT 10)
 RETURNS jsonb
 LANGUAGE sql
@@ -292,12 +284,7 @@ STABLE
 AS $$
   WITH sales_velocity AS (
     SELECT 
-      p.id,
-      p.name,
-      p.price,
-      p.stock_quantity,
-      p.image_url,
-      p.images,
+      p.id, p.name, p.price, p.stock_quantity, p.image_url, p.images,
       COALESCE(SUM(oi.quantity), 0) AS sold_30d,
       CASE 
         WHEN COALESCE(SUM(oi.quantity), 0) > 0 
@@ -315,15 +302,9 @@ AS $$
   )
   SELECT jsonb_agg(
     jsonb_build_object(
-      'id', id,
-      'name', name,
-      'price', price,
-      'stock_quantity', stock_quantity,
-      'image_url', image_url,
-      'images', images,
-      'sold_30d', sold_30d,
-      'days_until_stockout', ROUND(days_until_stockout, 0),
-      'revenue_30d', revenue_30d,
+      'id', id, 'name', name, 'price', price, 'stock_quantity', stock_quantity,
+      'image_url', image_url, 'images', images, 'sold_30d', sold_30d,
+      'days_until_stockout', ROUND(days_until_stockout, 0), 'revenue_30d', revenue_30d,
       'urgency', CASE 
         WHEN days_until_stockout < 7 THEN 'critical'
         WHEN days_until_stockout < 14 THEN 'high'
@@ -347,22 +328,15 @@ SECURITY DEFINER
 STABLE
 AS $$
   WITH current_period AS (
-    SELECT 
-      p.category,
-      SUM(oi.quantity * oi.unit_price) AS revenue,
-      SUM(oi.quantity) AS units
+    SELECT p.category, SUM(oi.quantity * oi.unit_price) AS revenue, SUM(oi.quantity) AS units
     FROM order_items oi
     JOIN orders o ON o.id = oi.order_id
     JOIN products p ON p.id = oi.product_id
-    WHERE o.status = 'fulfilled'
-      AND o.created_at >= NOW() - INTERVAL '30 days'
+    WHERE o.status = 'fulfilled' AND o.created_at >= NOW() - INTERVAL '30 days'
     GROUP BY p.category
   ),
   previous_period AS (
-    SELECT 
-      p.category,
-      SUM(oi.quantity * oi.unit_price) AS revenue,
-      SUM(oi.quantity) AS units
+    SELECT p.category, SUM(oi.quantity * oi.unit_price) AS revenue, SUM(oi.quantity) AS units
     FROM order_items oi
     JOIN orders o ON o.id = oi.order_id
     JOIN products p ON p.id = oi.product_id
@@ -373,20 +347,11 @@ AS $$
   )
   SELECT jsonb_agg(
     jsonb_build_object(
-      'category', c.category,
-      'currentRevenue', COALESCE(c.revenue, 0),
+      'category', c.category, 'currentRevenue', COALESCE(c.revenue, 0),
       'previousRevenue', COALESCE(p.revenue, 0),
-      'growthRate', CASE 
-        WHEN COALESCE(p.revenue, 0) > 0 
-        THEN ROUND(((c.revenue - p.revenue) / p.revenue) * 100, 1)
-        ELSE 100
-      END,
+      'growthRate', CASE WHEN COALESCE(p.revenue, 0) > 0 THEN ROUND(((c.revenue - p.revenue) / p.revenue) * 100, 1) ELSE 100 END,
       'units', COALESCE(c.units, 0),
-      'trend', CASE 
-        WHEN COALESCE(c.revenue, 0) > COALESCE(p.revenue, 0) THEN 'up'
-        WHEN COALESCE(c.revenue, 0) < COALESCE(p.revenue, 0) THEN 'down'
-        ELSE 'stable'
-      END
+      'trend', CASE WHEN COALESCE(c.revenue, 0) > COALESCE(p.revenue, 0) THEN 'up' WHEN COALESCE(c.revenue, 0) < COALESCE(p.revenue, 0) THEN 'down' ELSE 'stable' END
     )
     ORDER BY c.revenue DESC NULLS LAST
   )
@@ -402,51 +367,20 @@ SECURITY DEFINER
 STABLE
 AS $$
   WITH customer_stats AS (
-    SELECT 
-      o.user_id,
-      pr.full_name,
-      pr.email,
-      COUNT(*) AS order_count,
-      SUM(o.total) AS total_spent,
-      MAX(o.created_at) AS last_order
-    FROM orders o
-    JOIN profiles pr ON pr.id = o.user_id
-    WHERE o.status = 'fulfilled'
+    SELECT o.user_id, pr.full_name, pr.email, COUNT(*) AS order_count, SUM(o.total) AS total_spent, MAX(o.created_at) AS last_order
+    FROM orders o JOIN profiles pr ON pr.id = o.user_id WHERE o.status = 'fulfilled'
     GROUP BY o.user_id, pr.full_name, pr.email
   ),
-  top_spender AS (
-    SELECT * FROM customer_stats ORDER BY total_spent DESC LIMIT 1
-  ),
-  avg_clv AS (
-    SELECT AVG(total_spent) AS clv FROM customer_stats
-  )
+  top_spender AS (SELECT * FROM customer_stats ORDER BY total_spent DESC LIMIT 1),
+  avg_clv AS (SELECT AVG(total_spent) AS clv FROM customer_stats)
   SELECT jsonb_build_object(
     'totalCustomers', (SELECT COUNT(*) FROM profiles WHERE role = 'customer'),
-    'activeCustomers30d', (
-      SELECT COUNT(DISTINCT user_id) FROM orders 
-      WHERE created_at >= NOW() - INTERVAL '30 days'
-    ),
-    'newCustomers30d', (
-      SELECT COUNT(*) FROM profiles 
-      WHERE role = 'customer' AND created_at >= NOW() - INTERVAL '30 days'
-    ),
-    'repeatCustomerRate', (
-      SELECT ROUND(
-        100.0 * COUNT(*) FILTER (WHERE order_count >= 2) / NULLIF(COUNT(*), 0), 1
-      ) FROM customer_stats
-    ),
+    'activeCustomers30d', (SELECT COUNT(DISTINCT user_id) FROM orders WHERE created_at >= NOW() - INTERVAL '30 days'),
+    'newCustomers30d', (SELECT COUNT(*) FROM profiles WHERE role = 'customer' AND created_at >= NOW() - INTERVAL '30 days'),
+    'repeatCustomerRate', (SELECT ROUND(100.0 * COUNT(*) FILTER (WHERE order_count >= 2) / NULLIF(COUNT(*), 0), 1) FROM customer_stats),
     'avgLifetimeValue', (SELECT ROUND(clv, 0) FROM avg_clv),
-    'avgOrdersPerCustomer', (
-      SELECT ROUND(AVG(order_count)::numeric, 1) FROM customer_stats
-    ),
-    'topSpender', (
-      SELECT jsonb_build_object(
-        'name', full_name,
-        'email', email,
-        'totalSpent', total_spent,
-        'orderCount', order_count
-      ) FROM top_spender
-    )
+    'avgOrdersPerCustomer', (SELECT ROUND(AVG(order_count)::numeric, 1) FROM customer_stats),
+    'topSpender', (SELECT jsonb_build_object('name', full_name, 'email', email, 'totalSpent', total_spent, 'orderCount', order_count) FROM top_spender)
   );
 $$;
 

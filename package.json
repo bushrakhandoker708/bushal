@@ -24,6 +24,7 @@
     "react-dom": "^18",
     "react-hot-toast": "^2.4.1",
     "react-medium-image-zoom": "^5.4.7",
+    "recharts": "^3.8.1",
     "resend": "^6.12.4",
     "tailwind-merge": "^2.6.1",
     "uuid": "^14.0.0",
