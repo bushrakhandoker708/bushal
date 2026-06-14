@@ -1,12 +1,13 @@
-// app/components/product/ProductForm.tsx
 'use client'
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { Product } from '@/app/types/product'
 import { createBrowserClient } from '@/lib/supabase/client'
 import Input from '@/app/components/ui/Input'
 import Button from '@/app/components/ui/Button'
 import { getStockStatus } from '@/app/lib/utils/stockStatus'
+import { cn } from '@/app/lib/utils/cn'
+import { formatPrice } from '@/app/lib/utils/formatPrice'
 
 interface Category {
   id: string
@@ -24,16 +25,22 @@ export default function ProductForm({ mode, product, categories }: Props) {
   const router = useRouter()
   const supabase = createBrowserClient()
   const fileInputRef = useRef<HTMLInputElement>(null)
+  
   const [loading, setLoading] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState('')
   const [uploadProgress, setUploadProgress] = useState(0)
+  
+  // FIX: Added cost_price and other_costs to form state
   const [form, setForm] = useState({
     name: product?.name ?? '',
     description: product?.description ?? '',
     price: product?.price?.toString() ?? '',
+    cost_price: (product as any)?.cost_price?.toString() ?? '',
+    other_costs: (product as any)?.other_costs?.toString() ?? '',
     discount_percent: product?.discount_percent?.toString() ?? '',
     stock_quantity: product?.stock_quantity?.toString() ?? '0',
+    // FIX: Ensure category is never empty/null to prevent DB constraint errors
     category: product?.category ?? (categories[0]?.name ?? 'General'),
   })
 
@@ -59,6 +66,25 @@ export default function ProductForm({ mode, product, categories }: Props) {
   ) => {
     const { name, value } = e.target
     setForm((prev) => ({ ...prev, [name]: value }))
+  }
+
+  // --- Real-time Profit Margin Calculation ---
+  const profitMetrics = useMemo(() => {
+    const sellingPrice = parseFloat(form.price) || 0
+    const costPrice = parseFloat(form.cost_price) || 0
+    const otherCosts = parseFloat(form.other_costs) || 0
+    
+    const totalCost = costPrice + otherCosts
+    const profit = sellingPrice - totalCost
+    const profitMargin = sellingPrice > 0 ? (profit / sellingPrice) * 100 : 0
+    
+    return { sellingPrice, totalCost, profit, profitMargin }
+  }, [form.price, form.cost_price, form.other_costs])
+
+  const getMarginColor = (margin: number) => {
+    if (margin < 0) return 'text-bushal-danger bg-bushal-dangerBg border-bushal-danger/20'
+    if (margin < 20) return 'text-bushal-warning bg-bushal-warningBg border-bushal-warning/20'
+    return 'text-bushal-success bg-bushal-successBg border-bushal-success/20'
   }
 
   const uploadFiles = async (files: File[]) => {
@@ -124,33 +150,47 @@ export default function ProductForm({ mode, product, categories }: Props) {
     e.preventDefault()
     setLoading(true)
     setError('')
+
     const qty = parseInt(form.stock_quantity) || 0
+    
+    // FIX: Strictly enforce category to prevent "null value in column category" bug
+    const finalCategory = form.category.trim() || 'General'
+
     const payload = {
       name: form.name.trim(),
       description: form.description.trim(),
       price: parseFloat(form.price),
+      // New fields for profit tracking
+      cost_price: parseFloat(form.cost_price) || 0,
+      other_costs: parseFloat(form.other_costs) || 0,
       images,
       image_url: images[0] ?? null,
       in_stock: qty > 0,
       stock_quantity: qty,
       discount_percent: form.discount_percent ? parseInt(form.discount_percent) : null,
-      category: form.category || 'General',
+      category: finalCategory,
     }
+
     if (!payload.name) { setError('Product name is required'); setLoading(false); return }
-    if (isNaN(payload.price) || payload.price <= 0) { setError('Enter a valid price'); setLoading(false); return }
+    if (isNaN(payload.price) || payload.price <= 0) { setError('Enter a valid selling price'); setLoading(false); return }
+
     const url = mode === 'create' ? '/api/products' : `/api/products/${product?.id}`
     const method = mode === 'create' ? 'POST' : 'PUT'
+    
     const res = await fetch(url, {
       method,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     })
+
     setLoading(false)
+
     if (!res.ok) {
       const data = await res.json()
       setError(data.error ?? 'Something went wrong')
       return
     }
+
     router.push('/admin/products')
     router.refresh()
   }
@@ -186,7 +226,7 @@ export default function ProductForm({ mode, product, categories }: Props) {
 
       {/* Category */}
       <div>
-        <label className="block text-sm font-semibold text-bushal-inkMid mb-1.5">Category</label>
+        <label className="block text-sm font-semibold text-bushal-inkMid mb-1.5">Category *</label>
         <select
           name="category"
           value={form.category}
@@ -196,6 +236,7 @@ export default function ProductForm({ mode, product, categories }: Props) {
           {categories.map((cat) => (
             <option key={cat.id} value={cat.name}>{cat.name}</option>
           ))}
+          <option value="General">General</option>
         </select>
         <p className="mt-1.5 text-xs text-bushal-inkSoft">
           Manage categories in{' '}
@@ -205,32 +246,92 @@ export default function ProductForm({ mode, product, categories }: Props) {
         </p>
       </div>
 
-      {/* Price & Discount */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Input
-          id="price"
-          name="price"
-          type="number"
-          label="Price (৳) *"
-          value={form.price}
-          onChange={handleChange}
-          placeholder="0.00"
-          min="0.01"
-          step="0.01"
-          required
-        />
-        <Input
-          id="discount_percent"
-          name="discount_percent"
-          type="number"
-          label="Discount (%)"
-          value={form.discount_percent}
-          onChange={handleChange}
-          placeholder="0"
-          min="0"
-          max="100"
-          hint="Leave blank for no discount"
-        />
+      {/* ── PRICING & PROFIT MARGIN SECTION ─── */}
+      <div className="bg-bushal-ivoryDeep/50 rounded-2xl border border-bushal-border p-5 space-y-4">
+        <h3 className="text-sm font-bold text-bushal-forest flex items-center gap-2">
+          <svg className="w-4 h-4 text-bushal-copper" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          Pricing & Profit Analysis
+        </h3>
+        
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <Input
+            id="cost_price"
+            name="cost_price"
+            type="number"
+            label="Cost Price ()"
+            value={form.cost_price}
+            onChange={handleChange}
+            placeholder="0.00"
+            min="0"
+            step="0.01"
+            hint="Base buying price from supplier"
+          />
+          <Input
+            id="other_costs"
+            name="other_costs"
+            type="number"
+            label="Other Costs (৳)"
+            value={form.other_costs}
+            onChange={handleChange}
+            placeholder="0.00"
+            min="0"
+            step="0.01"
+            hint="Shipping, customs, packaging, etc."
+          />
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-bushal-border">
+          <Input
+            id="price"
+            name="price"
+            type="number"
+            label="Selling Price (৳) *"
+            value={form.price}
+            onChange={handleChange}
+            placeholder="0.00"
+            min="0.01"
+            step="0.01"
+            required
+          />
+          <Input
+            id="discount_percent"
+            name="discount_percent"
+            type="number"
+            label="Discount (%)"
+            value={form.discount_percent}
+            onChange={handleChange}
+            placeholder="0"
+            min="0"
+            max="100"
+            hint="Leave blank for no discount"
+          />
+        </div>
+
+        {/* Live Profit Margin Display */}
+        {profitMetrics.sellingPrice > 0 && (
+          <div className={cn(
+            "mt-4 p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-colors",
+            getMarginColor(profitMetrics.profitMargin)
+          )}>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider opacity-80">Estimated Profit per Unit</p>
+              <p className="text-xl font-bold font-heading">
+                {formatPrice(profitMetrics.profit)}
+              </p>
+              <p className="text-[11px] opacity-70 mt-0.5">
+                Selling: {formatPrice(profitMetrics.sellingPrice)} − Total Cost: {formatPrice(profitMetrics.totalCost)}
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs font-bold uppercase tracking-wider opacity-80">Profit Margin</p>
+              <p className="text-2xl font-bold font-heading">
+                {profitMetrics.profitMargin.toFixed(1)}%
+              </p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Stock Quantity */}
@@ -269,7 +370,6 @@ export default function ProductForm({ mode, product, categories }: Props) {
       {/* Image Upload */}
       <div>
         <label className="block text-sm font-semibold text-bushal-inkMid mb-1.5">Product Images</label>
-        {/* Drop zone */}
         <div
           onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
           onDragLeave={() => setDragOver(false)}
@@ -320,7 +420,7 @@ export default function ProductForm({ mode, product, categories }: Props) {
             )}
           </div>
         </div>
-        {/* Image previews */}
+
         {previews.length > 0 && (
           <div className="mt-3 grid grid-cols-3 sm:grid-cols-4 gap-2">
             {previews.map((src, i) => (
@@ -359,7 +459,7 @@ export default function ProductForm({ mode, product, categories }: Props) {
         </div>
       )}
 
-      {/* Actions - Fixed to ensure both buttons are visible */}
+      {/* Actions */}
       <div className="flex flex-col sm:flex-row gap-3 pt-6 border-t border-bushal-border mt-8">
         <Button
           type="button"
@@ -369,9 +469,9 @@ export default function ProductForm({ mode, product, categories }: Props) {
         >
           Cancel
         </Button>
-        <Button 
-          type="submit" 
-          loading={loading} 
+        <Button
+          type="submit"
+          loading={loading}
           className="flex-1 order-1 sm:order-2 bg-bushal-copper hover:bg-bushal-copperLight text-white"
         >
           {mode === 'create' ? 'Create Product' : 'Save Changes'}

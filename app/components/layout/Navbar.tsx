@@ -25,10 +25,12 @@ interface Notification {
 
 function useDebounce<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState(value)
+
   useEffect(() => {
     const t = setTimeout(() => setDebounced(value), delay)
     return () => clearTimeout(t)
   }, [value, delay])
+
   return debounced
 }
 
@@ -53,6 +55,7 @@ export default function Navbar() {
   const [searching, setSearching] = useState(false)
   const [showResults, setShowResults] = useState(false)
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false)
+
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [notifOpen, setNotifOpen] = useState(false)
   const [userRole, setUserRole] = useState<string | null>(null)
@@ -102,6 +105,7 @@ export default function Navbar() {
       setNotifLoading(false)
       return
     }
+
     try {
       setNotifLoading(true)
       const { data: profile } = await supabase
@@ -111,6 +115,7 @@ export default function Navbar() {
         .single()
 
       const admin = profile?.role === 'admin'
+
       let q = supabase
         .from('notifications')
         .select('id, type, title, body, read, created_at, order_id, comment_id')
@@ -124,6 +129,7 @@ export default function Navbar() {
       }
 
       const { data, error } = await q
+
       if (error) {
         console.error('Error fetching notifications:', error)
         setNotifications([])
@@ -145,6 +151,7 @@ export default function Navbar() {
   // Real-time notification subscriptions
   useEffect(() => {
     if (!user || isAdmin) return
+
     const channel = supabase
       .channel('customer-notifications:' + user.id)
       .on(
@@ -156,11 +163,13 @@ export default function Navbar() {
         }
       )
       .subscribe()
+
     return () => { supabase.removeChannel(channel) }
   }, [user, isAdmin, supabase])
 
   useEffect(() => {
     if (!user || !isAdmin) return
+
     const channel = supabase
       .channel('admin-notifications')
       .on(
@@ -173,20 +182,29 @@ export default function Navbar() {
         }
       )
       .subscribe()
+
     return () => { supabase.removeChannel(channel) }
   }, [user, isAdmin, supabase])
 
   const markAllRead = useCallback(async () => {
     if (!user || unreadCount === 0) return
+
     try {
       let q = supabase.from('notifications').update({ read: true }).eq('read', false)
+
       if (isAdmin) {
         q = q.is('user_id', null)
       } else {
         q = q.eq('user_id', user.id)
       }
+
       const { error } = await q
-      if (error) { console.error('Error marking notifications as read:', error); return }
+
+      if (error) { 
+        console.error('Error marking notifications as read:', error)
+        return 
+      }
+
       setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
     } catch (err) {
       console.error('Failed to mark notifications as read:', err)
@@ -209,10 +227,15 @@ export default function Navbar() {
       setSearching(false)
       return
     }
+
     let cancelled = false
     setSearching(true)
+
     fetch(`/api/search/autocomplete?q=${encodeURIComponent(debouncedQuery)}&limit=6`)
-      .then((r) => { if (!r.ok) throw new Error(); return r.json() })
+      .then((r) => { 
+        if (!r.ok) throw new Error()
+        return r.json() 
+      })
       .then((data: any) => {
         if (cancelled) return
         if (data.success && Array.isArray(data.suggestions)) {
@@ -232,8 +255,13 @@ export default function Navbar() {
         setSearching(false)
       })
       .catch(() => {
-        if (!cancelled) { setResults([]); setShowResults(false); setSearching(false) }
+        if (!cancelled) { 
+          setResults([])
+          setShowResults(false) 
+          setSearching(false) 
+        }
       })
+
     return () => { cancelled = true }
   }, [debouncedQuery])
 
@@ -244,17 +272,20 @@ export default function Navbar() {
         setShowResults(false)
         setSearchFocused(false)
       }
+
       if (mobileSearchRef.current && !mobileSearchRef.current.contains(e.target as Node)) {
         setMobileSearchOpen(false)
         setQuery('')
         setResults([])
         setShowResults(false)
       }
+
       if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
         if (notifOpen && unreadCount > 0) markAllRead()
         setNotifOpen(false)
       }
     }
+
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [notifOpen, unreadCount, markAllRead])
@@ -287,6 +318,7 @@ export default function Navbar() {
           </button>
         )}
       </div>
+
       <div className="overflow-y-auto flex-1 min-h-0 no-scrollbar">
         {notifLoading ? (
           <div className="px-4 py-10 text-center">
@@ -444,6 +476,7 @@ export default function Navbar() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                     </svg>
                   </button>
+
                   {user && (
                     <div className="relative" ref={notifRef}>
                       <button
@@ -463,6 +496,7 @@ export default function Navbar() {
                       {notifOpen && <NotificationPanel />}
                     </div>
                   )}
+
                   <button
                     onClick={() => setMobileMenuOpen((v) => !v)}
                     className="p-2.5 rounded-xl transition-all duration-200 hover:scale-110 text-white/70 hover:text-white hover:bg-white/10"
@@ -471,7 +505,8 @@ export default function Navbar() {
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       {mobileMenuOpen
                         ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />}
+                        : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                      }
                     </svg>
                   </button>
                 </div>
@@ -574,20 +609,17 @@ export default function Navbar() {
                         </Link>
                         <button
                           onClick={signOut}
-                          className="text-sm text-white/50 hover:text-white px-3 py-2 rounded-lg hover:bg-white/10 transition-all duration-200"
+                          className="text-sm text-white/70 hover:text-white px-3 py-2 rounded-lg hover:bg-white/10 transition-all duration-200"
                         >
                           <span>Sign out</span>
                         </button>
                       </>
                     ) : (
                       <>
-                        <Link href="/login" className="text-sm text-bushal-copper hover:text-bushal-copperLight px-4 py-2 rounded-lg hover:bg-white/10 transition-all duration-200 font-medium">
+                        <Link href="/login" className="text-sm text-white/70 hover:text-white px-3 py-2 rounded-lg hover:bg-white/10 transition-all duration-200">
                           <span>Sign in</span>
                         </Link>
-                        <Link
-                          href="/register"
-                          className="text-sm bg-gradient-to-r from-bushal-copper to-bushal-copperLight text-white px-5 py-2.5 rounded-lg font-semibold hover:shadow-lg hover:shadow-bushal-copper/30 hover:-translate-y-0.5 transition-all duration-300 active:scale-95"
-                        >
+                        <Link href="/register" className="text-sm bg-bushal-copper text-white px-4 py-2 rounded-lg hover:bg-bushal-copperLight transition-all duration-200 font-semibold">
                           <span>Register</span>
                         </Link>
                       </>
@@ -600,119 +632,138 @@ export default function Navbar() {
         </nav>
       </div>
 
-      {/* Mobile Search Dropdown */}
+      {/* Mobile Search Overlay */}
       {mobileSearchOpen && (
-        <div ref={mobileSearchRef} className="lg:hidden fixed top-16 left-0 right-0 z-40 border-t border-white/10 py-4 px-4 animate-fade-up bg-bushal-forest backdrop-blur-xl">
-          <div className="relative">
-            <svg className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/50 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
+        <div className="fixed inset-0 z-[60] bg-bushal-forest pt-20 px-4" ref={mobileSearchRef}>
+          <div className="relative max-w-2xl mx-auto">
+            <button
+              onClick={() => { setMobileSearchOpen(false); setQuery(''); setResults([]) }}
+              className="absolute -left-2 top-1/2 -translate-y-1/2 p-2 text-white/70 hover:text-white"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
             <input
               ref={mobileInputRef}
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search products..."
-              className="w-full bg-white/10 text-white placeholder-white/50 pl-12 pr-4 py-3 rounded-xl border border-white/10 text-sm focus:outline-none focus:border-bushal-copper/60 focus:ring-2 focus:ring-bushal-copper/20"
+              className="w-full bg-white/10 text-white placeholder-white/50 pl-12 pr-4 py-4 rounded-xl border border-white/10 text-base focus:outline-none focus:border-bushal-copper/60 focus:bg-white/15"
+              autoFocus
             />
-            {searching && (
-              <div className="absolute right-4 top-1/2 -translate-y-1/2">
-                <div className="w-5 h-5 border-2 border-bushal-copper/60 border-t-transparent rounded-full animate-spin" />
-              </div>
-            )}
           </div>
-          <SearchDropdown
-            results={results}
-            query={query}
-            showResults={showResults}
-            searching={searching}
-            onResultClick={handleResultClick}
-          />
-        </div>
-      )}
-
-      {/* Mobile Menu Dropdown */}
-      {mobileMenuOpen && (
-        <div className="lg:hidden fixed top-16 left-0 right-0 z-40 border-t border-white/10 py-4 space-y-1 animate-fade-up px-4 bg-bushal-forest backdrop-blur-xl max-h-[calc(100vh-4rem)] overflow-y-auto">
-          {user ? (
-            <>
-              {/* Wishlist */}
-              <Link href="/wishlist" onClick={() => setMobileMenuOpen(false)} className="flex items-center justify-between text-sm text-white/70 hover:text-white px-3 py-3 rounded-xl hover:bg-white/10 transition-all">
-                <span className="flex items-center gap-3">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                  </svg>
-                  <span>My Wishlist</span>
-                </span>
-                {wishlistCount > 0 && (
-                  <span suppressHydrationWarning className="bg-bushal-copper text-white text-[10px] font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center">
-                    {wishlistCount}
-                  </span>
-                )}
-              </Link>
-
-              {/* Compare */}
-              {compareCount > 0 && (
-                <Link href="/compare" onClick={() => setMobileMenuOpen(false)} className="flex items-center justify-between text-sm text-white/70 hover:text-white px-3 py-3 rounded-xl hover:bg-white/10 transition-all">
-                  <span className="flex items-center gap-3">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
-                    </svg>
-                    <span>Compare Products</span>
-                  </span>
-                  <span suppressHydrationWarning className="bg-bushal-forest text-white text-[10px] font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center">
-                    {compareCount}
-                  </span>
+          {results.length > 0 && (
+            <div className="max-w-2xl mx-auto mt-4 space-y-2">
+              {results.map((result) => (
+                <Link
+                  key={result.id}
+                  href={`/product/${result.id}`}
+                  onClick={handleResultClick}
+                  className="flex items-center gap-4 p-4 bg-white/5 rounded-xl hover:bg-white/10 transition-colors"
+                >
+                  <div className="w-16 h-16 rounded-lg bg-white/10 overflow-hidden flex-shrink-0">
+                    {result.image_url ? (
+                      <img src={result.image_url} alt={result.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-white/30">
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white font-semibold truncate">{result.name}</p>
+                    <p className="text-white/60 text-sm">৳{result.price.toLocaleString()}</p>
+                  </div>
                 </Link>
-              )}
-
-              {/* Orders */}
-              <Link href="/orders" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 text-sm text-white/70 hover:text-white px-3 py-3 rounded-xl hover:bg-white/10 transition-all">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                </svg>
-                <span>My Orders</span>
-              </Link>
-
-              {/* Profile / Admin */}
-              <Link href={isAdmin ? '/admin' : '/profile'} onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 text-sm text-white/70 hover:text-white px-3 py-3 rounded-xl hover:bg-white/10 transition-all">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
-                <span>{isAdmin ? 'Admin Panel' : 'My Profile'}</span>
-              </Link>
-
-              {/* Sign out */}
-              <button onClick={() => { signOut(); setMobileMenuOpen(false) }} className="flex items-center gap-3 w-full text-left text-sm text-white/50 hover:text-white px-3 py-3 rounded-xl hover:bg-white/10 transition-all">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                </svg>
-                <span>Sign out</span>
-              </button>
-            </>
-          ) : (
-            <>
-              {/* Wishlist for guests */}
-              <Link href="/wishlist" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 text-sm text-white/70 hover:text-white px-3 py-3 rounded-xl hover:bg-white/10 transition-all">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                </svg>
-                <span>Wishlist</span>
-              </Link>
-              <Link href="/login" onClick={() => setMobileMenuOpen(false)} className="block text-sm text-white/70 hover:text-white px-3 py-3 rounded-xl hover:bg-white/10 transition-all">
-                <span>Sign in</span>
-              </Link>
-              <Link href="/register" onClick={() => setMobileMenuOpen(false)} className="block text-sm bg-gradient-to-r from-bushal-copper to-bushal-copperLight text-white text-center px-3 py-3 rounded-xl font-semibold mt-2">
-                <span>Register</span>
-              </Link>
-            </>
+              ))}
+            </div>
           )}
         </div>
       )}
 
-      {/* Spacer */}
-      <div className="h-16 lg:h-20" />
-      <CartDrawer isOpen={cartOpen} onClose={() => setCartOpen(false)} />
+      {/* Mobile Menu Overlay */}
+      {mobileMenuOpen && (
+        <div className="fixed inset-0 z-[60] bg-bushal-forest pt-20 px-4">
+          <div className="max-w-sm mx-auto space-y-2">
+            {!isAdmin && (
+              <>
+                <Link
+                  href="/dashboard"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="block p-4 text-white/90 hover:text-white hover:bg-white/5 rounded-xl transition-colors"
+                >
+                  <span className="font-medium">Home</span>
+                </Link>
+                <Link
+                  href="/orders"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="block p-4 text-white/90 hover:text-white hover:bg-white/5 rounded-xl transition-colors"
+                >
+                  <span className="font-medium">My Orders</span>
+                </Link>
+                <Link
+                  href="/wishlist"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="block p-4 text-white/90 hover:text-white hover:bg-white/5 rounded-xl transition-colors"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium">Wishlist</span>
+                    {wishlistCount > 0 && (
+                      <span className="bg-bushal-copper text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                        {wishlistCount}
+                      </span>
+                    )}
+                  </div>
+                </Link>
+              </>
+            )}
+            {user ? (
+              <>
+                <Link
+                  href={isAdmin ? '/admin' : '/profile'}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="block p-4 text-white/90 hover:text-white hover:bg-white/5 rounded-xl transition-colors"
+                >
+                  <span className="font-medium">{isAdmin ? 'Admin Dashboard' : 'Profile'}</span>
+                </Link>
+                <button
+                  onClick={() => { signOut(); setMobileMenuOpen(false) }}
+                  className="w-full text-left p-4 text-white/90 hover:text-white hover:bg-white/5 rounded-xl transition-colors"
+                >
+                  <span className="font-medium">Sign Out</span>
+                </button>
+              </>
+            ) : (
+              <>
+                <Link
+                  href="/login"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="block p-4 text-white/90 hover:text-white hover:bg-white/5 rounded-xl transition-colors"
+                >
+                  <span className="font-medium">Sign In</span>
+                </Link>
+                <Link
+                  href="/register"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="block p-4 bg-bushal-copper text-white rounded-xl text-center font-semibold"
+                >
+                  <span>Create Account</span>
+                </Link>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+            {/* Cart Drawer - Fixed: Added isOpen prop */}
+      <CartDrawer 
+        isOpen={cartOpen} 
+        onClose={() => setCartOpen(false)} 
+      />
     </>
   )
 }

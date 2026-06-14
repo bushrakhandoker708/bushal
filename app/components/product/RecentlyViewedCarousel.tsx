@@ -1,32 +1,39 @@
 // app/components/product/RecentlyViewedCarousel.tsx
-
-// A premium, horizontal-scrolling carousel that displays products 
-// the user has recently viewed. It uses the `useRecentlyViewed` 
+// A premium, horizontal-scrolling carousel that displays products
+// the user has recently viewed. It uses the `useRecentlyViewed`
 // Zustand hook to fetch data from localStorage.
-
 'use client'
-
 import { useRecentlyViewed } from '@/app/hooks/useRecentlyViewed'
 import { formatPrice } from '@/app/lib/utils/formatPrice'
 import Link from 'next/link'
 import { cn } from '@/app/lib/utils/cn'
+import { useState, useEffect } from 'react'
 
 interface Props {
   // Pass the current product ID to exclude it from the carousel
-  currentProductId?: string 
+  currentProductId?: string
   className?: string
 }
 
 export default function RecentlyViewedCarousel({ currentProductId, className }: Props) {
   const { items } = useRecentlyViewed()
 
+  // FIX: Track if the component has mounted on the client to prevent hydration mismatches
+  // caused by Zustand's localStorage persistence.
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
   // Filter out the current product and limit to 8 items
   const relevantItems = items
     .filter((item) => item.id !== currentProductId)
     .slice(0, 8)
 
-  // If there are no other recently viewed items, don't render anything
-  if (relevantItems.length === 0) return null
+  // FIX: Only return null after mounting if there are no items.
+  // On the server and the client's first render, we return null to ensure
+  // the server and client HTML match perfectly before localStorage is read.
+  if (!mounted || relevantItems.length === 0) return null
 
   return (
     <section className={cn('mt-20 lg:mt-28', className)}>
@@ -73,7 +80,7 @@ export default function RecentlyViewedCarousel({ currentProductId, className }: 
                       </svg>
                     </div>
                   )}
-                  
+
                   {/* Stock Badge */}
                   {!item.in_stock && (
                     <div className="absolute top-2 left-2 bg-bushal-dangerBg/90 backdrop-blur-sm text-bushal-danger text-[9px] font-bold tracking-wider uppercase px-2 py-1 rounded-md">

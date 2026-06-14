@@ -1,7 +1,5 @@
 // app/components/layout/CompareDrawer.tsx
-
 'use client'
-
 import { useCompare } from '@/app/hooks/useCompare'
 import { motion, AnimatePresence } from 'framer-motion'
 import Link from 'next/link'
@@ -17,6 +15,13 @@ export default function CompareDrawer() {
   const { addItem } = useCart()
   const [isOpen, setIsOpen] = useState(false)
 
+  // FIX: Track if the component has mounted on the client to prevent hydration mismatches
+  // caused by Zustand's localStorage persistence.
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
   useEffect(() => {
     if (getItemCount() > 0) {
       setIsOpen(true)
@@ -25,7 +30,8 @@ export default function CompareDrawer() {
     }
   }, [items.length, getItemCount])
 
-  if (items.length === 0) return null
+  // FIX: Don't render anything until the client has mounted and localStorage is read.
+  if (!mounted || items.length === 0) return null
 
   const handleMoveToCart = (item: CompareItem) => {
     const productForCart: Product = {

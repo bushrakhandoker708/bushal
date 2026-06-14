@@ -1,12 +1,9 @@
 // app/(customer)/wishlist/page.tsx
-
 // A premium, responsive page displaying the user's saved wishlist items.
 // Utilizes the Zustand store for instant, optimistic UI updates.
 // Includes empty states, move-to-cart actions, and remove functionality.
 // Integrates Framer Motion for smooth layout animations when items are removed.
-
 'use client'
-
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useWishlist } from '@/app/hooks/useWishList'
@@ -18,10 +15,18 @@ import Navbar from '@/app/components/layout/Navbar'
 import Footer from '@/app/components/layout/Footer'
 import BottomNav from '@/app/components/layout/BottomNav'
 import PageWrapper from '@/app/components/layout/PageWrapper'
+import { useState, useEffect } from 'react'
 
 export default function WishlistPage() {
   const { items, removeItem, clearWishlist } = useWishlist()
   const { addItem } = useCart()
+
+  // FIX: Track if the component has mounted on the client to prevent hydration mismatches
+  // caused by Zustand's localStorage persistence.
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   // Map wishlist item back to a Product-like object for the cart
   const handleMoveToCart = (item: any) => {
@@ -39,8 +44,9 @@ export default function WishlistPage() {
     removeItem(item.id)
   }
 
-  // Empty State
-  if (items.length === 0) {
+  // FIX: To prevent hydration mismatch, we treat the wishlist as empty until 
+  // the client has mounted and read the actual data from localStorage.
+  if (!mounted || items.length === 0) {
     return (
       <div className="min-h-screen bg-bushal-ivory">
         <Navbar />
@@ -88,7 +94,7 @@ export default function WishlistPage() {
         </div>
 
         {/* Grid with Layout Animations */}
-        <motion.div 
+        <motion.div
           layout
           className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
         >
@@ -124,7 +130,7 @@ export default function WishlistPage() {
                         </svg>
                       </div>
                     )}
-                    
+
                     {/* Remove Button */}
                     <button
                       onClick={(e) => {

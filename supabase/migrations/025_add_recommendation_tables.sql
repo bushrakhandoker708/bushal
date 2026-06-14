@@ -1,7 +1,5 @@
--- ============================================================================
--- MIGRATION 025: RECOMMENDATION & ANALYTICS TABLES
--- ============================================================================
--- 
+-- RECOMMENDATION & ANALYTICS TABLES
+
 -- This migration adds the database schema required to support the new 
 -- ML/DSA features: Collaborative Filtering, Apriori (Frequently Bought Together),
 -- K-Means Customer Segmentation, Product Graph (PageRank), Holt-Winters 
@@ -13,7 +11,6 @@
 -- - Row Level Security (RLS) is enabled. Admins can read/write; the service 
 --   role (used by Next.js API routes) can insert/update freely.
 -- - Caching tables are included to prevent heavy ML computations on every request.
--- ============================================================================
 
 -- ─── 1. PRODUCT INTERACTIONS (For Collaborative Filtering) ──────────────────
 -- Tracks user behavior (views, clicks, purchases) to build the User-Item Matrix

@@ -1,7 +1,5 @@
--- ============================================================================
--- MIGRATION 027: PRODUCT GRAPH & RECOMMENDATION CACHE TABLES
--- ============================================================================
--- 
+-- PRODUCT GRAPH & RECOMMENDATION CACHE TABLES
+
 -- This migration adds tables to support the Product Graph Recommendation Engine
 -- (PageRank & Random Walk with Restart). 
 -- 
@@ -10,8 +8,6 @@
 -- - `product_graph_scores`: Caches the computed PageRank importance scores.
 -- - RLS is enabled. Public/API can read; Service Role/Admins can write.
 -- - Uses DROP IF EXISTS to ensure the migration is idempotent and safe to re-run.
--- ============================================================================
-
 -- ─── 1. PRODUCT GRAPH EDGES (Relationship Cache) ───────────────────────────
 -- Stores the directed edges of the product graph. 
 -- Edges are created based on co-purchases, category similarity, or manual admin overrides.

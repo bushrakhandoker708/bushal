@@ -2,15 +2,16 @@
 import { createServerClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
 import ProductForm from '@/app/components/product/ProductForm'
+import { Product } from '@/app/types/product'
 
 interface Props {
   params: { id: string }
 }
 
 export default async function EditProductPage({ params }: Props) {
-  const supabase =  await createServerClient()
-  
-  // Fetch the specific product to edit
+  const supabase = await createServerClient()
+
+  // Fetch the specific product to edit (including the new cost_price and other_costs columns)
   const { data: product } = await supabase
     .from('products')
     .select('*')
@@ -36,10 +37,10 @@ export default async function EditProductPage({ params }: Props) {
         </p>
       </div>
       <div className="bg-white rounded-2xl border border-slate-200 p-6 sm:p-8">
-        <ProductForm 
-          mode="edit" 
-          product={product} 
-          categories={categories ?? []} 
+        <ProductForm
+          mode="edit"
+          product={product as Product}
+          categories={categories ?? []}
         />
       </div>
     </div>

@@ -1,7 +1,5 @@
--- ============================================================================
--- MIGRATION 026: ADVANCED ANALYTICS TRACKING & HISTORY TABLES
--- ============================================================================
--- 
+-- ADVANCED ANALYTICS TRACKING & HISTORY TABLES
+
 -- This migration adds tables to track the historical performance and evolution
 -- of our ML/DSA algorithms. While the previous migration (025) added tables for
 -- caching current recommendations, this migration focuses on:
@@ -14,7 +12,6 @@
 --   algorithms perform over time and how customer behavior evolves.
 -- - RLS is enabled. Admins can read; the Service Role (Next.js API routes) 
 --   can insert/update freely.
--- ============================================================================
 
 -- ─── 1. FORECAST ACCURACY LOGS (Holt-Winters Tracking) ──────────────────────
 -- Tracks the accuracy of demand forecasts. Once a forecasted date passes,

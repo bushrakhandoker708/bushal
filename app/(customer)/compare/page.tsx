@@ -1,16 +1,11 @@
+// app/(customer)/compare/page.tsx
 /**
- * ============================================================================
- * DEDICATED COMPARE PAGE
- * ============================================================================
- * 
- * A premium, full-page view for comparing selected products side-by-side.
- * Uses the `useCompare` Zustand hook to fetch items from localStorage.
- * Features a sticky header, responsive table layout, and direct "Add to Bag" actions.
- * ============================================================================
- */
-
+* A premium, full-page view for comparing selected products side-by-side.
+* Uses the `useCompare` Zustand hook to fetch items from localStorage.
+* Features a sticky header, responsive table layout, and direct "Add to Bag" actions.
+* ============================================================================
+*/
 'use client'
-
 import { useCompare } from '@/app/hooks/useCompare'
 import { useCart } from '@/app/hooks/useCart'
 import { formatPrice } from '@/app/lib/utils/formatPrice'
@@ -22,10 +17,18 @@ import BottomNav from '@/app/components/layout/BottomNav'
 import PageWrapper from '@/app/components/layout/PageWrapper'
 import EmptyState from '@/app/components/ui/EmptyState'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useState, useEffect } from 'react'
 
 export default function ComparePage() {
   const { items, removeItem, clearCompare } = useCompare()
   const { addItem } = useCart()
+
+  // FIX: Track if the component has mounted on the client to prevent hydration mismatches
+  // caused by Zustand's localStorage persistence.
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   const handleMoveToCart = (item: any) => {
     const productForCart = {
@@ -43,8 +46,9 @@ export default function ComparePage() {
     removeItem(item.id)
   }
 
-  // Empty State
-  if (items.length === 0) {
+  // FIX: To prevent hydration mismatch, we treat the compare list as empty until 
+  // the client has mounted and read the actual data from localStorage.
+  if (!mounted || items.length === 0) {
     return (
       <div className="min-h-screen bg-bushal-ivory">
         <Navbar />
@@ -139,7 +143,6 @@ export default function ComparePage() {
                   })}
                 </tr>
               </thead>
-
               <tbody className="divide-y divide-bushal-border">
                 {/* Price Row */}
                 <tr>
@@ -162,7 +165,6 @@ export default function ComparePage() {
                     )
                   })}
                 </tr>
-
                 {/* Category Row */}
                 <tr>
                   <td className="p-4 font-semibold text-bushal-ink bg-bushal-ivoryDeep/30 sticky left-0 z-10 border-r border-bushal-border text-sm">
@@ -176,7 +178,6 @@ export default function ComparePage() {
                     </td>
                   ))}
                 </tr>
-
                 {/* Stock Row */}
                 <tr>
                   <td className="p-4 font-semibold text-bushal-ink bg-bushal-ivoryDeep/30 sticky left-0 z-10 border-r border-bushal-border text-sm">
@@ -193,7 +194,6 @@ export default function ComparePage() {
                     </td>
                   ))}
                 </tr>
-
                 {/* Description Row */}
                 <tr>
                   <td className="p-4 font-semibold text-bushal-ink bg-bushal-ivoryDeep/30 sticky left-0 z-10 border-r border-bushal-border text-sm align-top">
@@ -207,7 +207,6 @@ export default function ComparePage() {
                     </td>
                   ))}
                 </tr>
-
                 {/* Action Row */}
                 <tr>
                   <td className="p-6 bg-bushal-ivoryDeep/30 sticky left-0 z-10 border-r border-bushal-border"></td>

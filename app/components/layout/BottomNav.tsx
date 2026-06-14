@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation'
 import { useCart } from '@/app/hooks/useCart'
 import { useWishlist } from '@/app/hooks/useWishList'
 import { cn } from '@/app/lib/utils/cn'
+import { useState, useEffect } from 'react'
 
 const NAV_ITEMS = [
   {
@@ -56,9 +57,15 @@ export default function BottomNav() {
   const pathname = usePathname()
   const { items } = useCart()
   const { getItemCount: getWishlistCount } = useWishlist()
-  
   const cartCount = items.reduce((s, i) => s + i.quantity, 0)
   const wishlistCount = getWishlistCount()
+
+  // FIX: Track if the component has mounted on the client to prevent hydration mismatches
+  // caused by Zustand's localStorage persistence.
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   // Hide on admin pages
   if (pathname.startsWith('/admin')) return null
@@ -86,7 +93,10 @@ export default function BottomNav() {
             >
               <span className="relative">
                 {item.icon(active)}
-                {item.showBadge && badgeCount > 0 && (
+                
+                {/* FIX: Only render the badge after the component has mounted on the client.
+                   This ensures the server and client render the exact same initial DOM structure. */}
+                {mounted && item.showBadge && badgeCount > 0 && (
                   <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-4.5 bg-gradient-to-r from-bushal-copper to-bushal-copperLight text-white text-[9px] font-bold rounded-full flex items-center justify-center px-1 leading-none shadow-md shadow-bushal-copper/30 animate-bounce-pop">
                     {badgeCount > 9 ? '9+' : badgeCount}
                   </span>

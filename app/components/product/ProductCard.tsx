@@ -1,9 +1,8 @@
 // app/components/product/ProductCard.tsx
-
 'use client'
 
 import Link from 'next/link'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { formatPrice } from '@/app/lib/utils/formatPrice'
 import { Product } from '@/app/types/product'
 import { useCart } from '@/app/hooks/useCart'
@@ -26,8 +25,16 @@ export default function ProductCard({ product, index = 0 }: Props) {
   const [imgIndex, setImgIndex] = useState(0)
   const [quickViewOpen, setQuickViewOpen] = useState(false)
 
-  const isWished = isInWishlist(product.id)
-  const isCompared = isInCompare(product.id)
+  // FIX: Track if the component has mounted on the client to prevent hydration mismatches
+  // caused by Zustand's localStorage persistence for wishlist and compare hooks.
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  // Only check wishlist/compare status after mounting to ensure server/client match
+  const isWished = mounted ? isInWishlist(product.id) : false
+  const isCompared = mounted ? isInCompare(product.id) : false
 
   const discountedPrice = product.discount_percent
     ? product.price * (1 - product.discount_percent / 100)
