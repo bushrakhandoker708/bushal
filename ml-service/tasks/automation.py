@@ -3,7 +3,6 @@
 # Generating Purchase Orders: It identifies critical stock items (low stock) and uses reportlab to generate a PDF Purchase Order (PO) for the admin.
 # Retention Campaigns: It finds "High Risk" customers who haven't bought in 60+ days and sends them a personalized discount code via Resend to prevent churn
 
-
 import logging
 import os
 from datetime import datetime
