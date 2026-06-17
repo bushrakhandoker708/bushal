@@ -1,14 +1,13 @@
 // app/api/cron/trigger-ml/route.ts
 import { NextResponse } from 'next/server'
 // This is the bridge between your Next.js app and your new Python microservice. It uses Vercel Cron to automatically wake up your Python service once a day (at 2:00 AM UTC) to run all the heavy ML pipelines (Segmentation, Forecasting, Recommendations, Automation) without blocking your main app or hitting serverless timeouts.
-// ─── Vercel Cron Configuration ───────────────────────────────────────────────
-// This tells Vercel to automatically call this route on a schedule.
-// '0 2 * * *' means: Run at 2:00 AM UTC every day.
-// This is the ideal time for batch ML jobs when traffic is lowest.
-export const maxDuration = 60 // Allow up to 60 seconds for the request to complete
-export const config = {
-  cron: '0 2 * * *',
-}
+
+
+// ─── Next.js 14 App Router Route Segment Config ──────────────────────────────
+// FIX: Removed `export const config = { cron: ... }` as it is deprecated in App Router.
+// Cron schedules are now handled in `vercel.json` at the root of the project.
+export const maxDuration = 60 // Allow up to 60 seconds for the Python ML service to respond
+export const dynamic = 'force-dynamic' // Prevent caching; always execute when called
 
 export async function GET() {
   const mlServiceUrl = process.env.ML_SERVICE_URL
@@ -26,16 +25,14 @@ export async function GET() {
   try {
     console.log('🚀 Triggering ML Pipeline at', new Date().toISOString())
     
-    // 2. Call the Python Microservice
-    // We pass the secret in the header so the Python service knows it's a legitimate request.
+    // 2. Call the Python Microservice on Railway
     const response = await fetch(`${mlServiceUrl}/run-pipeline`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'x-pipeline-secret': pipelineSecret,
       },
-      // Increase timeout for heavy ML workloads
-      signal: AbortSignal.timeout(55000), 
+      signal: AbortSignal.timeout(55000), // 55s timeout (just under the 60s maxDuration)
     })
 
     // 3. Handle Python Service Response
