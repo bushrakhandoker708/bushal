@@ -2,12 +2,14 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { 
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend 
+import {
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
 } from 'recharts'
 import RFMMatrix, { type RFMData } from './analytics/RFMMatrix'
 import CohortHeatmap, { type CohortRow } from './analytics/CohortHeatmap'
 import PredictiveInsights, { type CLVData, type ForecastData } from './analytics/PredictiveInsights'
+// FIX: Import the new ML Performance panel and its types
+import MLPerformancePanel, { type MLAccuracyRecord } from './analytics/MLPerformancePanel'
 import { formatPrice } from '@/app/lib/utils/formatPrice'
 
 // Types matching page.tsx
@@ -97,11 +99,13 @@ interface Props {
   advancedForecast: ForecastData | null
 }
 
+// FIX: Added the new 'ml-performance' tab
 const TABS = [
   { id: 'overview', label: 'Overview & Revenue' },
   { id: 'rfm', label: 'Customer Segments' },
   { id: 'cohort', label: 'Cohort Retention' },
   { id: 'predictive', label: 'Predictive Insights' },
+  { id: 'ml-performance', label: 'AI Model Trust' },
 ]
 
 const TAB_DESCRIPTIONS: Record<string, { what: string; how: string }> = {
@@ -120,6 +124,11 @@ const TAB_DESCRIPTIONS: Record<string, { what: string; how: string }> = {
   predictive: {
     what: "Forecasts future demand and Customer Lifetime Value (CLV) using predictive algorithms.",
     how: "Demand is forecasted via a Weighted Moving Average (WMA) to react quickly to recent trends. CLV is predicted using historical purchase frequency, average order value, and customer lifespan."
+  },
+  // FIX: Added description for the new AI Model Trust tab
+  'ml-performance': {
+    what: "Displays the real-time accuracy and health of the AI models powering your store's intelligence features.",
+    how: "Fetches evaluation metrics (MAPE, Silhouette Score, Lift) logged by the Python ML microservice. This tells you exactly how much you can 'trust' the AI's predictions and recommendations."
   }
 }
 
@@ -137,15 +146,36 @@ export default function AdminAnalyticsClient({
 }: Props) {
   const [activeTab, setActiveTab] = useState('overview')
   const [chartData, setChartData] = useState<Array<{ date: string; Revenue: number; Profit: number }>>([])
+  
+  // NEW: State for ML Performance data
+  const [mlData, setMlData] = useState<MLAccuracyRecord[]>([])
+  const [mlLoading, setMlLoading] = useState(true)
+
+  // NEW: Fetch ML Accuracy data from the new API route
+  useEffect(() => {
+    const fetchMlData = async () => {
+      try {
+        const res = await fetch('/api/admin/ml-accuracy')
+        if (res.ok) {
+          const data = await res.json()
+          setMlData(data)
+        }
+      } catch (error) {
+        console.error('Failed to fetch ML accuracy data:', error)
+      } finally {
+        setMlLoading(false)
+      }
+    }
+    fetchMlData()
+  }, [])
 
   // Debug and transform data
   useEffect(() => {
     console.log('📊 Daily Revenue Raw Data:', dailyRevenue)
     console.log('📊 Summary Data:', summary)
-    
+
     if (dailyRevenue && Array.isArray(dailyRevenue) && dailyRevenue.length > 0) {
       const transformed = dailyRevenue.map(d => {
-        // Parse date - handle both YYYY-MM-DD and other formats
         let dateStr = d.date
         try {
           const dateObj = new Date(d.date)
@@ -155,7 +185,6 @@ export default function AdminAnalyticsClient({
         } catch (e) {
           console.warn('Date parse error:', d.date, e)
         }
-        
         return {
           date: dateStr,
           Revenue: Number(d.revenue) || 0,
@@ -181,12 +210,12 @@ export default function AdminAnalyticsClient({
     <div className="space-y-6">
       {/* Tabs Navigation */}
       <div className="border-b border-bushal-border">
-        <nav className="flex gap-6 -mb-px" aria-label="Tabs">
+        <nav className="flex gap-6 -mb-px overflow-x-auto no-scrollbar" aria-label="Tabs">
           {TABS.map(tab => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`py-3 text-sm font-medium border-b-2 transition-colors ${
+              className={`py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                 activeTab === tab.id
                   ? 'border-bushal-forest text-bushal-forest'
                   : 'border-transparent text-bushal-inkSoft hover:text-bushal-ink hover:border-bushal-inkSoft/30'
@@ -247,34 +276,34 @@ export default function AdminAnalyticsClient({
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                    <XAxis 
-                      dataKey="date" 
-                      tick={{ fontSize: 11, fill: '#6B7280' }} 
+                    <XAxis
+                      dataKey="date"
+                      tick={{ fontSize: 11, fill: '#6B7280' }}
                     />
-                    <YAxis 
-                      tick={{ fontSize: 11, fill: '#6B7280' }} 
+                    <YAxis
+                      tick={{ fontSize: 11, fill: '#6B7280' }}
                       tickFormatter={formatYAxisTick}
                     />
-                    <Tooltip 
+                    <Tooltip
                       contentStyle={{ borderRadius: '8px', border: '1px solid #E5E7EB', fontSize: '12px' }}
                       formatter={(value: any) => [`৳${Number(value).toLocaleString()}`, '']}
                     />
                     <Legend wrapperStyle={{ fontSize: '12px' }} />
-                    <Area 
-                      type="monotone" 
-                      dataKey="Revenue" 
-                      stroke="#065F46" 
-                      fillOpacity={1} 
-                      fill="url(#colorRevenue)" 
-                      strokeWidth={2} 
+                    <Area
+                      type="monotone"
+                      dataKey="Revenue"
+                      stroke="#065F46"
+                      fillOpacity={1}
+                      fill="url(#colorRevenue)"
+                      strokeWidth={2}
                     />
-                    <Area 
-                      type="monotone" 
-                      dataKey="Profit" 
-                      stroke="#B87333" 
-                      fillOpacity={1} 
-                      fill="url(#colorProfit)" 
-                      strokeWidth={2} 
+                    <Area
+                      type="monotone"
+                      dataKey="Profit"
+                      stroke="#B87333"
+                      fillOpacity={1}
+                      fill="url(#colorProfit)"
+                      strokeWidth={2}
                     />
                   </AreaChart>
                 </ResponsiveContainer>
@@ -292,8 +321,8 @@ export default function AdminAnalyticsClient({
                     <div className="flex items-center gap-3">
                       <span className="text-xs text-bushal-inkSoft tabular-nums">{formatPrice(cat.currentRevenue)}</span>
                       <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
-                        cat.trend === 'up' ? 'bg-bushal-forest/10 text-bushal-forest' : 
-                        cat.trend === 'down' ? 'bg-bushal-dangerBg text-bushal-danger' : 
+                        cat.trend === 'up' ? 'bg-bushal-forest/10 text-bushal-forest' :
+                        cat.trend === 'down' ? 'bg-bushal-dangerBg text-bushal-danger' :
                         'bg-bushal-ivoryDeep text-bushal-inkSoft'
                       }`}>
                         {cat.trend === 'up' ? '↑' : cat.trend === 'down' ? '↓' : '→'} {cat.growthRate}%
@@ -313,8 +342,8 @@ export default function AdminAnalyticsClient({
                     <div className="flex items-center gap-3">
                       <span className="text-xs text-bushal-inkSoft tabular-nums">{item.stock_quantity} left</span>
                       <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
-                        item.urgency === 'critical' ? 'bg-bushal-dangerBg text-bushal-danger' : 
-                        item.urgency === 'high' ? 'bg-bushal-warningBg text-bushal-warning' : 
+                        item.urgency === 'critical' ? 'bg-bushal-dangerBg text-bushal-danger' :
+                        item.urgency === 'high' ? 'bg-bushal-warningBg text-bushal-warning' :
                         'bg-bushal-ivoryDeep text-bushal-inkSoft'
                       }`}>
                         {item.urgency}
@@ -329,10 +358,28 @@ export default function AdminAnalyticsClient({
       )}
 
       {activeTab === 'rfm' && (rfmData ? <RFMMatrix data={rfmData} /> : <EmptyState msg="No RFM data available." />)}
+      
       {activeTab === 'cohort' && (cohortData ? <CohortHeatmap data={cohortData} /> : <EmptyState msg="No cohort data available." />)}
+      
       {activeTab === 'predictive' && (clvData && advancedForecast ? (
         <PredictiveInsights clvData={clvData} forecastData={advancedForecast} />
       ) : <EmptyState msg="No predictive data available." />)}
+
+      {/* NEW: ML Performance Tab Content */}
+      {activeTab === 'ml-performance' && (
+        <div className="space-y-6">
+          {mlLoading ? (
+            <div className="flex items-center justify-center py-12 bg-bushal-surface rounded-2xl border border-bushal-border">
+              <div className="w-8 h-8 border-2 border-bushal-copper border-t-transparent rounded-full animate-spin" />
+              <span className="ml-3 text-sm text-bushal-inkSoft">Loading AI model metrics...</span>
+            </div>
+          ) : mlData.length > 0 ? (
+            <MLPerformancePanel data={mlData} />
+          ) : (
+            <EmptyState msg="No AI model evaluations recorded yet. Run the ML pipeline to generate metrics." />
+          )}
+        </div>
+      )}
     </div>
   )
 }
