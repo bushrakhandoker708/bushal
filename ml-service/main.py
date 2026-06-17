@@ -1,4 +1,5 @@
 # ml-service/main.py
+#This is the entry point for your Python microservice. It sets up the FastAPI server, implements a security layer (so only your Next.js app can trigger the ML pipeline), and orchestrates the execution of the different ML tasks.
 import os
 import logging
 from fastapi import FastAPI, Header, HTTPException
