@@ -1,11 +1,11 @@
 # ml-service/main.py
-#This is the entry point for your Python microservice. It sets up the FastAPI server, implements a security layer (so only your Next.js app can trigger the ML pipeline), and orchestrates the execution of the different ML tasks.
 import os
 import logging
+import uvicorn
 from fastapi import FastAPI, Header, HTTPException
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
+# Load environment variables from .env file (for local development)
 load_dotenv()
 
 # Configure logging for the microservice
@@ -51,7 +51,7 @@ def run_pipeline(x_pipeline_secret: str = Header(None)):
     """
     # 1. Security Check
     if not PIPELINE_SECRET or x_pipeline_secret != PIPELINE_SECRET:
-        logger.error(" Unauthorized pipeline trigger attempt.")
+        logger.error("🚫 Unauthorized pipeline trigger attempt.")
         raise HTTPException(status_code=401, detail="Invalid pipeline secret")
     
     logger.info("🚀 ==========================================")
@@ -84,7 +84,7 @@ def run_pipeline(x_pipeline_secret: str = Header(None)):
         from tasks.recommendations import run_product_recommendations
         results['recommendations'] = run_product_recommendations()
     except Exception as e:
-        logger.error(f" Recommendations failed: {e}")
+        logger.error(f"❌ Recommendations failed: {e}")
         results['recommendations'] = f"Error: {str(e)}"
         
     # 5. Run Business Automation (Fraud detection, Auto-POs)
@@ -93,7 +93,7 @@ def run_pipeline(x_pipeline_secret: str = Header(None)):
         from tasks.automation import run_business_automation
         results['automation'] = run_business_automation()
     except Exception as e:
-        logger.error(f" Automation failed: {e}")
+        logger.error(f"❌ Automation failed: {e}")
         results['automation'] = f"Error: {str(e)}"
         
     logger.info("✅ ==========================================")
@@ -122,3 +122,16 @@ def get_db_connection():
     # Use RealDictCursor to get rows as dictionaries (like Supabase JS client)
     conn = psycopg2.connect(database_url, cursor_factory=RealDictCursor)
     return conn
+
+# ─── Railway / Production Server Startup ─────────────────────────────────────
+# FIX: This block ensures the server starts and listens on the correct port
+# regardless of whether Railway uses Docker or Nixpacks to run the app.
+if __name__ == "__main__":
+    # Railway dynamically injects the PORT environment variable.
+    # We default to 8000 for local development.
+    port = int(os.environ.get("PORT", 8000))
+    
+    logger.info(f"🚀 Starting Uvicorn server on port {port}...")
+    
+    # Start the server on 0.0.0.0 so Railway's router can connect to it
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=False)
