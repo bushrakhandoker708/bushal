@@ -1,0 +1,23 @@
+# ─── Web Framework & Server ───────────────────────────────────────────────────
+fastapi==0.111.0
+uvicorn[standard]==0.30.1
+pydantic==2.7.4
+
+# ─── Database Connection ──────────────────────────────────────────────────────
+psycopg2-binary==2.9.9
+SQLAlchemy==2.0.31
+
+# ─── Data Science & Math ──────────────────────────────────────────────────────
+pandas==2.2.2
+numpy==1.26.4
+scikit-learn==1.5.0         # For K-Means, Silhouette Score, Cosine Similarity
+statsmodels==0.14.2         # For Holt-Winters Time Series
+mlxtend==0.23.1             # For FP-Growth (Replacing Apriori)
+
+# ─── Automation & Business Loop ───────────────────────────────────────────────
+resend==2.1.0               # For automated retention emails
+reportlab==4.2.2            # For generating PDF Purchase Orders
+requests==2.32.3            # For HTTP calls
+
+# ─── Utilities ────────────────────────────────────────────────────────────────
+python-dotenv==1.0.1
