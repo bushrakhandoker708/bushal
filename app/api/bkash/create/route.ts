@@ -1,19 +1,19 @@
-// app/api/bkash/create/route.ts
 import { NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { v4 as uuidv4 } from 'uuid'
 import { CartItem } from '@/app/types/cart'
-import { bkashCreatePayment } from '@/app/lib/bkash'
+import { bkashCreatePayment } from '@/lib/bkash'
 
 export async function POST(request: Request) {
-  const supabase =  await createServerClient()
-
+  const supabase = await createServerClient()
   const { data: { user }, error: authError } = await supabase.auth.getUser()
+  
   if (authError || !user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   const body: { items: CartItem[] } = await request.json()
+  
   if (!body.items || body.items.length === 0) {
     return NextResponse.json({ error: 'Cart is empty' }, { status: 400 })
   }
@@ -56,10 +56,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: rpcError.message }, { status: 500 })
   }
 
+  // Fixed: Changed orderID to orderId to match the type definition
   const bkashRes = await bkashCreatePayment({
-    amount: Math.round(total),
-    callbackURL: `${origin}/api/bkash/callback?orderId=${newOrderId}`,
-    orderID,
+    amount: Math.round(total).toString(),
+    orderId: orderID,  // Changed from orderID to orderId
+    callbackUrl: `${origin}/api/bkash/callback?orderId=${newOrderId}`,
   })
 
   if (!bkashRes.bkashURL) {
@@ -69,5 +70,8 @@ export async function POST(request: Request) {
     )
   }
 
-  return NextResponse.json({ bkashURL: bkashRes.bkashURL, orderId: newOrderId })
+  return NextResponse.json({ 
+    bkashURL: bkashRes.bkashURL, 
+    orderId: newOrderId 
+  })
 }

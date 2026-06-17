@@ -1,10 +1,8 @@
 // lib/recommendations/collaborativeFiltering.ts
 
 /**
- * ============================================================================
- * COLLABORATIVE FILTERING RECOMMENDATION ENGINE
- * ============================================================================
- * 
+  * COLLABORATIVE FILTERING RECOMMENDATION ENGINE
+
  * This module implements a hybrid collaborative filtering system that combines:
  * 1. User-Based Collaborative Filtering with Cosine Similarity
  * 2. K-Nearest Neighbors (KNN) for finding similar users
@@ -18,11 +16,7 @@
  * - Cosine Similarity: cos(θ) = (A · B) / (||A|| × ||B||)
  * - KNN: Find K users with highest similarity scores
  * - SVD: M = U × Σ × V^T (decomposes user-item matrix into latent factors)
- * 
- * USAGE:
- * const recommendations = await getCollaborativeRecommendations(userId, k=5)
- * ============================================================================
- */
+*/
 
 // ─── Types & Interfaces ─────────────────────────────────────────────────────
 

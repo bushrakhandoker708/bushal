@@ -2,7 +2,6 @@
 // Server component: fetches all analytics RPCs in parallel and passes typed data
 // to AdminAnalyticsClient. Migration-013 RPCs are wrapped in Promise.resolve()
 // so .catch() is available — Supabase .then() returns PromiseLike, not Promise.
-// app/(admin)/admin/analytics/page.tsx
 import { createServerClient } from '@/lib/supabase/server'
 import AdminAnalyticsClient from '@/app/components/admin/AdminAnalyticsClient'
 import type { RFMData } from '@/app/components/admin/analytics/RFMMatrix'
@@ -40,15 +39,15 @@ export default async function AnalyticsPage() {
     Promise.resolve(supabase.rpc('get_rfm_segmentation'))
       .then(r => r.data as RFMData | null)
       .catch((err) => { console.error('❌ get_rfm_segmentation failed:', err); return null }),
-      
+    
     Promise.resolve(supabase.rpc('get_cohort_retention'))
       .then(r => r.data as CohortRow[] | null)
       .catch((err) => { console.error('❌ get_cohort_retention failed:', err); return null }),
-      
+    
     Promise.resolve(supabase.rpc('get_predictive_clv'))
       .then(r => r.data as CLVData | null)
       .catch((err) => { console.error('❌ get_predictive_clv failed:', err); return null }),
-      
+    
     Promise.resolve(supabase.rpc('get_advanced_demand_forecast'))
       .then(r => r.data as ForecastData | null)
       .catch((err) => { console.error('❌ get_advanced_demand_forecast failed:', err); return null }),

@@ -15,13 +15,6 @@
  * - Shows a reason/explanation for why the product is recommended
  * - Uses Framer Motion for smooth entrance animations
  * - Follows the Bushal luxury design system
- * 
- * USAGE:
- * <FrequentlyBoughtTogether productId={product.id} />
- * 
- * PLACEMENT:
- * Should be placed below the review section on the product detail page
- * ============================================================================
  */
 
 'use client'

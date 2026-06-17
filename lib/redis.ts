@@ -1,13 +1,15 @@
 // lib/redis.ts
 // Initializes the Upstash Redis client for server-side caching.
-// This is used to cache heavy analytics RPC results (like RFM, 
-// CLV, and revenue summaries) to prevent database overload 
+// This is used to cache heavy analytics RPC results (like RFM,
+// CLV, and revenue summaries) to prevent database overload
 // and ensure the admin dashboard loads instantly as data scales.
+// It is ALSO used by lib/bkash/index.ts to persist the bKash auth token
+// across Vercel serverless cold starts.
 
 import { Redis } from '@upstash/redis'
 
 // Initialize the Redis client using environment variables.
-// Upstash provides a REST-based Redis API, making it perfect 
+// Upstash provides a REST-based Redis API, making it perfect
 // for serverless environments like Vercel (where Bushal is hosted).
 export const redis = new Redis({
   url: process.env.UPSTASH_REDIS_REST_URL!,
@@ -15,7 +17,7 @@ export const redis = new Redis({
 })
 
 // Cache Keys Configuration
-// Centralizing cache keys prevents typos and makes it easy to 
+// Centralizing cache keys prevents typos and makes it easy to
 // invalidate specific caches when data changes.
 export const CACHE_KEYS = {
   ANALYTICS_SUMMARY: 'bushal:analytics:summary:v1',
@@ -29,7 +31,7 @@ export const CACHE_KEYS = {
 }
 
 // Cache TTL (Time To Live) Configuration
-// Analytics data doesn't need to be real-time. Caching for 1 hour 
+// Analytics data doesn't need to be real-time. Caching for 1 hour
 // provides a massive performance boost while keeping data fresh enough.
 export const CACHE_TTL = {
   SHORT: 300,    // 5 minutes (for highly volatile data like restock alerts)
@@ -38,8 +40,8 @@ export const CACHE_TTL = {
 }
 
 // Helper function to invalidate all analytics caches.
-// Call this function whenever a new order is fulfilled, cancelled, 
-// or a product is deleted/updated to ensure the dashboard reflects 
+// Call this function whenever a new order is fulfilled, cancelled,
+// or a product is deleted/updated to ensure the dashboard reflects
 // the latest data immediately.
 export async function invalidateAnalyticsCache() {
   const keysToDelete = Object.values(CACHE_KEYS)
