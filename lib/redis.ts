@@ -39,6 +39,8 @@ export const CACHE_TTL = {
   LONG: 3600,    // 1 hour (for heavy aggregations like RFM, CLV, Cohorts)
 }
 
+
+
 // Helper function to invalidate all analytics caches.
 // Call this function whenever a new order is fulfilled, cancelled,
 // or a product is deleted/updated to ensure the dashboard reflects

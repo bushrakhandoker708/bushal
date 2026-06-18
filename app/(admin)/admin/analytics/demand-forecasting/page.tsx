@@ -34,7 +34,7 @@ import {
   type TimeSeriesPoint,
   type FestivalEvent,
   type ForecastPoint,
-} from '@/lib/analytics/holtWinters'
+} from '@/docs/previously integrated ml in ts/holtWinters'
 
 export const metadata: Metadata = {
   title: 'Demand Forecasting',

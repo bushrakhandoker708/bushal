@@ -1,18 +1,18 @@
 /**
  * ============================================================================
- * DEMAND FORECASTING API ENDPOINT
+ * DEMAND FORECASTING API ENDPOINT (CACHE-BASED)
  * ============================================================================
  * 
- * This API endpoint provides on-demand Holt-Winters demand forecasting.
- * It can generate forecasts for either the overall store revenue or 
- * specific products based on their historical sales velocity.
+ * This API endpoint reads demand forecasts from the cache table populated
+ * by the Python ML microservice. It NO LONGER runs Holt-Winters algorithm
+ * in the serverless function.
  * 
- * FEATURES:
- * - Admin-only authentication
- * - Overall store revenue forecasting (monthly aggregation)
- * - Product-specific demand forecasting (units sold aggregation)
- * - Integration with Bangladesh festival calendar for sales boosts
- * - Stock-out risk analysis and restock recommendations
+ * CHANGES FROM PREVIOUS VERSION:
+ * - Removed all ML algorithm imports and execution
+ * - Reads from `demand_forecast_cache` table (populated by Python cron)
+ * - Reads festivals from `festivals` table (dynamic, not hardcoded)
+ * - Calculates stock-out risk based on cached forecasts
+ * - Much faster response time (no computation, just DB reads)
  * 
  * USAGE:
  * GET /api/analytics/demand-forecast?periods=6
@@ -22,7 +22,8 @@
  * {
  *   "success": true,
  *   "forecastType": "product" | "store_revenue",
- *   "historicalData": [...],
+ *   "productName": "Product Name",
+ *   "currentStock": 50,
  *   "forecast": [...],
  *   "stockOutRisk": "low" | "medium" | "high",
  *   "recommendedRestock": 50,
@@ -34,90 +35,64 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { requireAdmin } from '@/lib/auth'
-import {
-  generateDemandForecast,
-  type TimeSeriesPoint,
-  type FestivalEvent,
-  type DemandForecastResult,
-} from '@/lib/analytics/holtWinters'
 
-// ─── Bangladesh Festival Calendar (Dynamic for current/upcoming year) ──────
+// ─── Types ──────────────────────────────────────────────────────────────────
 
-function getUpcomingFestivals(): FestivalEvent[] {
-  const currentYear = new Date().getFullYear()
-  
-  // Note: In a production app, these dates would be fetched from a database
-  // or an external calendar API, as Islamic holidays shift yearly.
-  return [
-    {
-      name: 'Eid-ul-Fitr',
-      startDate: `${currentYear}-03-20`,
-      endDate: `${currentYear}-03-22`,
-      boostFactor: 2.5,
-    },
-    {
-      name: 'Pohela Boishakh',
-      startDate: `${currentYear}-04-14`,
-      endDate: `${currentYear}-04-16`,
-      boostFactor: 1.8,
-    },
-    {
-      name: 'Eid-ul-Adha',
-      startDate: `${currentYear}-05-27`,
-      endDate: `${currentYear}-05-29`,
-      boostFactor: 2.2,
-    },
-    {
-      name: 'Valentine\'s Day',
-      startDate: `${currentYear}-02-14`,
-      endDate: `${currentYear}-02-14`,
-      boostFactor: 1.6,
-    },
-    {
-      name: 'Durga Puja',
-      startDate: `${currentYear}-10-17`,
-      endDate: `${currentYear}-10-21`,
-      boostFactor: 1.7,
-    },
-    {
-      name: 'Winter Sale Season',
-      startDate: `${currentYear}-12-15`,
-      endDate: `${currentYear}-12-31`,
-      boostFactor: 2.0,
-    },
-    {
-      name: 'Independence Day',
-      startDate: `${currentYear}-03-26`,
-      endDate: `${currentYear}-03-26`,
-      boostFactor: 1.4,
-    },
-    {
-      name: 'Victory Day',
-      startDate: `${currentYear}-12-16`,
-      endDate: `${currentYear}-12-16`,
-      boostFactor: 1.3,
-    },
-  ]
+interface ForecastPoint {
+  date: string
+  predictedValue: number
+  lowerBound: number
+  upperBound: number
+  isFestivalPeriod: boolean
+  festivalName?: string
+  boostApplied: number
 }
 
-// ─── Helper: Aggregate Data by Month ────────────────────────────────────────
+interface Festival {
+  name: string
+  start_date: string
+  end_date: string
+  boost_factor: number
+}
 
-function aggregateByMonth(
-  records: { date: string; value: number }[]
-): TimeSeriesPoint[] {
-  const monthlyMap = new Map<string, number>()
+// ─── Helper: Calculate Stock-Out Risk ───────────────────────────────────────
 
-  records.forEach((record) => {
-    // Extract YYYY-MM from ISO date string
-    const monthKey = record.date.slice(0, 7)
-    const current = monthlyMap.get(monthKey) ?? 0
-    monthlyMap.set(monthKey, current + record.value)
-  })
+function calculateStockOutRisk(
+  currentStock: number,
+  forecast: ForecastPoint[],
+  leadTimeDays: number = 14
+): { risk: 'low' | 'medium' | 'high'; recommendedRestock: number } {
+  if (forecast.length === 0) {
+    return { risk: 'low', recommendedRestock: 0 }
+  }
 
-  // Convert to sorted array of TimeSeriesPoint
-  return Array.from(monthlyMap.entries())
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([date, value]) => ({ date: `${date}-01`, value }))
+  // Calculate cumulative demand over lead time
+  const leadTimeMonths = Math.ceil(leadTimeDays / 30)
+  const leadTimeForecast = forecast.slice(0, leadTimeMonths)
+  
+  const cumulativeDemand = leadTimeForecast.reduce(
+    (sum, f) => sum + f.predictedValue,
+    0
+  )
+
+  // Calculate safety stock (1.5x max daily demand)
+  const maxDailyDemand = Math.max(...forecast.map(f => f.predictedValue / 30))
+  const safetyStock = maxDailyDemand * 1.5
+
+  // Determine risk level
+  let risk: 'low' | 'medium' | 'high' = 'low'
+  
+  if (currentStock < cumulativeDemand * 0.5) {
+    risk = 'high'
+  } else if (currentStock < cumulativeDemand + safetyStock) {
+    risk = 'medium'
+  }
+
+  // Calculate recommended restock
+  const targetStock = cumulativeDemand + safetyStock
+  const recommendedRestock = Math.max(0, Math.ceil(targetStock - currentStock))
+
+  return { risk, recommendedRestock }
 }
 
 // ─── Main API Handler ───────────────────────────────────────────────────────
@@ -146,20 +121,17 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // 3. Fetch Historical Data
-    let historicalData: TimeSeriesPoint[] = []
+    // 3. Fetch Product Details (if product_id provided)
     let currentStock = 0
     let productName = 'Overall Store'
     let forecastType: 'product' | 'store_revenue' = 'store_revenue'
 
     if (productId) {
-      // ─ Product-Specific Forecast ──
       forecastType = 'product'
 
-      // Fetch product details for current stock
       const { data: product, error: productError } = await supabase
         .from('products')
-        .select('name, stock_quantity, in_stock')
+        .select('name, stock_quantity')
         .eq('id', productId)
         .is('is_deleted', false)
         .single()
@@ -172,111 +144,82 @@ export async function GET(request: NextRequest) {
       }
 
       productName = product.name
-      currentStock = product.stock_quantity
-
-      // Fetch historical sales for this specific product
-      // We look at fulfilled orders from the last 24 months
-      const twentyFourMonthsAgo = new Date()
-      twentyFourMonthsAgo.setMonth(twentyFourMonthsAgo.getMonth() - 24)
-
-      const { data: orderItems, error: itemsError } = await supabase
-        .from('order_items')
-        .select('quantity, created_at, orders!inner(status, created_at)')
-        .eq('product_id', productId)
-        .eq('orders.status', 'fulfilled')
-        .gte('orders.created_at', twentyFourMonthsAgo.toISOString())
-
-      if (itemsError) {
-        console.error('[Demand Forecast API] Error fetching order items:', itemsError)
-        return NextResponse.json(
-          { error: 'Failed to fetch historical sales data.' },
-          { status: 500 }
-        )
-      }
-
-      // Aggregate units sold by month
-      const salesRecords = (orderItems ?? []).map((item: any) => ({
-        date: item.orders.created_at,
-        value: item.quantity,
-      }))
-
-      historicalData = aggregateByMonth(salesRecords)
-    } else {
-      // ─ Overall Store Revenue Forecast ──
-      const twelveMonthsAgo = new Date()
-      twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 24)
-
-      const { data: orders, error: ordersError } = await supabase
-        .from('orders')
-        .select('total, created_at')
-        .eq('status', 'fulfilled')
-        .gte('created_at', twelveMonthsAgo.toISOString())
-
-      if (ordersError) {
-        console.error('[Demand Forecast API] Error fetching orders:', ordersError)
-        return NextResponse.json(
-          { error: 'Failed to fetch historical order data.' },
-          { status: 500 }
-        )
-      }
-
-      // Aggregate revenue by month
-      const revenueRecords = (orders ?? []).map((order: any) => ({
-        date: order.created_at,
-        value: order.total,
-      }))
-
-      historicalData = aggregateByMonth(revenueRecords)
+      currentStock = product.stock_quantity ?? 0
     }
 
-    // 4. Validate Historical Data
-    if (historicalData.length < 3) {
+    // 4. Fetch Forecasts from Cache Table
+    const today = new Date()
+    const forecastEndDate = new Date()
+    forecastEndDate.setMonth(forecastEndDate.getMonth() + periodsToForecast)
+
+    let forecastQuery = supabase
+      .from('demand_forecast_cache')
+      .select('*')
+      .gte('forecast_date', today.toISOString().split('T')[0])
+      .lte('forecast_date', forecastEndDate.toISOString().split('T')[0])
+      .order('forecast_date', { ascending: true })
+
+    if (productId) {
+      forecastQuery = forecastQuery.eq('product_id', productId)
+    }
+
+    const { data: forecastData, error: forecastError } = await forecastQuery
+
+    if (forecastError) {
+      console.error('[Demand Forecast API] Error fetching forecast cache:', forecastError)
       return NextResponse.json(
-        {
-          success: false,
-          error: 'Insufficient historical data. Need at least 3 months of data to generate a forecast.',
-          historicalData,
-        },
-        { status: 422 }
+        { error: 'Failed to fetch forecast data.' },
+        { status: 500 }
       )
     }
 
-    // 5. Get Festival Calendar
-    const festivals = getUpcomingFestivals()
+    // 5. Transform Forecast Data
+    const forecast: ForecastPoint[] = (forecastData ?? []).map((row: any) => ({
+      date: row.forecast_date,
+      predictedValue: row.predicted_value,
+      lowerBound: row.lower_bound,
+      upperBound: row.upper_bound,
+      isFestivalPeriod: row.is_festival_period,
+      festivalName: row.festival_name,
+      boostApplied: row.boost_factor,
+    }))
 
-    // 6. Run Holt-Winters Forecasting
-    const forecastResult: DemandForecastResult = generateDemandForecast(
-      historicalData,
-      {
-        seasonLength: 12, // Monthly seasonality
-        alpha: 0.3,       // Level smoothing
-        beta: 0.1,        // Trend smoothing
-        gamma: 0.2,       // Seasonal smoothing
-        additive: true,   // Additive seasonality
-      },
-      periodsToForecast,
-      festivals,
+    // 6. Fetch Upcoming Festivals
+    const { data: festivals, error: festivalsError } = await supabase
+      .from('festivals')
+      .select('name, start_date, end_date, boost_factor')
+      .gte('start_date', today.toISOString().split('T')[0])
+      .lte('start_date', forecastEndDate.toISOString().split('T')[0])
+      .order('start_date', { ascending: true })
+
+    if (festivalsError) {
+      console.error('[Demand Forecast API] Error fetching festivals:', festivalsError)
+    }
+
+    const festivalsApplied = (festivals ?? []).map((f: Festival) => ({
+      name: f.name,
+      startDate: f.start_date,
+      endDate: f.end_date,
+      boostFactor: f.boost_factor,
+    }))
+
+    // 7. Calculate Stock-Out Risk
+    const { risk: stockOutRisk, recommendedRestock } = calculateStockOutRisk(
       currentStock,
+      forecast,
       leadTimeDays
     )
 
-    // 7. Build Response
+    // 8. Build Response
     return NextResponse.json({
       success: true,
       forecastType,
       productName,
       currentStock,
-      historicalData,
-      forecast: forecastResult.forecast,
-      stockOutRisk: forecastResult.stockOutRisk,
-      recommendedRestock: forecastResult.recommendedRestock,
-      festivalsApplied: festivals.filter((f) => {
-        const festivalDate = new Date(f.startDate)
-        const today = new Date()
-        const forecastEndDate = new Date()
-        forecastEndDate.setMonth(forecastEndDate.getMonth() + periodsToForecast)
-        return festivalDate >= today && festivalDate <= forecastEndDate
-      }),
+      forecast,
+      stockOutRisk,
+      recommendedRestock,
+      festivalsApplied,
       generatedAt: new Date().toISOString(),
     })
 
@@ -285,7 +228,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error: 'Internal server error while generating forecast.',
+        error: 'Internal server error while fetching forecast.',
       },
       { status: 500 }
     )

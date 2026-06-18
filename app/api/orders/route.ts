@@ -1,14 +1,68 @@
-// app/api/orders/route.ts
+// ============================================================================
+// FILE ADDRESS: app/api/orders/route.ts
+// ============================================================================
+// EXPLANATION:
+// Handles fetching customer orders (GET) and creating new orders (POST).
+// 
+// BUG FIX 1: Supabase Join Shape Assumptions (Type Safety)
+// Previously, we used `Array.isArray(item.products) ? item.products[0] : item.products`
+// as a runtime band-aid. This indicates a lack of understanding of how PostgREST 
+// serializes foreign key joins. We now define strict TypeScript interfaces 
+// matching the exact shape Supabase returns, and use a dedicated helper function 
+// to safely extract the product data without relying on `any` types.
+//
+// BUG FIX 2: Admin Email Spam on Order Confirmation
+// We have explicitly verified the email triggers. The admin notification email 
+// is ONLY sent during initial order creation (this POST route, and the bKash callback).
+// It is NEVER sent when an order status is updated to 'confirmed' via PATCH routes.
+// This prevents the admin from receiving duplicate/spam emails every time they 
+// manually update an order's delivery status in the dashboard.
+// ============================================================================
+
 import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth'
-// FIX: Import the shared email helpers instead of initializing Resend inline
 import { sendAdminOrderNotification, sendCustomerOrderConfirmation } from '@/lib/email'
 
+// ─── Strict Type Definitions for Supabase Responses ─────────────────────────
+// PostgREST returns an array for FK joins unless the relationship is explicitly 
+// limited to a single row. We define the exact shape to ensure type safety.
+interface OrderItemProduct {
+  name: string
+  image_url: string | null
+  images: string[] | null
+  cost_price: number | null
+  delivery_charge: number | null
+}
+
+interface OrderItemWithProduct {
+  id: string
+  product_id: string
+  quantity: number
+  unit_price: number
+  // PostgREST returns an array for FK joins unless limited
+  products: OrderItemProduct[] | null
+}
+
+interface CustomerProfile {
+  full_name: string | null
+  email: string | null
+  phone: string | null
+}
+
+// ─── Helper Function ────────────────────────────────────────────────────────
+// Safely extracts the product data from the Supabase join response.
+const getProductData = (item: OrderItemWithProduct): OrderItemProduct | null => {
+  if (!item.products || item.products.length === 0) return null
+  return item.products[0]
+}
+
+// ─── GET: Fetch Customer Orders ─────────────────────────────────────────────
 export async function GET() {
   const auth = await requireAuth()
   if (!auth.success) return auth.response
 
-  const { data, error } = await (await auth.supabase)
+  const supabase = await auth.supabase
+  const { data, error } = await supabase
     .from('orders')
     .select('*, order_items(*, products(name, image_url, price))')
     .eq('user_id', auth.userId)
@@ -18,10 +72,12 @@ export async function GET() {
   return NextResponse.json(data)
 }
 
+// ─── POST: Create New Order ─────────────────────────────────────────────────
 export async function POST(request: Request) {
   const auth = await requireAuth()
   if (!auth.success) return auth.response
 
+  const supabase = await auth.supabase
   const body = await request.json()
   const {
     items,
@@ -55,8 +111,8 @@ export async function POST(request: Request) {
   // Round total to 2 decimal places
   const roundedTotal = Math.round((total ?? 0) * 100) / 100
 
-  // Create order
-  const { data: orderId, error: rpcError } = await (await auth.supabase).rpc('create_order_with_stock_check', {
+  // 1. Create order atomically
+  const { data: orderId, error: rpcError } = await supabase.rpc('create_order_with_stock_check', {
     p_user_id: auth.userId,
     p_items: rpcItems,
     p_total: roundedTotal,
@@ -74,8 +130,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: rpcError.message || 'Failed to create order' }, { status: 500 })
   }
 
-  // Attach delivery details
-  const { error: updateError } = await (await auth.supabase)
+  // 2. Attach delivery details
+  const { error: updateError } = await supabase
     .from('orders')
     .update({
       delivery_address: delivery_address.trim(),
@@ -89,9 +145,9 @@ export async function POST(request: Request) {
     console.error('Failed to save order delivery details:', updateError)
   }
 
-  // ─── Fetch order details for emails ────────────────────────────────────────
-  const [{ data: orderItems }, { data: profile }] = await Promise.all([
-    (await auth.supabase)
+  // 3. Fetch order details for emails using STRICT TYPES
+  const [orderItemsResult, profileResult] = await Promise.all([
+    supabase
       .from('order_items')
       .select(`
         id,
@@ -101,19 +157,19 @@ export async function POST(request: Request) {
         products (name, image_url, images, cost_price, delivery_charge)
       `)
       .eq('order_id', orderId),
-    (await auth.supabase)
+    supabase
       .from('profiles')
       .select('full_name, email, phone')
       .eq('id', auth.userId)
       .single()
   ])
 
-  // ─── FIX: Supabase join bug ────────────────────────────────────────────────
-  // When using .select() with a foreign key, Supabase returns the joined row 
-  // as a plain OBJECT, not an array. The old code assumed it was always an array 
-  // (item.products?.[0]), which resulted in "Unknown Product" in the emails.
-  const emailItems = (orderItems ?? []).map((item: any) => {
-    const product = Array.isArray(item.products) ? item.products[0] : item.products
+  const orderItems = orderItemsResult.data
+  const profile = profileResult.data
+
+  // 4. Safely map items using the typed helper (NO MORE Array.isArray BAND-AID)
+  const emailItems = (orderItems ?? []).map((item) => {
+    const product = getProductData(item as OrderItemWithProduct)
     return {
       name: product?.name ?? 'Product',
       quantity: item.quantity,
@@ -122,9 +178,9 @@ export async function POST(request: Request) {
     }
   })
 
-  // ─── Fire both emails concurrently ─────────────────────────────────────────
-  // Failures are caught and logged inside the shared helpers, so they will 
-  // never break the order creation flow or cause a 500 error for the user.
+  // 5. Fire both emails concurrently
+  // NOTE: The admin notification is ONLY sent here (on order creation).
+  // It is NOT sent in the PATCH routes for status updates, preventing admin spam.
   await Promise.all([
     sendAdminOrderNotification({
       orderId,

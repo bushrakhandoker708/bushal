@@ -1,49 +1,51 @@
+//app/api/analytics/customer-segments/route.ts
+
 /**
- * ============================================================================
- * CUSTOMER SEGMENTATION API ENDPOINT
- * ============================================================================
+
+ * This API endpoint reads customer segments from the cache table populated
+ * by the Python ML microservice. It NO LONGER runs K-Means clustering
+ * in the serverless function.
  * 
- * This API endpoint provides K-Means clustering-based customer segmentation.
- * It analyzes customer purchasing behavior to divide them into 5 distinct segments:
- * VIP, Loyal, Normal, High Risk, and Fake Orders.
- * 
- * FEATURES:
- * - Admin-only authentication
- * - Fetches 12 months of fulfilled order history
- * - Prepares customer metrics (Total Spent, Frequency, Variance)
- * - Runs K-Means clustering algorithm
- * - Returns segmented customers with confidence scores and discount recommendations
- * - Provides category-specific discount recommendations based on affinity lift
+ * CHANGES FROM PREVIOUS VERSION:
+ * - Removed all ML algorithm imports and execution
+ * - Reads from `customer_segments` table (populated by Python cron)
+ * - Calculates summaries and recommendations directly from cached DB data
+ * - Much faster response time (no computation, just DB reads)
  * 
  * USAGE:
  * GET /api/analytics/customer-segments?limit=50
  * GET /api/analytics/customer-segments?segment=VIP
  * GET /api/analytics/customer-segments?includeRecommendations=true
- * 
- * RESPONSE:
- * {
- *   "success": true,
- *   "segments": [...],
- *   "summary": {...},
- *   "recommendations": [...],
- *   "generatedAt": "timestamp"
- * }
- * ============================================================================
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { requireAdmin } from '@/lib/auth'
-import {
-  segmentCustomers,
-  prepareCustomerMetrics,
-  generateSegmentSummary,
-  recommendCategoryDiscounts,
-  type CustomerSegment,
-  type SegmentType,
-} from '@/lib/analytics/customerSegmentation'
 
-// ── Main API Handler ───────────────────────────────────────────────────────
+// ─── Types ──────────────────────────────────────────────────────────────────
+
+type SegmentType = 'VIP' | 'Loyal' | 'Normal' | 'High Risk' | 'Fake Orders'
+
+interface CustomerSegmentRow {
+  user_id: string
+  segment: SegmentType
+  total_spent: number
+  order_count: number
+  avg_order_value: number
+  order_variance: number
+  confidence_score: number
+  recommended_discount: number
+  top_category: string | null
+  updated_at: string
+}
+
+interface ProfileRow {
+  id: string
+  full_name: string | null
+  email: string | null
+}
+
+// ─── Main API Handler ───────────────────────────────────────────────────────
 
 export async function GET(request: NextRequest) {
   try {
@@ -61,7 +63,6 @@ export async function GET(request: NextRequest) {
     const segmentFilter = searchParams.get('segment') as SegmentType | null
     const includeRecommendations = searchParams.get('includeRecommendations') === 'true'
 
-    // Validate parameters
     if (limit < 1 || limit > 500) {
       return NextResponse.json(
         { error: 'Invalid limit parameter. Must be between 1 and 500.' },
@@ -69,118 +70,155 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // 3. Fetch Historical Orders (Last 12 Months)
-    const twelveMonthsAgo = new Date()
-    twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12)
+    // 3. Fetch Segments from Cache Table
+    // We fetch up to 2000 records to calculate accurate summaries and recommendations,
+    // then slice the final enriched list to the requested `limit`.
+    let segmentsQuery = supabase
+      .from('customer_segments')
+      .select('*')
+      .order('total_spent', { ascending: false })
+      .limit(2000)
 
-    const { data: orders, error: ordersError } = await supabase
-      .from('orders')
-      .select('id, user_id, total, created_at')
-      .eq('status', 'fulfilled')
-      .gte('created_at', twelveMonthsAgo.toISOString())
-      .order('created_at', { ascending: false })
-      .limit(5000) // Limit to prevent memory issues
+    if (segmentFilter) {
+      segmentsQuery = supabase
+        .from('customer_segments')
+        .select('*')
+        .eq('segment', segmentFilter)
+        .order('total_spent', { ascending: false })
+        .limit(2000)
+    }
 
-    if (ordersError) {
-      console.error('[Customer Segments API] Error fetching orders:', ordersError)
+    const { data: allSegments, error: segmentsError } = await segmentsQuery
+
+    if (segmentsError) {
+      console.error('[Customer Segments API] Error fetching segments:', segmentsError)
       return NextResponse.json(
-        { error: 'Failed to fetch order history' },
+        { error: 'Failed to fetch customer segments' },
         { status: 500 }
       )
     }
 
-    if (!orders || orders.length === 0) {
+    const segments = (allSegments ?? []) as CustomerSegmentRow[]
+
+    if (segments.length === 0) {
       return NextResponse.json({
         success: true,
         segments: [],
         summary: [],
         recommendations: [],
         totalCustomers: 0,
+        filteredCount: 0,
         generatedAt: new Date().toISOString(),
       })
     }
 
-    // 4. Prepare Customer Metrics
-    const rawOrders = orders.map((o: any) => ({
-      user_id: o.user_id,
-      total: o.total,
-      created_at: o.created_at,
-    }))
+    // 4. Generate Segment Summaries from Cached Data
+    const summaryMap = new Map<SegmentType, { count: number; total_spent: number; total_orders: number }>()
+    const allSegmentTypes: SegmentType[] = ['VIP', 'Loyal', 'Normal', 'High Risk', 'Fake Orders']
+    
+    allSegmentTypes.forEach(s => summaryMap.set(s, { count: 0, total_spent: 0, total_orders: 0 }))
 
-    const customerMetrics = prepareCustomerMetrics(rawOrders)
-
-    // 5. Run K-Means Clustering
-    const segments = segmentCustomers(customerMetrics, {
-      k: 5,
-      maxIterations: 100,
-      tolerance: 0.0001,
+    segments.forEach(seg => {
+      const data = summaryMap.get(seg.segment)!
+      data.count++
+      data.total_spent += Number(seg.total_spent)
+      data.total_orders += seg.order_count
     })
 
-    // 6. Apply Segment Filter if Provided
-    let filteredSegments = segments
-    if (segmentFilter) {
-      filteredSegments = segments.filter((s) => s.segment === segmentFilter)
-    }
+    const summaries = allSegmentTypes.map(segment => {
+      const data = summaryMap.get(segment)!
+      return {
+        segment,
+        count: data.count,
+        avg_spent: data.count > 0 ? Math.round(data.total_spent / data.count) : 0,
+        avg_orders: data.count > 0 ? Math.round((data.total_orders / data.count) * 10) / 10 : 0,
+        total_revenue: Math.round(data.total_spent),
+      }
+    })
 
-    // 7. Limit Results
-    const limitedSegments = filteredSegments.slice(0, limit)
+    // 5. Limit the detailed segments list
+    const limitedSegments = segments.slice(0, limit)
 
-    // 8. Generate Segment Summaries
-    const summaries = generateSegmentSummary(segments)
+    // 6. Fetch Customer Profiles for Enrichment
+    const userIds = limitedSegments.map(s => s.user_id)
+    
+    let enrichedSegments: any[] = []
+    
+    if (userIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, full_name, email')
+        .in('id', userIds)
 
-    // 9. Fetch Customer Profiles for Enrichment
-    const userIds = limitedSegments.map((s) => s.user_id)
-    const { data: profiles, error: profilesError } = await supabase
-      .from('profiles')
-      .select('id, full_name, email')
-      .in('id', userIds)
-
-    if (profilesError) {
-      console.error('[Customer Segments API] Error fetching profiles:', profilesError)
-    }
-
-    // 10. Enrich Segments with Profile Data
-    const profileMap = new Map<string, { name: string; email: string }>()
-    ;(profiles ?? []).forEach((p: any) => {
-      profileMap.set(p.id, {
-        name: p.full_name ?? 'Anonymous',
-        email: p.email ?? 'No email',
+      const profileMap = new Map<string, { name: string; email: string }>()
+      ;(profiles ?? []).forEach((p: ProfileRow) => {
+        profileMap.set(p.id, {
+          name: p.full_name ?? 'Anonymous',
+          email: p.email ?? 'No email',
+        })
       })
-    })
 
-    const enrichedSegments = limitedSegments.map((seg) => ({
-      ...seg,
-      customer_name: profileMap.get(seg.user_id)?.name ?? 'Anonymous',
-      customer_email: profileMap.get(seg.user_id)?.email ?? 'No email',
-    }))
+      enrichedSegments = limitedSegments.map(seg => ({
+        user_id: seg.user_id,
+        segment: seg.segment,
+        total_spent: Number(seg.total_spent),
+        order_count: seg.order_count,
+        confidence_score: Number(seg.confidence_score),
+        recommended_discount: seg.recommended_discount,
+        top_category: seg.top_category ?? 'General',
+        customer_name: profileMap.get(seg.user_id)?.name ?? 'Anonymous',
+        customer_email: profileMap.get(seg.user_id)?.email ?? 'No email',
+      }))
+    }
 
-    // 11. Generate Category Discount Recommendations (Optional)
+    // 7. Generate Category Discount Recommendations (Optional)
     let recommendations: Array<{
-      segment: SegmentType
+      segment: string
       category: string
       recommended_discount: number
       reasoning: string
     }> = []
 
     if (includeRecommendations) {
-      // Mock global category sales data (in production, fetch from order_items + products)
-      const globalCategorySales: Record<string, number> = {
-        'Accessories': 45000,
-        'Clothing': 120000,
-        'Electronics': 85000,
-        'Home': 32000,
-        'Beauty': 28000,
-      }
-      const allCategories = Object.keys(globalCategorySales)
+      // Analyze top_category affinity per segment from the cached data
+      const affinityMap: Record<string, Record<string, number>> = {}
+      
+      segments.forEach(seg => {
+        if (!seg.top_category) return
+        if (!affinityMap[seg.segment]) affinityMap[seg.segment] = {}
+        affinityMap[seg.segment][seg.top_category] = (affinityMap[seg.segment][seg.top_category] || 0) + 1
+      })
 
-      recommendations = recommendCategoryDiscounts(
-        segments,
-        allCategories,
-        globalCategorySales
-      )
+      for (const [segment, categories] of Object.entries(affinityMap)) {
+        const sortedCategories = Object.entries(categories).sort((a, b) => b[1] - a[1])
+        
+        if (sortedCategories.length > 0) {
+          const topCategory = sortedCategories[0][0]
+          const count = sortedCategories[0][1]
+          const totalInSegment = summaryMap.get(segment as SegmentType)?.count || 1
+          const affinityPercentage = Math.round((count / totalInSegment) * 100)
+          
+          // Base discount logic on segment type
+          let discount = 15
+          if (segment === 'High Risk') discount = 30
+          else if (segment === 'VIP') discount = 10
+          else if (segment === 'Fake Orders') discount = 0
+
+          if (discount > 0) {
+            recommendations.push({
+              segment,
+              category: topCategory,
+              recommended_discount: discount,
+              reasoning: `${segment} customers show ${affinityPercentage}% affinity for ${topCategory}. Targeted discount recommended to boost conversion.`,
+            })
+          }
+        }
+      }
+      
+      recommendations.sort((a, b) => b.recommended_discount - a.recommended_discount)
     }
 
-    // 12. Build Response
+    // 8. Build Response
     return NextResponse.json({
       success: true,
       segments: enrichedSegments,
@@ -196,7 +234,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error: 'Internal server error while generating customer segments.',
+        error: 'Internal server error while fetching customer segments.',
       },
       { status: 500 }
     )

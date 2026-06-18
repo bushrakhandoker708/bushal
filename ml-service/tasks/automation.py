@@ -1,10 +1,28 @@
-# ml-service/tasks/automation.py
-# Auto-Canceling Fraud: It checks the customer_segments table for users flagged as "Fake Orders" (with high confidence) and automatically cancels their pending orders to prevent shipping losses.
-# Generating Purchase Orders: It identifies critical stock items (low stock) and uses reportlab to generate a PDF Purchase Order (PO) for the admin.
-# Retention Campaigns: It finds "High Risk" customers who haven't bought in 60+ days and sends them a personalized discount code via Resend to prevent churn
+# ============================================================================
+# FILE ADDRESS: ml-service/tasks/automation.py
+# ============================================================================
+# EXPLANATION:
+# This script handles automated business workflows triggered by the nightly 
+# Vercel Cron job. It executes three critical business automation tasks:
+#
+# 1. Fraud Prevention (Human Review Queue):
+#    Flags suspicious orders for admin review instead of auto-cancelling.
+#
+# 2. Inventory (Automated Purchase Orders):
+#    Identifies critical stock items and generates a PDF Purchase Order.
+#
+# 3. Retention (Causal Inference Holdout Group):
+#    Finds "High Risk" customers and sends them a 20% discount code.
+#    CRITICAL FIX: We now intentionally hold out 10% of these customers 
+#    (Control Group) and do NOT send them the email. Both groups are logged 
+#    in the `retention_email_log` table. This enables Difference-in-Differences 
+#    (DiD) causal inference to measure the TRUE ROI of the email campaign, 
+#    isolating the impact of the email from natural customer recovery.
+# ============================================================================
 
 import logging
 import os
+import random
 from datetime import datetime
 import resend
 from reportlab.lib.pagesizes import letter
@@ -21,16 +39,18 @@ ADMIN_EMAIL = os.getenv("ADMIN_EMAIL")
 def run_business_automation():
     """
     Executes the business automation pipeline:
-    1. Fraud Detection: Auto-cancel orders from 'Fake Orders' segment.
+    1. Fraud Detection: Flag suspicious orders for human review.
     2. Inventory: Generate PDF Purchase Orders for critical stock items.
-    3. Retention: Send discount emails to 'High Risk' churned customers.
+    3. Retention: Send discount emails to 'High Risk' churned customers 
+       with a 10% holdout group for causal inference (DiD).
     """
     logger.info("🤖 Starting Business Automation Pipeline...")
     conn = None
     results = {
-        "fraud_cancelled": 0,
+        "fraud_flagged": 0,
         "pos_generated": 0,
-        "retention_emails_sent": 0
+        "retention_emails_sent": 0,
+        "retention_holdout_size": 0
     }
 
     try:
@@ -38,54 +58,59 @@ def run_business_automation():
         conn = get_db_connection()
         cursor = conn.cursor(cursor_factory=RealDictCursor)
 
-        # ─── TASK 1: Fraud Prevention (Auto-Cancel) ──────────────────────────
-        logger.info("🛡️ [1/3] Checking for fraudulent pending orders...")
+        # ─── TASK 1: Fraud Prevention (Human Review Queue) ───────────────
+        logger.info("🛡️ [1/3] Flagging suspicious orders for human review...")
         
-        # Find users flagged as 'Fake Orders' with high confidence (>85%)
         cursor.execute("""
-            SELECT customer_id, confidence_score 
-            FROM customer_segments 
-            WHERE segment = 'Fake Orders' AND confidence_score > 0.85
+            SELECT customer_id, segment, confidence_score
+            FROM customer_segments
+            WHERE (segment = 'Fake Orders' AND confidence_score > 0.75)
+               OR (segment = 'High Risk' AND confidence_score > 0.85)
         """)
-        fake_users = cursor.fetchall()
+        suspicious_users = cursor.fetchall()
         
-        cancelled_count = 0
-        for user in fake_users:
-            # Find their recent pending orders (last 24h)
+        flagged_count = 0
+        for user in suspicious_users:
             cursor.execute("""
-                SELECT id FROM orders 
-                WHERE user_id = %s AND status = 'pending' 
-                AND created_at > NOW() - INTERVAL '24 hours'
+                SELECT id, total FROM orders
+                WHERE user_id = %s 
+                  AND status = 'pending' 
+                  AND delivery_status = 'order_placed'
+                  AND created_at > NOW() - INTERVAL '48 hours'
             """, (user['customer_id'],))
-            orders_to_cancel = cursor.fetchall()
+            orders_to_flag = cursor.fetchall()
             
-            for order in orders_to_cancel:
+            for order in orders_to_flag:
                 cursor.execute("""
-                    UPDATE orders 
-                    SET status = 'cancelled', delivery_status = 'cancelled'
-                    WHERE id = %s
-                """, (order['id'],))
-                cancelled_count += 1
-                logger.info(f"   🚫 Auto-cancelled order {order['id']} for user {user['customer_id']}")
+                    INSERT INTO fraud_review_queue (order_id, customer_id, reason, confidence_proxy, status)
+                    VALUES (%s, %s, %s, %s, 'pending')
+                    ON CONFLICT (order_id) DO NOTHING
+                """, (
+                    order['id'], 
+                    user['customer_id'], 
+                    f"Customer flagged as {user['segment']} by K-Means clustering",
+                    user['confidence_score']
+                ))
+                
+                if cursor.rowcount > 0:
+                    flagged_count += 1
+                    logger.info(f"   🚩 Flagged order {order['id']} for review")
         
-        results["fraud_cancelled"] = cancelled_count
-        conn.commit() # Commit cancellations immediately
+        results["fraud_flagged"] = flagged_count
+        conn.commit()
 
-        # ── TASK 2: Automated Purchase Orders (PDF Generation) ──────────────
+        # ─── TASK 2: Automated Purchase Orders (PDF Generation) ──────────
         logger.info("📦 [2/3] Generating Purchase Orders for critical stock...")
         
-        # Identify critical items (Stock <= 5 and In Stock)
-        # Note: In a full system, this would query the 'restock_alerts' table populated by the ML engine.
         cursor.execute("""
-            SELECT id, name, cost_price, stock_quantity 
-            FROM products 
+            SELECT id, name, cost_price, stock_quantity
+            FROM products
             WHERE in_stock = true AND stock_quantity <= 5 AND is_deleted = false
             LIMIT 20
         """)
         critical_items = cursor.fetchall()
         
         if critical_items:
-            # Create directory if it doesn't exist
             os.makedirs("generated_reports", exist_ok=True)
             filename = f"generated_reports/PO_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
             doc = SimpleDocTemplate(filename, pagesize=letter)
@@ -99,7 +124,7 @@ def run_business_automation():
             data = [['Product Name', 'Current Stock', 'Est. Unit Cost']]
             for item in critical_items:
                 cost = float(item['cost_price'] or 0)
-                data.append([item['name'], str(item['stock_quantity']), f"${cost:.2f}"])
+                data.append([item['name'], str(item['stock_quantity']), f"৳{cost:.2f}"])
             
             t = Table(data)
             t.setStyle(TableStyle([
@@ -112,13 +137,13 @@ def run_business_automation():
                 ('GRID', (0, 0), (-1, -1), 1, colors.black)
             ]))
             elements.append(t)
-            
             doc.build(elements)
+            
             results["pos_generated"] = 1
             logger.info(f"   📄 Generated PO PDF: {filename}")
 
-        # ─── TASK 3: Retention Emails (Churn Prevention) ─────────────────────
-        logger.info("📧 [3/3] Sending retention emails to High Risk customers...")
+        # ─── TASK 3: Retention Emails (Causal Inference Holdout) ─────────
+        logger.info("📧 [3/3] Processing retention emails with 10% Causal Holdout...")
         
         if not resend.api_key:
             logger.warning("   ⚠️ RESEND_API_KEY missing. Skipping emails.")
@@ -128,44 +153,85 @@ def run_business_automation():
                 SELECT cs.customer_id, p.email, p.full_name, cs.recency
                 FROM customer_segments cs
                 JOIN profiles p ON p.id = cs.customer_id
-                WHERE cs.segment = 'High Risk' AND cs.recency > 60 AND p.email IS NOT NULL
-                LIMIT 50
+                WHERE cs.segment = 'High Risk' 
+                  AND cs.recency > 60 
+                  AND p.email IS NOT NULL
             """)
             churn_risk_customers = cursor.fetchall()
             
-            sent_count = 0
-            for customer in churn_risk_customers:
-                try:
-                    # Generate a unique-ish code
+            if not churn_risk_customers:
+                logger.info("   ⏭️ No High Risk customers found for retention.")
+            else:
+                # 🔥 CAUSAL INFERENCE: Randomly shuffle and split into 90% Treatment / 10% Control
+                random.shuffle(churn_risk_customers)
+                holdout_size = max(1, int(len(churn_risk_customers) * 0.10)) # 10% holdout
+                
+                holdout_group = churn_risk_customers[:holdout_size]
+                treatment_group = churn_risk_customers[holdout_size:]
+                
+                logger.info(f"   🧪 Splitting {len(churn_risk_customers)} users: {len(treatment_group)} Treatment, {len(holdout_group)} Control (Holdout)")
+                
+                sent_count = 0
+                
+                # 1. Log the HOLDOUT group (Control) - NO EMAIL SENT
+                # This establishes the baseline for Difference-in-Differences (DiD)
+                for customer in holdout_group:
+                    cursor.execute("""
+                        INSERT INTO public.retention_email_log (user_id, segment, is_holdout, discount_code)
+                        VALUES (%s, %s, true, null)
+                    """, (customer['customer_id'], 'High Risk'))
+                
+                # 2. Log the TREATMENT group and SEND EMAILS
+                for customer in treatment_group:
                     code = f"COMEBACK{customer['customer_id'][:4].upper()}"
                     
-                    resend.Emails.send({
-                        "from": "Bushal <onboarding@resend.dev>", # Use sandbox address
-                        "to": [customer['email']],
-                        "subject": "We miss you! Here's 20% off your next order.",
-                        "html": f"""
-                        <div style="font-family: sans-serif; padding: 20px;">
-                            <p>Hi {customer['full_name'] or 'there'},</p>
-                            <p>It's been a while! We noticed you haven't shopped with us in {customer['recency']} days.</p>
-                            <p>Use code <strong style="color: #ea580c;">{code}</strong> for 20% off your next order.</p>
-                            <p>— The Bushal Team</p>
-                        </div>
-                        """
-                    })
-                    sent_count += 1
-                except Exception as e:
-                    logger.error(f"   ❌ Failed to email {customer['email']}: {e}")
+                    # Log to DB with the discount code used
+                    cursor.execute("""
+                        INSERT INTO public.retention_email_log (user_id, segment, is_holdout, discount_code)
+                        VALUES (%s, %s, false, %s)
+                    """, (customer['customer_id'], 'High Risk', code))
                     
-            results["retention_emails_sent"] = sent_count
-            logger.info(f"   ✅ Sent {sent_count} retention emails.")
+                    try:
+                        resend.Emails.send({
+                            "from": "Bushal <onboarding@resend.dev>",
+                            "to": [customer['email']],
+                            "subject": "We miss you! Here's 20% off your next order.",
+                            "html": f"""
+                            <div style="font-family: sans-serif; padding: 20px; max-width: 600px; margin: 0 auto;">
+                                <h2 style="color: #1A362D;">Hi {customer['full_name'] or 'there'},</h2>
+                                <p style="color: #4B5563; line-height: 1.6;">
+                                    It's been a while! We noticed you haven't shopped with us in <strong>{customer['recency']} days</strong>.
+                                </p>
+                                <p style="color: #4B5563; line-height: 1.6;">
+                                    We'd love to see you back. Use code <strong style="color: #B87333; font-size: 1.2em;">{code}</strong> for 20% off your next order.
+                                </p>
+                                <a href="https://bushal.vercel.app/dashboard" 
+                                   style="display: inline-block; background: #B87333; color: white; padding: 12px 24px; 
+                                          text-decoration: none; border-radius: 8px; font-weight: bold; margin-top: 16px;">
+                                    Shop Now
+                                </a>
+                                <p style="color: #9CA3AF; font-size: 12px; margin-top: 32px;">— The Bushal Team</p>
+                            </div>
+                            """
+                        })
+                        sent_count += 1
+                    except Exception as e:
+                        logger.error(f"   ❌ Failed to email {customer['email']}: {e}")
+                
+                results["retention_emails_sent"] = sent_count
+                results["retention_holdout_size"] = len(holdout_group)
+                logger.info(f"   ✅ Sent {sent_count} emails. {len(holdout_group)} users held out for causal baseline.")
+                
+                conn.commit()
+
+        logger.info("✅ Business Automation Pipeline Completed.")
+        return results
 
     except Exception as e:
         logger.error(f"❌ Automation pipeline failed: {e}", exc_info=True)
         if conn:
             conn.rollback()
+        return {"status": "error", "error": str(e)}
     finally:
         if conn:
             conn.close()
-
-    logger.info("✅ Business Automation Pipeline Completed.")
-    return results

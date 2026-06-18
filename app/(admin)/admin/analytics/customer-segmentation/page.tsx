@@ -32,7 +32,7 @@ import {
   recommendCategoryDiscounts,
   type CustomerSegment,
   type SegmentType,
-} from '@/lib/analytics/customerSegmentation'
+} from '@/docs/previously integrated ml in ts/customerSegmentation'
 
 export const metadata: Metadata = {
   title: 'Customer Segmentation',

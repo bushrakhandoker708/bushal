@@ -1,4 +1,34 @@
-# ml-service/main.py
+# ============================================================================
+# FILE ADDRESS: ml-service/main.py
+# ============================================================================
+# EXPLANATION:
+# This is the main entry point for the Bushal ML Microservice. It defines the
+# FastAPI application, the master pipeline orchestrator endpoint, and the 
+# database connection helper.
+#
+# OBSERVABILITY INTEGRATION:
+# OpenTelemetry is initialized at the very top of this file to ensure that 
+# all incoming HTTP requests and outgoing database queries are automatically 
+# traced. This completes the distributed tracing chain started by the Next.js 
+# frontend, allowing you to see the entire request lifecycle in your tracing 
+# dashboard (e.g., Jaeger, Datadog, Vercel).
+#
+# PIPELINE ORCHESTRATION:
+# The pipeline now runs 5 sequential tasks:
+# 1. Customer Segmentation (K-Means)
+# 2. Demand Forecasting (Holt-Winters)
+# 3. Product Recommendations (FP-Growth & Graph)
+# 4. Model Drift Detection (NEW - Alerts admin if models degrade)
+# 5. Business Automation (Fraud detection, Auto-POs, Retention emails)
+# ============================================================================
+
+# 1. Initialize OpenTelemetry FIRST (before any other imports that might use tracing)
+from otel import init_otel
+init_otel()
+
+# 2. Import FastAPIInstrumentor to automatically trace HTTP endpoints
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+
 import os
 import logging
 import uvicorn
@@ -21,6 +51,11 @@ app = FastAPI(
     description="Heavy machine learning pipelines for Bushal e-commerce",
     version="1.0.0"
 )
+
+# 3. Instrument the app immediately after creation
+# This automatically creates spans for every incoming HTTP request,
+# capturing headers, status codes, and execution time.
+FastAPIInstrumentor.instrument_app(app)
 
 # ─── Security Configuration ──────────────────────────────────────────────────
 # This secret must match the one in your Next.js .env.local (ML_PIPELINE_SECRET)
@@ -55,14 +90,14 @@ def run_pipeline(x_pipeline_secret: str = Header(None)):
         raise HTTPException(status_code=401, detail="Invalid pipeline secret")
     
     logger.info("🚀 ==========================================")
-    logger.info("🚀 Starting Bushal ML Pipeline...")
+    logger.info("🚀 Starting Bushal ML Pipeline (5 Tasks)...")
     logger.info("🚀 ==========================================")
     
     results = {}
     
     # 2. Run Customer Segmentation (K-Means)
     try:
-        logger.info("📊 [1/4] Running Customer Segmentation...")
+        logger.info("📊 [1/5] Running Customer Segmentation...")
         from tasks.segmentation import run_customer_segmentation
         results['segmentation'] = run_customer_segmentation()
     except Exception as e:
@@ -71,7 +106,7 @@ def run_pipeline(x_pipeline_secret: str = Header(None)):
         
     # 3. Run Demand Forecasting (Holt-Winters)
     try:
-        logger.info("📈 [2/4] Running Demand Forecasting...")
+        logger.info("📈 [2/5] Running Demand Forecasting...")
         from tasks.forecasting import run_demand_forecasting
         results['forecasting'] = run_demand_forecasting()
     except Exception as e:
@@ -80,16 +115,32 @@ def run_pipeline(x_pipeline_secret: str = Header(None)):
         
     # 4. Run Product Recommendations (FP-Growth & Graph)
     try:
-        logger.info("🛒 [3/4] Running Product Recommendations...")
+        logger.info("🛒 [3/5] Running Product Recommendations...")
         from tasks.recommendations import run_product_recommendations
         results['recommendations'] = run_product_recommendations()
     except Exception as e:
         logger.error(f"❌ Recommendations failed: {e}")
         results['recommendations'] = f"Error: {str(e)}"
-        
-    # 5. Run Business Automation (Fraud detection, Auto-POs)
+
+    # 5. Run Model Drift Detection (NEW)
+    # This analyzes the metrics logged by the previous steps to detect if 
+    # the models are degrading (e.g., Silhouette Score dropping, MAPE rising).
     try:
-        logger.info("🤖 [4/4] Running Business Automation...")
+        logger.info("📉 [4/5] Running Model Drift Detection...")
+        from tasks.drift_detection import run_drift_detection
+        # Drift detection requires a DB connection to query ml_model_accuracy
+        conn = get_db_connection()
+        try:
+            results['drift_detection'] = run_drift_detection(conn)
+        finally:
+            conn.close()
+    except Exception as e:
+        logger.error(f"❌ Drift Detection failed: {e}")
+        results['drift_detection'] = f"Error: {str(e)}"
+        
+    # 6. Run Business Automation (Fraud detection, Auto-POs, Retention)
+    try:
+        logger.info("🤖 [5/5] Running Business Automation...")
         from tasks.automation import run_business_automation
         results['automation'] = run_business_automation()
     except Exception as e:
@@ -120,6 +171,8 @@ def get_db_connection():
         raise ValueError("DATABASE_URL is not set in environment variables.")
         
     # Use RealDictCursor to get rows as dictionaries (like Supabase JS client)
+    # Note: Because we ran Psycopg2Instrumentor().instrument() in otel.py, 
+    # every query executed through this connection will automatically be traced!
     conn = psycopg2.connect(database_url, cursor_factory=RealDictCursor)
     return conn
 

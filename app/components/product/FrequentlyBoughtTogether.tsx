@@ -1,25 +1,25 @@
-//app/components/product/FrequentlyBoughtTogether.tsx
-
-/**
- * ============================================================================
- * FREQUENTLY BOUGHT TOGETHER COMPONENT
- * ============================================================================
- * 
- * This component displays products that are frequently purchased together
- * with the current product, using the Apriori association rule mining algorithm.
- * 
- * FEATURES:
- * - Fetches recommendations from the /api/recommendations/frequently-bought API
- * - Displays product cards with image, name, price, and confidence score
- * - Includes "Add to Cart" functionality for each recommended product
- * - Shows a reason/explanation for why the product is recommended
- * - Uses Framer Motion for smooth entrance animations
- * - Follows the Bushal luxury design system
- */
+// ============================================================================
+// FILE ADDRESS: app/components/product/FrequentlyBoughtTogether.tsx
+// ============================================================================
+// EXPLANATION:
+// This component displays products that are frequently purchased together
+// with the current product. It now integrates with the A/B Testing Framework
+// (Thompson Sampling) to track user interactions with the recommendations.
+//
+// TRACKING INTEGRATION:
+// - Impression: Fired when recommendations are successfully loaded and displayed.
+// - Click: Fired when a user clicks on a recommended product (image or title).
+// - Purchase (Add to Cart): Fired when a user adds a recommended product to cart.
+// 
+// These events are sent to /api/recommendations/track, which updates the 
+// Beta distribution parameters (alpha/beta) for the 'fp_growth' algorithm,
+// allowing Thompson Sampling to dynamically allocate traffic to the best 
+// performing recommendation engine over time.
+// ============================================================================
 
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { formatPrice } from '@/app/lib/utils/formatPrice'
 import { useCart } from '@/app/hooks/useCart'
@@ -47,6 +47,36 @@ interface Props {
   className?: string
 }
 
+// The model name that generated these recommendations.
+// Since this component reads from the Python FP-Growth cache, we use 'fp_growth'.
+const MODEL_NAME = 'fp_growth'
+
+// ─── Tracking Helper ────────────────────────────────────────────────────────
+// Fire-and-forget tracking event to the A/B testing API.
+// Uses keepalive: true to ensure the request completes even if the user navigates away.
+function trackRecommendationEvent(
+  eventType: 'impression' | 'click' | 'purchase',
+  recommendedProductId: string
+) {
+  try {
+    fetch('/api/recommendations/track', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        modelName: MODEL_NAME,
+        eventType,
+        productId: recommendedProductId,
+      }),
+      keepalive: true,
+    }).catch((err) => {
+      // Silent fail - tracking should never break the user experience
+      console.warn('[FBT Tracking] Failed to log event:', err)
+    })
+  } catch (err) {
+    console.warn('[FBT Tracking] Unexpected error:', err)
+  }
+}
+
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export default function FrequentlyBoughtTogether({ productId, className }: Props) {
@@ -72,6 +102,12 @@ export default function FrequentlyBoughtTogether({ productId, className }: Props
         
         if (data.success && data.recommendations?.length > 0) {
           setRecommendations(data.recommendations)
+          
+          // 🔥 TRACKING: Log impression events for all displayed recommendations
+          // This tells Thompson Sampling that these items were shown to the user.
+          data.recommendations.forEach((rec: FBTRecommendation) => {
+            trackRecommendationEvent('impression', rec.product_id)
+          })
         } else {
           setRecommendations([])
         }
@@ -89,7 +125,7 @@ export default function FrequentlyBoughtTogether({ productId, className }: Props
     }
   }, [productId])
 
-  const handleAddToCart = (recommendation: FBTRecommendation) => {
+  const handleAddToCart = useCallback((recommendation: FBTRecommendation) => {
     if (!recommendation.in_stock) return
     
     // Create a Product-like object for the cart
@@ -105,6 +141,12 @@ export default function FrequentlyBoughtTogether({ productId, className }: Props
     
     addItem(productForCart as any)
     
+    // 🔥 TRACKING: Log a 'purchase' event (Add to Cart is the conversion metric)
+    // This automatically rewards the 'fp_growth' model in the Thompson Sampling engine,
+    // incrementing its alpha parameter (successes) and making it more likely to be 
+    // selected for future users.
+    trackRecommendationEvent('purchase', recommendation.product_id)
+    
     // Track which items were added for UI feedback
     setAddedIds(prev => new Set(prev).add(recommendation.product_id))
     
@@ -116,7 +158,12 @@ export default function FrequentlyBoughtTogether({ productId, className }: Props
         return next
       })
     }, 2000)
-  }
+  }, [addItem])
+
+  const handleProductClick = useCallback((recommendedProductId: string) => {
+    // 🔥 TRACKING: Log a 'click' event when the user navigates to the product page
+    trackRecommendationEvent('click', recommendedProductId)
+  }, [])
 
   // Don't render if no recommendations
   if (!loading && recommendations.length === 0) {
@@ -197,6 +244,7 @@ export default function FrequentlyBoughtTogether({ productId, className }: Props
                 <Link
                   href={`/product/${rec.product_id}`}
                   className="block relative aspect-[3/4] overflow-hidden bg-bushal-ivoryDeep"
+                  onClick={() => handleProductClick(rec.product_id)}
                 >
                   {cover ? (
                     <img
@@ -227,7 +275,11 @@ export default function FrequentlyBoughtTogether({ productId, className }: Props
 
                 {/* Details */}
                 <div className="p-4 flex flex-col gap-3">
-                  <Link href={`/product/${rec.product_id}`} className="group/link">
+                  <Link 
+                    href={`/product/${rec.product_id}`} 
+                    className="group/link"
+                    onClick={() => handleProductClick(rec.product_id)}
+                  >
                     <h3 className="font-heading text-lg text-bushal-forest leading-tight line-clamp-2 group-hover/link:text-bushal-copper transition-colors">
                       {rec.name}
                     </h3>
@@ -296,7 +348,7 @@ export default function FrequentlyBoughtTogether({ productId, className }: Props
           transition={{ delay: 0.5 }}
           className="text-xs text-bushal-inkSoft text-center mt-6"
         >
-          Recommendations powered by Apriori algorithm · Based on {recommendations.length > 0 ? 'real purchase patterns' : 'historical data'}
+          Recommendations powered by FP-Growth algorithm · Optimized via Thompson Sampling
         </motion.p>
       )}
     </section>

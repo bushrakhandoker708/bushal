@@ -1,218 +1,265 @@
-# ml-service/tasks/forecasting.py
+# ============================================================================
+# FILE ADDRESS: ml-service/tasks/forecasting.py
+# ============================================================================
+# EXPLANATION:
+# This script executes the Holt-Winters Triple Exponential Smoothing pipeline 
+# for demand forecasting. It replaces the naive residual-based confidence 
+# intervals with statistically correct simulation-based prediction intervals.
+# 
+# KEY FIXES IMPLEMENTED:
+# 1. 📉 Out-of-Sample Train/Test Split: Holds back the last 3 months for true 
+#    MAPE evaluation, eliminating data leakage.
+# 2. 🌍 Dynamic Festival Fetching: Queries the new `public.festivals` table 
+#    instead of hardcoding lunar calendar dates.
+# 3. 📊 Proper MAPE Storage: MAPE is now stored in a dedicated numeric column, 
+#    not string-parsed from the algorithm version.
+# 4. 🛡️ Seasonal Period Guard: Falls back to Double Exponential Smoothing 
+#    (no seasonality) if <24 months of data exist.
+# 5. 📝 Training Metadata: Logs date ranges, transaction counts, and model 
+#    parameters to `ml_model_accuracy` for drift detection and reproducibility.
+# ============================================================================
 
-#Instead of a naive moving average, we are using the industry-standard statsmodels library for Triple Exponential Smoothing. We also calculate the MAPE (Mean Absolute Percentage Error) for every product so the admin dashboard can display exactly how "trustworthy" the AI's predictions are. Finally, we apply the Bangladesh festival multipliers (Eid, Pohela Boishakh) to the forecasted values.
 import logging
 import pandas as pd
 import numpy as np
-from datetime import datetime
+from datetime import datetime, timedelta
 from statsmodels.tsa.holtwinters import ExponentialSmoothing
-from psycopg2.extras import execute_batch
+import psycopg2
+from psycopg2.extras import execute_values, Json
 
-logger = logging.getLogger("bushal-ml.forecasting")
+# Configure logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logger = logging.getLogger(__name__)
 
-# ─── Bangladesh Festival Calendar ────────────────────────────────────────────
-def get_bd_festivals(year: int):
+# ─── Helper: Fetch Festivals Dynamically ─────────────────────────────────────
+def fetch_festivals(conn):
+    """Fetch upcoming festivals from the new `festivals` table."""
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT name, start_date, end_date, boost_factor
+            FROM public.festivals
+            WHERE start_date >= CURRENT_DATE - INTERVAL '3 months'
+              AND end_date <= CURRENT_DATE + INTERVAL '12 months'
+            ORDER BY start_date
+        """)
+        return [
+            {"name": row[0], "start": row[1], "end": row[2], "boost": float(row[3])}
+            for row in cur.fetchall()
+        ]
+
+# ─── Helper: Apply Festival Multipliers ──────────────────────────────────────
+def apply_festival_multipliers(forecast_values, forecast_dates, festivals):
+    """Apply dynamic boost factors to forecasted months that overlap festivals."""
+    boosted = np.array(forecast_values, dtype=float)
+    applied = []
+    for i, dt in enumerate(forecast_dates):
+        month_start = dt.replace(day=1)
+        month_end = (month_start + pd.DateOffset(months=1)) - pd.Timedelta(days=1)
+        max_boost = 1.0
+        for fest in festivals:
+            f_start = pd.Timestamp(fest["start"])
+            f_end = pd.Timestamp(fest["end"])
+            # Check overlap
+            if f_start <= month_end and f_end >= month_start:
+                max_boost = max(max_boost, fest["boost"])
+        boosted[i] *= max_boost
+        if max_boost > 1.0:
+            applied.append({"festival": "Active Festival Month", "month": dt.strftime("%Y-%m"), "boost": max_boost})
+    return boosted.tolist(), applied
+
+# ─── Helper: Simulation-Based Confidence Intervals ──────────────────────────
+def compute_prediction_intervals(model, forecast_months, n_simulations=200):
     """
-    Returns major Bangladeshi shopping festivals and their sales boost multipliers.
-    In a production system, this would be fetched from a database or calendar API.
+    Statistically correct confidence intervals using bootstrap simulation.
+    Fallback to residual-scaled intervals if simulation fails.
     """
-    return [
-        {"name": "Eid-ul-Fitr", "start": f"{year}-03-20", "end": f"{year}-03-22", "boost": 2.5},
-        {"name": "Pohela Boishakh", "start": f"{year}-04-14", "end": f"{year}-04-16", "boost": 1.8},
-        {"name": "Eid-ul-Adha", "start": f"{year}-05-27", "end": f"{year}-05-29", "boost": 2.2},
-        {"name": "Valentine's Day", "start": f"{year}-02-14", "end": f"{year}-02-14", "boost": 1.6},
-        {"name": "Durga Puja", "start": f"{year}-10-17", "end": f"{year}-10-21", "boost": 1.7},
-        {"name": "Winter Sale", "start": f"{year}-12-15", "end": f"{year}-12-31", "boost": 2.0},
-    ]
+    try:
+        sim = model.simulate(
+            forecast_months, 
+            repetitions=n_simulations, 
+            error='add', 
+            random_errors='bootstrap', 
+            random_state=42
+        )
+        lower = np.percentile(sim, 2.5, axis=1)
+        upper = np.percentile(sim, 97.5, axis=1)
+        return lower.tolist(), upper.tolist()
+    except Exception as e:
+        logger.warning(f"Simulation failed, falling back to scaled residual CI: {e}")
+        std_err = np.std(model.resid)
+        forecast = model.forecast(forcast_months)
+        # Scale uncertainty by sqrt(horizon) as forecast uncertainty grows
+        lower = [max(0, forecast.iloc[i] - 1.96 * std_err * np.sqrt(i + 1)) for i in range(forecast_months)]
+        upper = [forecast.iloc[i] + 1.96 * std_err * np.sqrt(i + 1) for i in range(forecast_months)]
+        return lower, upper
 
-def run_demand_forecasting():
+# ─── Main Pipeline ───────────────────────────────────────────────────────────
+def run_demand_forecasting(conn):
     """
     Executes the Holt-Winters demand forecasting pipeline.
-    Calculates MAPE for model evaluation and applies festival multipliers.
+    Computes out-of-sample MAPE, dynamic festival boosts, and prediction intervals.
     """
     logger.info("📈 Starting Demand Forecasting Pipeline...")
-    conn = None
     try:
-        from main import get_db_connection
-        conn = get_db_connection()
-
-        # 1. Fetch historical monthly sales data (last 24 months)
-        query = """
-        SELECT 
-            oi.product_id,
-            DATE_TRUNC('month', o.created_at) as month_start,
-            SUM(oi.quantity) as total_sold
-        FROM order_items oi
-        JOIN orders o ON o.id = oi.order_id
-        WHERE o.status = 'fulfilled'
-          AND o.created_at >= NOW() - INTERVAL '24 months'
-        GROUP BY oi.product_id, DATE_TRUNC('month', o.created_at)
-        ORDER BY oi.product_id, month_start;
-        """
-        df = pd.read_sql_query(query, conn)
+        cur = conn.cursor()
         
-        if df.empty:
-            logger.warning("⚠️ No historical sales data found for forecasting.")
-            return {"status": "skipped", "reason": "No sales data"}
-
-        # Filter to top 500 products by sales volume to prevent serverless timeout
-        product_volumes = df.groupby('product_id')['total_sold'].sum().sort_values(ascending=False)
-        top_products = product_volumes.head(500).index.tolist()
-        logger.info(f"📊 Processing top {len(top_products)} products by sales volume...")
+        # 1. Fetch festivals dynamically
+        festivals = fetch_festivals(conn)
         
-        forecast_records = []
+        # 2. Fetch product sales history (last 36 months)
+        cur.execute("""
+            SELECT oi.product_id, p.name, p.current_stock, 
+                   DATE_TRUNC('month', o.created_at) AS month,
+                   SUM(oi.quantity) AS units_sold
+            FROM order_items oi
+            JOIN orders o ON oi.order_id = o.id
+            JOIN products p ON oi.product_id = p.id
+            WHERE o.status IN ('fulfilled', 'confirmed')
+              AND o.created_at >= NOW() - INTERVAL '36 months'
+            GROUP BY oi.product_id, p.name, p.current_stock, DATE_TRUNC('month', o.created_at)
+            ORDER BY oi.product_id, month
+        """)
+        raw_sales = cur.fetchall()
+        logger.info(f"✅ Fetched {len(raw_sales)} raw sales records.")
+
+        # Group by product
+        products_data = {}
+        for pid, pname, stock, month, units in raw_sales:
+            products_data.setdefault(pid, {"name": pname, "stock": stock, "sales": []})
+            products_data[pid]["sales"].append({"date": month, "units": float(units)})
+
         accuracy_records = []
-        valid_products = []
-        
-        current_year = datetime.now().year
-        # Get festivals for this year and next year to cover the forecast horizon
-        festivals = get_bd_festivals(current_year) + get_bd_festivals(current_year + 1)
-        forecast_months = 6 # Predict 6 months into the future
-        
-        for pid in top_products:
-            prod_df = df[df['product_id'] == pid].copy()
-            if len(prod_df) < 6: # Need at least 6 months of data for seasonality
+        forecast_records = []
+        processed = 0
+        skipped = 0
+
+        for pid, data in products_data.items():
+            df = pd.DataFrame(data["sales"])
+            df.set_index("date", inplace=True)
+            df = df.asfreq("MS").fillna(0).sort_index()
+            
+            # Guard: Need at least 6 months for meaningful forecasting
+            if len(df) < 6:
+                skipped += 1
                 continue
-                
-            # Create a continuous monthly date range
-            prod_df['month_start'] = pd.to_datetime(prod_df['month_start'])
-            prod_df.set_index('month_start', inplace=True)
+
+            # 📉 Train/Test Split: Hold out last 3 months
+            train = df.iloc[:-3]
+            test = df.iloc[-3:]
             
-            # Resample to ensure monthly frequency (fill missing months with 0)
-            ts = prod_df['total_sold'].resample('MS').sum().fillna(0)
-            
-            if len(ts) < 6:
-                continue
-                
-            valid_products.append(pid)
-            
+            # 🛡️ Seasonal Periods Guard
+            use_seasonal = len(df) >= 24
             try:
-                # Fit Holt-Winters model (Additive trend and seasonality)
-                # Seasonal period = 12 (monthly data with yearly seasonality)
                 model = ExponentialSmoothing(
-                    ts, 
-                    trend='add', 
-                    seasonal='add', 
-                    seasonal_periods=12,
+                    train["units"],
+                    trend='add',
+                    seasonal='add' if use_seasonal else None,
+                    seasonal_periods=12 if use_seasonal else None,
                     initialization_method="estimated"
                 ).fit(optimized=True)
-                
-                # Forecast next N months
-                forecast = model.forecast(forecast_months)
-                
-                # Calculate in-sample MAPE (Mean Absolute Percentage Error)
-                fitted_values = model.fittedvalues
-                mask = ts != 0 # Avoid division by zero
-                if mask.sum() > 0:
-                    mape = np.mean(np.abs((ts[mask] - fitted_values[mask]) / ts[mask])) * 100
-                else:
-                    mape = 0.0
-                    
-                # Apply Festival Multipliers & Generate Records
-                for date, value in forecast.items():
-                    is_festival = False
-                    festival_name = None
-                    boost_factor = 1.0
-                    
-                    for fest in festivals:
-                        start_date = pd.to_datetime(fest['start'])
-                        end_date = pd.to_datetime(fest['end'])
-                        if start_date <= date <= end_date:
-                            is_festival = True
-                            festival_name = fest['name']
-                            boost_factor = fest['boost']
-                            break
-                            
-                    final_value = max(0, value * boost_factor)
-                    
-                    # Calculate 95% Confidence Intervals
-                    residuals = model.resid
-                    std_err = np.std(residuals)
-                    lower_bound = max(0, final_value - 1.96 * std_err)
-                    upper_bound = final_value + 1.96 * std_err
-                    
-                    forecast_records.append((
-                        pid,
-                        date.date(),
-                        round(final_value, 2),
-                        round(lower_bound, 2),
-                        round(upper_bound, 2),
-                        is_festival,
-                        festival_name,
-                        boost_factor
-                    ))
-                    
-                    # Log accuracy metrics (Actual value is NULL for future dates)
-                    accuracy_records.append((
-                        pid,
-                        date.date(),
-                        round(final_value, 2),
-                        None, 
-                        f'holt_winters_v1_mape_{mape:.2f}',
-                        is_festival
-                    ))
-                    
             except Exception as e:
-                logger.error(f"❌ Forecasting failed for product {pid}: {e}")
+                logger.warning(f"Skipping PID {pid}: Model fit failed ({e})")
+                skipped += 1
                 continue
 
-        logger.info(f"✅ Generated forecasts for {len(valid_products)} products.")
-        
-        # 2. Write to database
-        cursor = conn.cursor()
-        
-        if valid_products:
-            # Clear old future forecasts for these products to avoid duplicates
-            cursor.execute("""
-                DELETE FROM demand_forecast_cache 
-                WHERE product_id = ANY(%s) 
-                AND forecast_date >= CURRENT_DATE
-            """, (valid_products,))
+            # Forecast next 6 months
+            forecast_horizon = 6
+            future_dates = pd.date_range(start=test.index[-1] + pd.offsets.MonthBegin(1), periods=forecast_horizon, freq="MS")
+            forecast_values = model.forecast(forecast_horizon).tolist()
             
-            # Insert new forecasts
-            insert_forecast = """
-                INSERT INTO demand_forecast_cache (
-                    product_id, forecast_date, predicted_value, lower_bound, upper_bound, 
-                    is_festival_period, festival_name, boost_factor, created_at
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
-            """
-            execute_batch(cursor, insert_forecast, forecast_records, page_size=1000)
-            
-            # Insert accuracy logs
-            insert_accuracy = """
-                INSERT INTO forecast_accuracy_logs (
-                    product_id, forecast_date, predicted_value, actual_value, 
-                    algorithm_version, festival_boost_applied, created_at
-                ) VALUES (%s, %s, %s, %s, %s, %s, NOW())
-                ON CONFLICT (product_id, forecast_date) DO NOTHING
-            """
-            execute_batch(cursor, insert_accuracy, accuracy_records, page_size=1000)
-            
-            conn.commit()
-            cursor.close()
-            
-        # Calculate average MAPE across all forecasted products
-        avg_mape = 0.0
-        if accuracy_records:
-            mapes = [float(v[4].split('_')[-1]) for v in accuracy_records if 'mape_' in v[4]]
-            if mapes:
-                avg_mape = sum(mapes) / len(mapes)
+            # Apply festival multipliers
+            boosted_forecast, applied_festivals = apply_festival_multipliers(
+                forecast_values, future_dates, festivals
+            )
 
-        logger.info(f"✅ Demand forecasting completed. Avg MAPE: {avg_mape:.2f}%")
-        
-        return {
-            "status": "success",
-            "products_forecasted": len(valid_products),
-            "total_forecast_records": len(forecast_records),
-            "average_mape": round(avg_mape, 2),
-            "timestamp": datetime.now().isoformat()
+            # Compute prediction intervals
+            lower_ci, upper_ci = compute_prediction_intervals(model, forecast_horizon)
+
+            # 📊 Out-of-Sample MAPE Calculation
+            test_pred = model.forecast(3).tolist()
+            mask = test["units"] != 0
+            if mask.sum() > 0:
+                oos_mape = np.mean(np.abs((test[mask] - test_pred) / test[mask])) * 100
+            else:
+                oos_mape = np.nan  # Insufficient data for MAPE
+
+            # Save to forecast cache
+            for i in range(forecast_horizon):
+                forecast_records.append((
+                    pid,
+                    future_dates[i].date(),
+                    round(boosted_forecast[i], 2),
+                    round(lower_ci[i], 2),
+                    round(upper_ci[i], 2),
+                    bool(applied_festivals and any(f["month"] == future_dates[i].strftime("%Y-%m") for f in applied_festivals))
+                ))
+
+            # Save accuracy log
+            accuracy_records.append((
+                pid,
+                datetime.now().date(),
+                round(boosted_forecast[0], 2),
+                float(test["units"].iloc[0]) if not test.empty else None,
+                'holt_winters_v2_simulation',  # Clean version string
+                round(oos_mape, 4) if not np.isnan(oos_mape) else None,  # Separate MAPE column
+                bool(applied_festivals)
+            ))
+            processed += 1
+
+        # ─── Batch Insert Forecast Cache ─────────────────────────────────────
+        if forecast_records:
+            execute_values(
+                cur,
+                """INSERT INTO public.demand_forecast_cache 
+                   (product_id, forecast_date, predicted_value, lower_bound, upper_bound, festival_boost_applied)
+                   VALUES %s
+                   ON CONFLICT (product_id, forecast_date) DO UPDATE 
+                   SET predicted_value = EXCLUDED.predicted_value,
+                       lower_bound = EXCLUDED.lower_bound,
+                       upper_bound = EXCLUDED.upper_bound,
+                       festival_boost_applied = EXCLUDED.festival_boost_applied""",
+                forecast_records, page_size=1000
+            )
+            logger.info(f"💾 Cached {len(forecast_records)} forecast records.")
+
+        # ─── Batch Insert Accuracy Logs ──────────────────────────────────────
+        if accuracy_records:
+            execute_values(
+                cur,
+                """INSERT INTO public.forecast_accuracy_logs 
+                   (product_id, forecast_date, predicted_value, actual_value, algorithm_version, mape, festival_boost_applied)
+                   VALUES %s
+                   ON CONFLICT (product_id, forecast_date) DO NOTHING""",
+                accuracy_records, page_size=1000
+            )
+            logger.info(f"📊 Logged {len(accuracy_records)} accuracy records.")
+
+        # 📝 Log Training Metadata for Drift Detection
+        train_start = min(df.index).strftime("%Y-%m-%d") if processed > 0 else None
+        train_end = max(df.index).strftime("%Y-%m-%d") if processed > 0 else None
+        metadata = {
+            "date_range": [train_start, train_end],
+            "products_processed": processed,
+            "products_skipped": skipped,
+            "avg_oos_mape": round(np.mean([r[5] for r in accuracy_records if r[5] is not None]), 2) if any(r[5] is not None for r in accuracy_records) else None,
+            "seasonal_model_used": use_seasonal,
+            "run_timestamp": datetime.now().isoformat()
         }
+        
+        cur.execute("""
+            INSERT INTO public.ml_model_accuracy (model_name, metric_name, metric_value, training_metadata, created_at)
+            VALUES ('holt_winters_demand', 'out_of_sample_mape', %s, %s, NOW())
+            ON CONFLICT (model_name, metric_name, created_at) DO NOTHING
+        """, (metadata.get("avg_oos_mape"), Json(metadata)))
+
+        conn.commit()
+        logger.info(f"✅ Demand forecasting completed. Processed: {processed}, Skipped: {skipped}")
+        return {"status": "success", "processed": processed, "skipped": skipped}
 
     except Exception as e:
+        conn.rollback()
         logger.error(f"❌ Forecasting pipeline failed: {e}", exc_info=True)
-        if conn:
-            conn.rollback()
         return {"status": "error", "error": str(e)}
     finally:
-        if conn:
-            conn.close()
+        # Note: Connection closing is handled by the calling cron handler
+        pass
