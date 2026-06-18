@@ -1,0 +1,34 @@
+# ml-service/.dockerignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+*.egg-info/
+.ruff_cache/
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Testing & Coverage
+.pytest_cache/
+coverage/
+htmlcov/
+
+# Local environment files (Never commit secrets to Docker!)
+.env
+.env.local
+.env.production
