@@ -16,8 +16,15 @@
 #    CRITICAL FIX: We now intentionally hold out 10% of these customers 
 #    (Control Group) and do NOT send them the email. Both groups are logged 
 #    in the `retention_email_log` table. This enables Difference-in-Differences 
-#    (DiD) causal inference to measure the TRUE ROI of the email campaign, 
-#    isolating the impact of the email from natural customer recovery.
+#    (DiD) causal inference to measure the TRUE ROI of the email campaign.
+#
+# BUG FIXES APPLIED:
+# 1. Function signature now accepts `conn` parameter from main.py.
+# 2. Removed internal `get_db_connection()` call.
+# 3. Fixed "column confidence_score does not exist" error by removing the 
+#    confidence_score check. We now flag ALL users in 'Fake Orders' or 
+#    'High Risk' segments for manual review.
+# 4. Does NOT close the connection (main.py handles that).
 # ============================================================================
 
 import logging
@@ -36,16 +43,20 @@ logger = logging.getLogger("bushal-ml.automation")
 resend.api_key = os.getenv("RESEND_API_KEY")
 ADMIN_EMAIL = os.getenv("ADMIN_EMAIL")
 
-def run_business_automation():
+def run_business_automation(conn):
     """
     Executes the business automation pipeline:
     1. Fraud Detection: Flag suspicious orders for human review.
     2. Inventory: Generate PDF Purchase Orders for critical stock items.
     3. Retention: Send discount emails to 'High Risk' churned customers 
        with a 10% holdout group for causal inference (DiD).
+       
+    Args:
+        conn: psycopg2 connection object (passed from main.py)
     """
     logger.info("🤖 Starting Business Automation Pipeline...")
-    conn = None
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    
     results = {
         "fraud_flagged": 0,
         "pos_generated": 0,
@@ -54,23 +65,22 @@ def run_business_automation():
     }
 
     try:
-        from main import get_db_connection
-        conn = get_db_connection()
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-
         # ─── TASK 1: Fraud Prevention (Human Review Queue) ───────────────
         logger.info("🛡️ [1/3] Flagging suspicious orders for human review...")
         
+        # FIX: Removed `confidence_score` check. The customer_segments table 
+        # only has: customer_id, segment, recency, frequency, monetary, cluster_id.
+        # We flag ALL users in the 'Fake Orders' or 'High Risk' segments.
         cursor.execute("""
-            SELECT customer_id, segment, confidence_score
+            SELECT customer_id, segment
             FROM customer_segments
-            WHERE (segment = 'Fake Orders' AND confidence_score > 0.75)
-               OR (segment = 'High Risk' AND confidence_score > 0.85)
+            WHERE segment IN ('Fake Orders', 'High Risk')
         """)
         suspicious_users = cursor.fetchall()
         
         flagged_count = 0
         for user in suspicious_users:
+            # Find pending orders from this user in the last 48 hours
             cursor.execute("""
                 SELECT id, total FROM orders
                 WHERE user_id = %s 
@@ -89,7 +99,7 @@ def run_business_automation():
                     order['id'], 
                     user['customer_id'], 
                     f"Customer flagged as {user['segment']} by K-Means clustering",
-                    user['confidence_score']
+                    0.85 # Default proxy confidence since the column was removed from schema
                 ))
                 
                 if cursor.rowcount > 0:
@@ -99,7 +109,7 @@ def run_business_automation():
         results["fraud_flagged"] = flagged_count
         conn.commit()
 
-        # ─── TASK 2: Automated Purchase Orders (PDF Generation) ──────────
+        # ─── TASK 2: Automated Purchase Orders (PDF Generation) ─────────
         logger.info("📦 [2/3] Generating Purchase Orders for critical stock...")
         
         cursor.execute("""
@@ -124,7 +134,7 @@ def run_business_automation():
             data = [['Product Name', 'Current Stock', 'Est. Unit Cost']]
             for item in critical_items:
                 cost = float(item['cost_price'] or 0)
-                data.append([item['name'], str(item['stock_quantity']), f"৳{cost:.2f}"])
+                data.append([item['name'], str(item['stock_quantity']), f"{cost:.2f}"])
             
             t = Table(data)
             t.setStyle(TableStyle([
@@ -149,6 +159,7 @@ def run_business_automation():
             logger.warning("   ⚠️ RESEND_API_KEY missing. Skipping emails.")
         else:
             # Find High Risk customers with Recency > 60 days
+            # Schema check: customer_segments has customer_id, segment, recency, frequency, monetary, cluster_id
             cursor.execute("""
                 SELECT cs.customer_id, p.email, p.full_name, cs.recency
                 FROM customer_segments cs
@@ -230,8 +241,13 @@ def run_business_automation():
     except Exception as e:
         logger.error(f"❌ Automation pipeline failed: {e}", exc_info=True)
         if conn:
-            conn.rollback()
+            try:
+                conn.rollback()
+            except:
+                pass
         return {"status": "error", "error": str(e)}
     finally:
-        if conn:
-            conn.close()
+        # NOTE: We do NOT close the connection here.
+        # main.py is responsible for managing the connection lifecycle.
+        if cursor and not cursor.closed:
+            cursor.close()

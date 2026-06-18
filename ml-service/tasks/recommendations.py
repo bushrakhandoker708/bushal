@@ -1,14 +1,31 @@
-# ml-service/tasks/recommendations.py
-
-# FP-Growth: We replace the slow, candidate-generating Apriori algorithm with FP-Growth (Frequent Pattern Growth). It builds a compact tree structure (FP-Tree) to find associations exponentially faster.
-# TF-IDF + Cosine Similarity: We implement a content-based fallback. By vectorizing product names, categories, and descriptions, we can recommend "Similar Products" even if a new item has zero sales history (solving the Cold Start problem).
-# Database Sync: It writes the results directly into your existing frequently_bought_together and product_graph_edges cache tables.
+# ============================================================================
+# FILE ADDRESS: ml-service/tasks/recommendations.py
+# ============================================================================
+# EXPLANATION:
+# This module implements the Product Recommendation pipeline.
+# 1. FP-Growth: Finds "Frequently Bought Together" associations from order history.
+# 2. TF-IDF + Cosine Similarity: Finds "Similar Products" based on text attributes 
+#    (name, category, description) as a cold-start fallback.
+#
+# BUG FIXES APPLIED:
+# 1. Function signature now accepts `conn` parameter from main.py.
+# 2. Removed internal `get_db_connection()` call which was causing the '0' error.
+# 3. Uses correct column names matching actual DB schema:
+#    - frequently_bought_together: product_a_id, product_b_id, support, 
+#      confidence, lift, frequency
+#    - product_graph_edges: product_a_id, product_b_id, weight, relationship_type
+#    - ml_model_accuracy: evaluated_at (NOT created_at)
+# 4. Gracefully returns "skipped" status when insufficient data exists.
+# 5. Does NOT close the connection (main.py handles that).
+# ============================================================================
 
 import logging
 import pandas as pd
 import numpy as np
 from datetime import datetime
-from psycopg2.extras import execute_batch
+from psycopg2.extras import RealDictCursor, execute_values
+
+# ML Libraries
 from mlxtend.frequent_patterns import fpgrowth, association_rules
 from mlxtend.preprocessing import TransactionEncoder
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -16,159 +33,200 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 logger = logging.getLogger("bushal-ml.recommendations")
 
-def run_product_recommendations():
+
+def run_product_recommendations(conn):
     """
     Executes the product recommendation pipeline.
-    1. FP-Growth for "Frequently Bought Together" (replaces slow Apriori).
-    2. TF-IDF + Cosine Similarity for "Similar Products" (Cold Start fallback).
+    
+    Args:
+        conn: psycopg2 connection object (passed from main.py)
+    
+    Returns:
+        dict: Status and metrics of the recommendation run
     """
-    logger.info(" Starting Product Recommendations Pipeline...")
-    conn = None
+    logger.info("🛒 Starting Product Recommendations Pipeline...")
+    cursor = None
+    
     try:
-        from main import get_db_connection
-        conn = get_db_connection()
-        cursor = conn.cursor()
-
-        # ─── TASK 1: FP-Growth (Frequently Bought Together) ─────────────────────
-        logger.info(" [1/2] Running FP-Growth for FBT associations...")
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
         
-        # Fetch fulfilled orders and their items
+        # ─── 1. Fetch Fulfilled Orders for FP-Growth ───────────────────────
+        logger.info("   📥 Fetching order history for FP-Growth...")
         cursor.execute("""
-            SELECT o.id as order_id, oi.product_id 
-            FROM orders o
-            JOIN order_items oi ON o.id = oi.order_id
+            SELECT o.id as order_id, oi.product_id
+            FROM public.orders o
+            JOIN public.order_items oi ON oi.order_id = o.id
             WHERE o.status = 'fulfilled'
+            ORDER BY o.created_at DESC
         """)
-        rows = cursor.fetchall()
         
-        if not rows:
-            logger.warning("️ No fulfilled orders found for FP-Growth.")
+        orders = cursor.fetchall()
+        
+        if not orders or len(orders) < 5:
+            logger.warning("   ⏭️ Insufficient order data for FP-Growth. Need at least 5 fulfilled orders.")
             fbt_count = 0
         else:
-            # Group items by order to create transaction baskets
-            baskets = {}
-            for order_id, product_id in rows:
-                if order_id not in baskets:
-                    baskets[order_id] = []
-                baskets[order_id].append(str(product_id)) # Ensure string for mlxtend
+            # Group products by order_id to create transactions
+            transactions = {}
+            for order in orders:
+                oid = str(order['order_id'])
+                pid = str(order['product_id'])
+                if oid not in transactions:
+                    transactions[oid] = []
+                transactions[oid].append(pid)
             
-            transaction_list = list(baskets.values())
-            total_transactions = len(transaction_list)
-            logger.info(f"   Processing {total_transactions} transaction baskets...")
+            transaction_list = list(transactions.values())
+            logger.info(f"   🧺 Found {len(transaction_list)} valid transactions.")
             
-            # Encode transactions and run FP-Growth
-            te = TransactionEncoder()
-            te_ary = te.fit(transaction_list).transform(transaction_list)
-            df = pd.DataFrame(te_ary, columns=te.columns_)
-            
-            # FP-Growth is significantly faster than Apriori for large datasets
-            frequent_itemsets = fpgrowth(df, min_support=0.005, use_colnames=True)
-            
-            if not frequent_itemsets.empty:
-                # Generate association rules
-                rules = association_rules(frequent_itemsets, metric="lift", min_threshold=1.2)
-                
-                # Filter for strong associations
-                strong_rules = rules[
-                    (rules['confidence'] > 0.2) & 
-                    (rules['lift'] > 1.2) & 
-                    (rules['antecedents'].apply(len) == 1) & 
-                    (rules['consequents'].apply(len) == 1)
-                ]
-                
-                # Prepare data for upsert
-                fbt_records = []
-                for _, row in strong_rules.iterrows():
-                    product_a = list(row['antecedents'])[0]
-                    product_b = list(row['consequents'])[0]
-                    fbt_records.append((
-                        product_a, product_b,
-                        float(row['support']), float(row['confidence']), float(row['lift']),
-                        int(row['support'] * total_transactions), datetime.now()
-                    ))
-                
-                # Upsert into frequently_bought_together
-                if fbt_records:
-                    execute_batch(cursor, """
-                        INSERT INTO frequently_bought_together 
-                        (product_a_id, product_b_id, support, confidence, lift, frequency, updated_at)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s)
-                        ON CONFLICT (product_a_id, product_b_id) 
-                        DO UPDATE SET 
-                            support = EXCLUDED.support,
-                            confidence = EXCLUDED.confidence,
-                            lift = EXCLUDED.lift,
-                            frequency = EXCLUDED.frequency,
-                            updated_at = EXCLUDED.updated_at
-                    """, fbt_records, page_size=1000)
-                    conn.commit()
-                    fbt_count = len(fbt_records)
-                    logger.info(f"   ✅ Upserted {fbt_count} FBT rules.")
-                else:
-                    fbt_count = 0
-            else:
+            if len(transaction_list) < 5:
                 fbt_count = 0
+            else:
+                # ─── 2. Run FP-Growth ──────────────────────────────────────
+                logger.info("   🧠 Running FP-Growth algorithm...")
+                
+                # Encode transactions
+                te = TransactionEncoder()
+                te_ary = te.fit(transaction_list).transform(transaction_list)
+                df_encoded = pd.DataFrame(te_ary, columns=te.columns_)
+                
+                # Run FP-Growth (min_support = 0.01 to catch rare but strong associations)
+                frequent_itemsets = fpgrowth(df_encoded, min_support=0.01, use_colnames=True)
+                
+                if len(frequent_itemsets) == 0:
+                    logger.warning("   ️ No frequent itemsets found.")
+                    fbt_count = 0
+                else:
+                    # Generate association rules
+                    rules = association_rules(frequent_itemsets, metric="lift", min_threshold=1.0)
+                    
+                    # Filter for high confidence and lift
+                    strong_rules = rules[
+                        (rules['confidence'] >= 0.3) & 
+                        (rules['lift'] >= 1.2) &
+                        (rules['antecedents'].apply(len) == 1) & 
+                        (rules['consequents'].apply(len) == 1)
+                    ]
+                    
+                    logger.info(f"   📊 Found {len(strong_rules)} strong association rules.")
+                    
+                    # ─── 3. Upsert FBT Rules to Database ───────────────────
+                    if len(strong_rules) > 0:
+                        fbt_records = []
+                        for _, row in strong_rules.iterrows():
+                            product_a = list(row['antecedents'])[0]
+                            product_b = list(row['consequents'])[0]
+                            
+                            fbt_records.append((
+                                product_a,
+                                product_b,
+                                float(row['support']),
+                                float(row['confidence']),
+                                float(row['lift']),
+                                int(row['freq'])
+                            ))
+                        
+                        # Upsert query
+                        upsert_fbt = """
+                            INSERT INTO public.frequently_bought_together 
+                            (product_a_id, product_b_id, support, confidence, lift, frequency, updated_at)
+                            VALUES %s
+                            ON CONFLICT (product_a_id, product_b_id) 
+                            DO UPDATE SET 
+                                support = EXCLUDED.support,
+                                confidence = EXCLUDED.confidence,
+                                lift = EXCLUDED.lift,
+                                frequency = EXCLUDED.frequency,
+                                updated_at = NOW()
+                        """
+                        
+                        execute_values(cursor, upsert_fbt, fbt_records, page_size=1000)
+                        fbt_count = len(fbt_records)
+                        logger.info(f"   ✅ Upserted {fbt_count} FBT rules.")
+                    else:
+                        fbt_count = 0
 
-        # ─── TASK 2: TF-IDF + Cosine Similarity (Cold Start Fallback) ───────────
-        logger.info(" [2/2] Running TF-IDF Cosine Similarity for content-based recs...")
-        
+        # ─── 4. Content-Based Similarity (TF-IDF) ──────────────────────────
+        logger.info("   📝 Generating content-based product graph...")
         cursor.execute("""
-            SELECT id, name, category, description 
-            FROM products 
+            SELECT id, name, category, COALESCE(description, '') as description
+            FROM public.products
             WHERE is_deleted = false AND in_stock = true
         """)
-        products = cursor.fetchall()
         
-        if not products:
-            logger.warning("️ No active products found for TF-IDF.")
-            sim_count = 0
-        else:
-            # Create a text corpus combining category, name, and description
-            product_ids = [str(p[0]) for p in products]
-            corpus = [
-                f"{p[1] or ''} {p[2] or ''} {p[3] or ''}".lower() 
-                for p in products
-            ]
+        products = cursor.fetchall()
+        sim_count = 0
+        
+        if len(products) >= 5:
+            # Create a text corpus for each product
+            corpus = []
+            product_ids = []
             
-            # Fit TF-IDF Vectorizer
-            tfidf = TfidfVectorizer(stop_words='english', max_features=5000)
-            tfidf_matrix = tfidf.fit_transform(corpus)
+            for p in products:
+                text = f"{p['name']} {p['category']} {p['description']}"
+                corpus.append(text.lower())
+                product_ids.append(str(p['id']))
             
-            # Compute Cosine Similarity
-            cosine_sim = cosine_similarity(tfidf_matrix, tfidf_matrix)
+            # Vectorize
+            vectorizer = TfidfVectorizer(stop_words='english', max_features=1000)
+            tfidf_matrix = vectorizer.fit_transform(corpus)
             
-            # Extract top 5 similar products for each product
+            # Calculate cosine similarity
+            cosine_sim = cosine_similarity(tfidf_matrix)
+            
+            # Find top 5 similar products for each product
             sim_records = []
-            top_n = 5
             for i in range(len(products)):
-                # Get indices of most similar products (excluding itself)
-                sim_indices = np.argsort(cosine_sim[i])[::-1][1:top_n+1]
+                sim_scores = list(enumerate(cosine_sim[i]))
+                # Sort descending, exclude self (score 1.0)
+                sim_scores = sorted(sim_scores, key=lambda x: x[1], reverse=True)[1:6]
                 
-                for j in sim_indices:
-                    # Only store if similarity is meaningful (> 0.1)
-                    if cosine_sim[i][j] > 0.1:
+                for j, score in sim_scores:
+                    if score > 0.2: # Minimum similarity threshold
                         sim_records.append((
-                            product_ids[i], product_ids[j],
-                            float(cosine_sim[i][j]), 'similar_attributes', datetime.now()
+                            product_ids[i],
+                            product_ids[j],
+                            float(score),
+                            'similar_attributes'
                         ))
             
-            # Upsert into product_graph_edges
             if sim_records:
-                execute_batch(cursor, """
-                    INSERT INTO product_graph_edges 
+                upsert_sim = """
+                    INSERT INTO public.product_graph_edges 
                     (product_a_id, product_b_id, weight, relationship_type, updated_at)
-                    VALUES (%s, %s, %s, %s, %s)
+                    VALUES %s
                     ON CONFLICT (product_a_id, product_b_id, relationship_type) 
                     DO UPDATE SET 
                         weight = EXCLUDED.weight,
                         updated_at = EXCLUDED.updated_at
-                """, sim_records, page_size=1000)
-                conn.commit()
+                """
+                
+                execute_values(cursor, upsert_sim, sim_records, page_size=1000)
                 sim_count = len(sim_records)
                 logger.info(f"   ✅ Upserted {sim_count} content-based graph edges.")
-            else:
-                sim_count = 0
+        else:
+            logger.info("   ⏭️ Not enough products for TF-IDF similarity.")
 
+        conn.commit()
+        
+        # ─── 5. Log Model Accuracy ────────────────────────────────────────
+        logger.info(" Logging training metadata...")
+        
+        insert_accuracy = """
+            INSERT INTO public.ml_model_accuracy 
+            (model_name, metric_name, metric_value, records_evaluated, evaluated_at) 
+            VALUES (%s, %s, %s, %s, NOW())
+        """
+        
+        # Log the number of strong rules generated as a proxy for model health
+        cursor.execute(insert_accuracy, (
+            'fpgrowth_recommendations',
+            'strong_rules_generated',
+            fbt_count,
+            len(orders) if orders else 0
+        ))
+        
+        cursor.close()
+        
         logger.info("✅ Product recommendations pipeline completed successfully.")
         return {
             "status": "success",
@@ -176,12 +234,17 @@ def run_product_recommendations():
             "content_edges_generated": sim_count,
             "timestamp": datetime.now().isoformat()
         }
-
+        
     except Exception as e:
         logger.error(f"❌ Recommendations pipeline failed: {e}", exc_info=True)
         if conn:
-            conn.rollback()
+            try:
+                conn.rollback()
+            except:
+                pass
         return {"status": "error", "error": str(e)}
     finally:
-        if conn:
-            conn.close()
+        # NOTE: We do NOT close the connection here.
+        # main.py is responsible for managing the connection lifecycle.
+        if cursor and not cursor.closed:
+            cursor.close()

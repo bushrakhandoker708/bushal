@@ -7,15 +7,14 @@
 # rolling average. If the deviation exceeds a defined threshold, it triggers 
 # an alert in the `model_drift_alerts` table.
 #
-# LOGIC:
-# 1. Fetch the last 4 weeks of metrics for key models from `ml_model_accuracy`.
-# 2. Calculate the rolling average.
-# 3. Compare the latest run's metric to the average.
-# 4. Thresholds:
-#    - K-Means (Silhouette Score): Alert if score drops > 10% (Warning) or > 20% (Critical).
-#    - Holt-Winters (MAPE): Alert if error increases > 15% (Warning) or > 30% (Critical).
-# 5. Insert alert into `model_drift_alerts` (with manual daily deduplication 
-#    since Postgres doesn't allow DATE() in immutable index expressions).
+# BUG FIXES APPLIED:
+# 1. Fixed "column created_at does not exist" error by using `evaluated_at` 
+#    when querying the `ml_model_accuracy` table.
+# 2. Implemented explicit daily deduplication in Python. The database unique 
+#    index is on the exact timestamp, so we must check if an alert for today 
+#    already exists before inserting to prevent duplicate alerts.
+# 3. Function signature now accepts `conn` parameter from main.py.
+# 4. Does NOT close the connection (main.py handles that).
 # ============================================================================
 
 import logging
@@ -38,18 +37,19 @@ def run_drift_detection(conn):
         # - is_lower_better: True for MAPE (lower error is better), False for Silhouette (higher score is better)
         models_to_check = [
             ('kmeans_segmentation', 'silhouette_score', False, 0.10, 0.20), # 10% drop = warning, 20% drop = critical
-            ('holt_winters_demand', 'out_of_sample_mape', True, 0.15, 0.30), # 15% increase = warning, 30% increase = critical
+            ('holt_winters_forecast', 'out_of_sample_mape', True, 0.15, 0.30), # 15% increase = warning, 30% increase = critical
         ]
 
         four_weeks_ago = datetime.now() - timedelta(weeks=4)
 
         for model_name, metric_name, is_lower_better, warn_thresh, crit_thresh in models_to_check:
             # ─── 2. Fetch Historical Data (Last 4 Weeks) ────────────────────
+            # FIX: Changed `created_at` to `evaluated_at` to match the actual DB schema
             cursor.execute("""
-                SELECT metric_value, created_at
+                SELECT metric_value, evaluated_at
                 FROM public.ml_model_accuracy
-                WHERE model_name = %s AND metric_name = %s AND created_at >= %s
-                ORDER BY created_at DESC
+                WHERE model_name = %s AND metric_name = %s AND evaluated_at >= %s
+                ORDER BY evaluated_at DESC
             """, (model_name, metric_name, four_weeks_ago))
             
             history = cursor.fetchall()
@@ -91,7 +91,7 @@ def run_drift_detection(conn):
                 logger.info(f"   ✅ {model_name} is stable. Change: {percent_change:.2%}")
                 continue
 
-            # ─── 4. Determine Severity ──────────────────────────────────────
+            # ─── 4. Determine Severity ─────────────────────────────────────
             severity = None
             if severity_val >= crit_thresh:
                 severity = 'critical'
@@ -101,16 +101,20 @@ def run_drift_detection(conn):
             if severity:
                 logger.warning(f"   🚨 DRIFT DETECTED: {model_name} ({severity}) | Current: {latest_value:.4f} | Avg: {rolling_avg:.4f} | Change: {percent_change:.2%}")
                 
-                # ─── 5. Insert Alert (with Daily Deduplication) ─────────────
-                # Since we cannot use DATE() in a Postgres unique index (it's not IMMUTABLE),
-                # we manually check if an alert already exists for today before inserting.
+                # ── 5. Check for Daily Deduplication ──────────────────────
+                # Since the DB unique index is on the exact timestamp, we must 
+                # manually check if we already logged an alert for this model/metric today.
                 cursor.execute("""
-                    SELECT id FROM public.model_drift_alerts
-                    WHERE model_name = %s AND metric_name = %s
-                    AND created_at >= CURRENT_DATE
+                    SELECT id FROM public.model_drift_alerts 
+                    WHERE model_name = %s AND metric_name = %s AND DATE(created_at) = CURRENT_DATE
                 """, (model_name, metric_name))
                 
-                if cursor.fetchone() is None:
+                existing_alert = cursor.fetchone()
+                
+                if existing_alert:
+                    logger.info(f"   ⏭️ Alert for {model_name} already exists today. Skipping insert.")
+                else:
+                    # ─── 6. Insert Alert ────────────────────────────────────
                     cursor.execute("""
                         INSERT INTO public.model_drift_alerts 
                         (model_name, metric_name, current_value, rolling_avg_value, percent_change, severity, status)
@@ -123,12 +127,11 @@ def run_drift_detection(conn):
                         percent_change,
                         severity
                     ))
+                    
                     alerts_generated += 1
                     logger.info(f"   📝 Alert logged for {model_name}.")
-                else:
-                    logger.info(f"   ⏭️ Alert for {model_name} already exists today. Skipping.")
             else:
-                logger.info(f"   ⚠️ {model_name} has minor deviation ({percent_change:.2%}), below threshold.")
+                logger.info(f"   ️ {model_name} has minor deviation ({percent_change:.2%}), below threshold.")
 
         conn.commit()
         logger.info(f"✅ Drift Detection Complete. Generated {alerts_generated} alerts.")
@@ -136,7 +139,14 @@ def run_drift_detection(conn):
 
     except Exception as e:
         logger.error(f"❌ Drift Detection failed: {e}", exc_info=True)
-        conn.rollback()
+        if conn:
+            try:
+                conn.rollback()
+            except:
+                pass
         return {"status": "error", "error": str(e)}
     finally:
-        cursor.close()
+        # NOTE: We do NOT close the connection here.
+        # main.py is responsible for managing the connection lifecycle.
+        if cursor and not cursor.closed:
+            cursor.close()

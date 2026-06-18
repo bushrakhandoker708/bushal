@@ -6,23 +6,15 @@
 # FastAPI application, the master pipeline orchestrator endpoint, and the 
 # database connection helper.
 #
-# OBSERVABILITY INTEGRATION:
-# OpenTelemetry is initialized at the very top of this file to ensure that 
-# all incoming HTTP requests and outgoing database queries are automatically 
-# traced. This completes the distributed tracing chain started by the Next.js 
-# frontend, allowing you to see the entire request lifecycle in your tracing 
-# dashboard (e.g., Jaeger, Datadog, Vercel).
-#
-# PIPELINE ORCHESTRATION:
-# The pipeline now runs 5 sequential tasks:
-# 1. Customer Segmentation (K-Means)
-# 2. Demand Forecasting (Holt-Winters)
-# 3. Product Recommendations (FP-Growth & Graph)
-# 4. Model Drift Detection (NEW - Alerts admin if models degrade)
-# 5. Business Automation (Fraud detection, Auto-POs, Retention emails)
+# BUG FIXES APPLIED:
+# 1. All task functions now receive the database connection (conn) as an argument.
+# 2. Connection is created ONCE per pipeline run and shared across tasks to 
+#    reduce overhead and prevent connection pool exhaustion.
+# 3. Each task is wrapped in try/except so one failure doesn't stop the others.
+# 4. Connection is properly closed in a finally block to prevent leaks.
 # ============================================================================
 
-# 1. Initialize OpenTelemetry FIRST (before any other imports that might use tracing)
+# 1. Initialize OpenTelemetry FIRST (before any other imports)
 from otel import init_otel
 init_otel()
 
@@ -35,10 +27,10 @@ import uvicorn
 from fastapi import FastAPI, Header, HTTPException
 from dotenv import load_dotenv
 
-# Load environment variables from .env file (for local development)
+# Load environment variables
 load_dotenv()
 
-# Configure logging for the microservice
+# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -53,12 +45,9 @@ app = FastAPI(
 )
 
 # 3. Instrument the app immediately after creation
-# This automatically creates spans for every incoming HTTP request,
-# capturing headers, status codes, and execution time.
 FastAPIInstrumentor.instrument_app(app)
 
 # ─── Security Configuration ──────────────────────────────────────────────────
-# This secret must match the one in your Next.js .env.local (ML_PIPELINE_SECRET)
 PIPELINE_SECRET = os.getenv("PIPELINE_SECRET")
 
 if not PIPELINE_SECRET:
@@ -94,62 +83,73 @@ def run_pipeline(x_pipeline_secret: str = Header(None)):
     logger.info("🚀 ==========================================")
     
     results = {}
+    conn = None
     
-    # 2. Run Customer Segmentation (K-Means)
     try:
-        logger.info("📊 [1/5] Running Customer Segmentation...")
-        from tasks.segmentation import run_customer_segmentation
-        results['segmentation'] = run_customer_segmentation()
-    except Exception as e:
-        logger.error(f"❌ Segmentation failed: {e}")
-        results['segmentation'] = f"Error: {str(e)}"
-        
-    # 3. Run Demand Forecasting (Holt-Winters)
-    try:
-        logger.info("📈 [2/5] Running Demand Forecasting...")
-        from tasks.forecasting import run_demand_forecasting
-        results['forecasting'] = run_demand_forecasting()
-    except Exception as e:
-        logger.error(f"❌ Forecasting failed: {e}")
-        results['forecasting'] = f"Error: {str(e)}"
-        
-    # 4. Run Product Recommendations (FP-Growth & Graph)
-    try:
-        logger.info("🛒 [3/5] Running Product Recommendations...")
-        from tasks.recommendations import run_product_recommendations
-        results['recommendations'] = run_product_recommendations()
-    except Exception as e:
-        logger.error(f"❌ Recommendations failed: {e}")
-        results['recommendations'] = f"Error: {str(e)}"
-
-    # 5. Run Model Drift Detection (NEW)
-    # This analyzes the metrics logged by the previous steps to detect if 
-    # the models are degrading (e.g., Silhouette Score dropping, MAPE rising).
-    try:
-        logger.info("📉 [4/5] Running Model Drift Detection...")
-        from tasks.drift_detection import run_drift_detection
-        # Drift detection requires a DB connection to query ml_model_accuracy
+        # Create a single database connection for all tasks
         conn = get_db_connection()
+        logger.info("✅ Database connection established.")
+        
+        # 2. Run Customer Segmentation (K-Means)
         try:
+            logger.info("📊 [1/5] Running Customer Segmentation...")
+            from tasks.segmentation import run_customer_segmentation
+            results['segmentation'] = run_customer_segmentation(conn)
+        except Exception as e:
+            logger.error(f"❌ Segmentation failed: {e}", exc_info=True)
+            results['segmentation'] = {"status": "error", "error": str(e)}
+            
+        # 3. Run Demand Forecasting (Holt-Winters)
+        try:
+            logger.info("📈 [2/5] Running Demand Forecasting...")
+            from tasks.forecasting import run_demand_forecasting
+            results['forecasting'] = run_demand_forecasting(conn)
+        except Exception as e:
+            logger.error(f"❌ Forecasting failed: {e}", exc_info=True)
+            results['forecasting'] = {"status": "error", "error": str(e)}
+            
+        # 4. Run Product Recommendations (FP-Growth & Graph)
+        try:
+            logger.info("🛒 [3/5] Running Product Recommendations...")
+            from tasks.recommendations import run_product_recommendations
+            results['recommendations'] = run_product_recommendations(conn)
+        except Exception as e:
+            logger.error(f"❌ Recommendations failed: {e}", exc_info=True)
+            results['recommendations'] = {"status": "error", "error": str(e)}
+
+        # 5. Run Model Drift Detection
+        try:
+            logger.info("📉 [4/5] Running Model Drift Detection...")
+            from tasks.drift_detection import run_drift_detection
             results['drift_detection'] = run_drift_detection(conn)
-        finally:
-            conn.close()
-    except Exception as e:
-        logger.error(f"❌ Drift Detection failed: {e}")
-        results['drift_detection'] = f"Error: {str(e)}"
+        except Exception as e:
+            logger.error(f"❌ Drift Detection failed: {e}", exc_info=True)
+            results['drift_detection'] = {"status": "error", "error": str(e)}
+            
+        # 6. Run Business Automation (Fraud detection, Auto-POs, Retention)
+        try:
+            logger.info("🤖 [5/5] Running Business Automation...")
+            from tasks.automation import run_business_automation
+            results['automation'] = run_business_automation(conn)
+        except Exception as e:
+            logger.error(f"❌ Automation failed: {e}", exc_info=True)
+            results['automation'] = {"status": "error", "error": str(e)}
+            
+        logger.info("✅ ==========================================")
+        logger.info("✅ ML Pipeline Completed Successfully.")
+        logger.info("✅ ==========================================")
         
-    # 6. Run Business Automation (Fraud detection, Auto-POs, Retention)
-    try:
-        logger.info("🤖 [5/5] Running Business Automation...")
-        from tasks.automation import run_business_automation
-        results['automation'] = run_business_automation()
     except Exception as e:
-        logger.error(f"❌ Automation failed: {e}")
-        results['automation'] = f"Error: {str(e)}"
-        
-    logger.info("✅ ==========================================")
-    logger.info("✅ ML Pipeline Completed Successfully.")
-    logger.info("✅ ==========================================")
+        logger.error(f"❌ Pipeline-level error: {e}", exc_info=True)
+        results['pipeline_error'] = str(e)
+    finally:
+        # Always close the connection
+        if conn:
+            try:
+                conn.close()
+                logger.info("🔒 Database connection closed.")
+            except Exception as e:
+                logger.error(f"Error closing connection: {e}")
     
     return {
         "status": "success", 
@@ -169,22 +169,20 @@ def get_db_connection():
     database_url = os.getenv("DATABASE_URL")
     if not database_url:
         raise ValueError("DATABASE_URL is not set in environment variables.")
-        
-    # Use RealDictCursor to get rows as dictionaries (like Supabase JS client)
-    # Note: Because we ran Psycopg2Instrumentor().instrument() in otel.py, 
-    # every query executed through this connection will automatically be traced!
-    conn = psycopg2.connect(database_url, cursor_factory=RealDictCursor)
+    
+    # Handle pooler URLs that might have query parameters
+    # psycopg2 can handle them, but we need to ensure SSL is enabled
+    conn = psycopg2.connect(
+        database_url, 
+        cursor_factory=RealDictCursor,
+        sslmode='require'  # Force SSL for Supabase
+    )
     return conn
 
 # ─── Railway / Production Server Startup ─────────────────────────────────────
-# FIX: This block ensures the server starts and listens on the correct port
-# regardless of whether Railway uses Docker or Nixpacks to run the app.
 if __name__ == "__main__":
-    # Railway dynamically injects the PORT environment variable.
-    # We default to 8000 for local development.
     port = int(os.environ.get("PORT", 8000))
     
     logger.info(f"🚀 Starting Uvicorn server on port {port}...")
     
-    # Start the server on 0.0.0.0 so Railway's router can connect to it
     uvicorn.run("main:app", host="0.0.0.0", port=port, reload=False)
