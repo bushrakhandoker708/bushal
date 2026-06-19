@@ -7,15 +7,20 @@ interface Params {
   params: { id: string }
 }
 
-// GET - Fetch order details with items and customer info
+// GET - Fetch order details
+// BUGFIX: Use FK join query instead of separate product fetches.
+// The previous version did individual supabase queries per product using the
+// non-service-role client, which meant soft-deleted products (is_deleted=true)
+// were blocked by RLS and returned null → "Unknown Product".
+// The FK join goes through PostgREST and correctly returns the product data
+// even for soft-deleted products since the admin session has read access.
 export async function GET(_req: Request, { params }: Params) {
   const auth = await requireAdmin()
   if (!auth.success) return auth.response
-  
+
   const supabase = await auth.supabase
 
-  // First, fetch the order with order_items
-  const { data: order, error: orderError } = await supabase
+  const { data: order, error } = await supabase
     .from('orders')
     .select(`
       id,
@@ -37,85 +42,78 @@ export async function GET(_req: Request, { params }: Params) {
         id,
         quantity,
         unit_price,
-        product_id
-      )
-    `)
-    .eq('id', params.id)
-    .single()
-
-  if (orderError || !order) {
-    console.error('Error fetching order:', orderError)
-    return NextResponse.json({ error: 'Order not found' }, { status: 404 })
-  }
-
-  // Fetch customer profile
-  const { data: profile, error: profileError } = await supabase
-    .from('profiles')
-    .select('full_name, email, phone')
-    .eq('id', order.user_id)
-    .single()
-
-  if (profileError) {
-    console.error('Error fetching profile:', profileError)
-  }
-
-  // Fetch products for each order item (including soft-deleted ones)
-  const orderItemsWithProducts = await Promise.all(
-    (order.order_items ?? []).map(async (item: any) => {
-      // Fetch product data - include soft-deleted products for historical accuracy
-      const { data: product, error: productError } = await supabase
-        .from('products')
-        .select(`
+        product_id,
+        variant_id,
+        products (
           id,
           name,
           image_url,
           images,
           cost_price,
           delivery_charge,
-          price,
           is_deleted
-        `)
-        .eq('id', item.product_id)
-        .single()
+        )
+      )
+    `)
+    .eq('id', params.id)
+    .single()
 
-      if (productError) {
-        console.error(`Error fetching product ${item.product_id}:`, productError)
-      }
+  if (error || !order) {
+    console.error('Error fetching order:', error)
+    return NextResponse.json({ error: 'Order not found' }, { status: 404 })
+  }
 
-      const costPrice: number = product?.cost_price ?? 0
-      const deliveryCharge: number = product?.delivery_charge ?? 0
-      const subtotal = item.unit_price * item.quantity
-      const itemProfit = subtotal - (costPrice * item.quantity) - (deliveryCharge * item.quantity)
-      
-      // Get the first image from images array or use image_url
-      const productImage = 
-        (Array.isArray(product?.images) && product.images.length > 0 && product.images[0]) || 
-        product?.image_url || 
-        null
+  // Fetch customer profile separately (no FK on auth.users)
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('full_name, email, phone')
+    .eq('id', order.user_id)
+    .single()
 
-      return {
-        id: item.id,
-        product_id: item.product_id,
-        product_name: product?.name ?? 'Unknown Product',
-        product_image: productImage,
-        quantity: item.quantity,
-        unit_price: item.unit_price,
-        cost_price: costPrice || null,
-        delivery_charge: deliveryCharge || null,
-        subtotal,
-        item_profit: itemProfit,
-        is_product_deleted: product?.is_deleted ?? false,
-      }
-    })
-  )
+  // Transform order_items
+  // IMPORTANT: Supabase v2 PostgREST returns FK joins as a single OBJECT, not an array.
+  // Do NOT use Array.isArray() here — it will always return false and break product lookup.
+  const items = (order.order_items ?? []).map((item: any) => {
+    // product is an object (or null), never an array
+    const product = item.products ?? null
 
-  // Parse delivery address
+    const costPrice: number = product?.cost_price ?? 0
+    const deliveryCharge: number = product?.delivery_charge ?? 0
+    const subtotal = item.unit_price * item.quantity
+    const itemProfit =
+      subtotal - costPrice * item.quantity - deliveryCharge * item.quantity
+
+    // Prefer first image in images[] array, fall back to image_url
+    const productImage =
+      (Array.isArray(product?.images) && product.images.length > 0
+        ? product.images[0]
+        : null) ??
+      product?.image_url ??
+      null
+
+    return {
+      id: item.id,
+      product_id: item.product_id,
+      variant_id: item.variant_id ?? null,
+      product_name: product?.name ?? 'Deleted Product',
+      product_image: productImage,
+      is_product_deleted: product?.is_deleted ?? true,
+      quantity: item.quantity,
+      unit_price: item.unit_price,
+      cost_price: costPrice || null,
+      delivery_charge: deliveryCharge || null,
+      subtotal,
+      item_profit: itemProfit,
+    }
+  })
+
+  // Parse delivery address — supports both JSON and legacy plain-text
   let deliveryAddressObj = null
   if (order.delivery_address) {
     try {
       deliveryAddressObj = JSON.parse(order.delivery_address)
     } catch {
-      // Keep as null if not JSON
+      // Legacy plain-text address — keep as null, render raw string in UI
     }
   }
 
@@ -139,7 +137,7 @@ export async function GET(_req: Request, { params }: Params) {
     inventory_reduced: order.inventory_reduced ?? false,
     created_at: order.created_at,
     updated_at: order.updated_at,
-    items: orderItemsWithProducts,
+    items,
   }
 
   return NextResponse.json(shapedOrder)
@@ -149,36 +147,39 @@ export async function GET(_req: Request, { params }: Params) {
 export async function PATCH(request: Request, { params }: Params) {
   const auth = await requireAdmin()
   if (!auth.success) return auth.response
-  
+
   const supabase = await auth.supabase
   const body = await request.json()
   const { delivery_status } = body
 
-  // Define valid delivery statuses with their labels
   const DELIVERY_STATUSES: Record<string, string> = {
-    'order_placed':     'Order Placed',
-    'confirmed':        'Confirmed',
-    'processing':       'Processing',
-    'shipped':          'Shipped',
-    'out_for_delivery': 'Out for Delivery',
-    'delivered':        'Delivered',
-    'cancelled':        'Cancelled',
+    order_placed: 'Order Placed',
+    confirmed: 'Confirmed',
+    processing: 'Processing',
+    shipped: 'Shipped',
+    out_for_delivery: 'Out for Delivery',
+    delivered: 'Delivered',
+    cancelled: 'Cancelled',
   }
 
   if (!delivery_status || !DELIVERY_STATUSES[delivery_status]) {
-    return NextResponse.json({ 
-      error: 'Invalid delivery status',
-      validStatuses: Object.keys(DELIVERY_STATUSES)
-    }, { status: 400 })
+    return NextResponse.json(
+      {
+        error: 'Invalid delivery status',
+        validStatuses: Object.keys(DELIVERY_STATUSES),
+      },
+      { status: 400 }
+    )
   }
 
-  // Map delivery_status to order status
-  const orderStatus = 
-    delivery_status === 'delivered' ? 'fulfilled' :
-    delivery_status === 'cancelled' ? 'cancelled' :
-    'pending'
+  const orderStatus =
+    delivery_status === 'delivered'
+      ? 'fulfilled'
+      : delivery_status === 'cancelled'
+      ? 'cancelled'
+      : 'pending'
 
-  // SECURITY FIX: Verify order exists and get user_id BEFORE calling the RPC.
+  // Verify order exists before calling RPC
   const { data: existingOrder, error: fetchError } = await supabase
     .from('orders')
     .select('id, user_id, total, bkash_invoice')
@@ -189,18 +190,21 @@ export async function PATCH(request: Request, { params }: Params) {
     return NextResponse.json({ error: 'Order not found' }, { status: 404 })
   }
 
-  // Call the atomic RPC to update status and reduce stock if confirming
-  const { data: rpcData, error: rpcError } = await supabase.rpc('confirm_order_and_reduce_stock', {
-    p_order_id: params.id,
-    p_new_status: delivery_status,
-  })
+  // Atomic RPC: update status + reduce stock if confirming
+  const { data: rpcData, error: rpcError } = await supabase.rpc(
+    'confirm_order_and_reduce_stock',
+    {
+      p_order_id: params.id,
+      p_new_status: delivery_status,
+    }
+  )
 
   if (rpcError) {
     console.error('RPC Error:', rpcError)
     return NextResponse.json({ error: rpcError.message }, { status: 500 })
   }
 
-  // Send email notification to customer via Resend (non-fatal)
+  // Email notification to customer (non-fatal)
   if (existingOrder?.user_id) {
     const { data: customerProfile } = await supabase
       .from('profiles')
@@ -211,13 +215,13 @@ export async function PATCH(request: Request, { params }: Params) {
     if (customerProfile?.email) {
       const label = DELIVERY_STATUSES[delivery_status]
       const orderId = params.id.slice(0, 8).toUpperCase()
-      
+
       try {
         await fetch('https://api.resend.com/emails', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+            Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
           },
           body: JSON.stringify({
             from: 'Bushal <noreply@bushal.com>',
@@ -245,9 +249,9 @@ export async function PATCH(request: Request, { params }: Params) {
     }
   }
 
-  return NextResponse.json({ 
-    delivery_status, 
+  return NextResponse.json({
+    delivery_status,
     status: orderStatus,
-    inventory_reduced_now: rpcData?.inventory_reduced_now ?? false 
+    inventory_reduced_now: rpcData?.inventory_reduced_now ?? false,
   })
 }

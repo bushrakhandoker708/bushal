@@ -2,7 +2,12 @@
 import { createServerClient } from '@/lib/supabase/server'
 import AdminOrdersClient from '@/app/components/admin/AdminOrderClient'
 
-// Type definitions
+// ─── Types ────────────────────────────────────────────────────────────────────
+// IMPORTANT: Supabase v2 PostgREST returns FK joins as a single OBJECT, not an
+// array, when the relationship is a many-to-one (order_items → products).
+// The old code used Array.isArray(item.products) which always returned false,
+// so productData was always null → all items showed "Unknown Product".
+
 interface OrderProduct {
   id: string
   name: string
@@ -15,7 +20,8 @@ interface OrderItem {
   quantity: number
   unit_price: number
   product_id: string
-  products: OrderProduct[] | null
+  // PostgREST v2: this is an OBJECT (many-to-one FK), never an array
+  products: OrderProduct | null
 }
 
 interface Order {
@@ -75,24 +81,18 @@ interface EnrichedOrder {
   total_product_lines: number
 }
 
-// Helper to safely get first product image
-const getProductImage = (item: OrderItem): string | null => {
-  if (!item.products || item.products.length === 0) return null
-  
-  const product = item.products[0]
-  
-  // Prioritize: first image in images array > image_url > null
-  if (product.images && Array.isArray(product.images) && product.images.length > 0) {
+// Extracts first image from a product — prioritises images[] array over image_url
+const getProductImage = (product: OrderProduct | null): string | null => {
+  if (!product) return null
+  if (Array.isArray(product.images) && product.images.length > 0) {
     return product.images[0]
   }
-  
-  return product.image_url || null
+  return product.image_url ?? null
 }
 
 export default async function AdminOrdersPage() {
   const supabase = await createServerClient()
 
-  // Fetch orders with properly nested order_items and products
   const { data: orders, error } = await supabase
     .from('orders')
     .select(`
@@ -131,7 +131,7 @@ export default async function AdminOrdersPage() {
   // Fetch customer profiles for all unique user IDs
   const userIds = Array.from(new Set((orders ?? []).map((o) => o.user_id)))
   let profilesMap: Record<string, CustomerProfile> = {}
-  
+
   if (userIds.length > 0) {
     const { data: profiles } = await supabase
       .from('profiles')
@@ -150,27 +150,22 @@ export default async function AdminOrdersPage() {
     }
   }
 
-  // Transform orders with proper image handling
   const enrichedOrders: EnrichedOrder[] = (orders ?? []).map((o) => {
-    // Transform order items with proper image extraction
     const orderItems: EnrichedOrderItem[] = (o.order_items ?? []).map((item) => {
-      // Safely extract product data - handle null/undefined cases
-      let productData = null
-      
-      if (item.products && Array.isArray(item.products) && item.products.length > 0) {
-        const product = item.products[0]
-        
-        // Ensure we have valid product data
-        if (product && product.id) {
-          productData = {
-            id: product.id,
-            name: product.name ?? 'Unknown Product',
-            image_url: product.image_url ?? null,
-            images: Array.isArray(product.images) ? product.images : [],
-          }
-        }
-      }
-      
+      // BUGFIX: item.products is an object, not an array.
+      // Supabase v2 PostgREST returns many-to-one FK joins as objects.
+      const product = item.products as OrderProduct | null
+
+      const productData =
+        product && product.id
+          ? {
+              id: product.id,
+              name: product.name ?? 'Deleted Product',
+              image_url: getProductImage(product),
+              images: Array.isArray(product.images) ? product.images : [],
+            }
+          : null
+
       return {
         id: item.id,
         quantity: typeof item.quantity === 'number' ? item.quantity : 0,
@@ -180,7 +175,6 @@ export default async function AdminOrdersPage() {
       }
     })
 
-    // Calculate totals
     const totalItemsCount = orderItems.reduce((sum, item) => sum + item.quantity, 0)
     const totalProductLines = orderItems.length
 
@@ -203,7 +197,7 @@ export default async function AdminOrdersPage() {
         id: o.user_id,
         full_name: null,
         email: null,
-        phone: null
+        phone: null,
       },
       total_items_count: totalItemsCount,
       total_product_lines: totalProductLines,
