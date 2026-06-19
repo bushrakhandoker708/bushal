@@ -142,7 +142,7 @@ def _compute_mape(actuals: list[float], predictions: list[float]) -> float:
 def _moving_average_forecast(series: list[float], window: int = 8, 
                              horizon: int = 6) -> list[float]:
     """
-    Simple moving average fallback for when Holt-Winters overfits.
+    Simple moving average fallback for when Holt-Winters overfits or fails.
     Uses the last `window` periods to generate flat forecasts.
     """
     recent = series[-window:] if len(series) >= window else series
@@ -223,25 +223,38 @@ def run_demand_forecasting(conn):
             f"testing on {len(test_actuals)} held-out months..."
         )
         
-        level_v, trend_v, seasonal_v, _ = _holt_winters_fit(
-            train_series, HW_ALPHA, HW_BETA, HW_GAMMA, SEASON_LENGTH
-        )
-        
-        # Forecast TEST_PERIODS steps ahead using only training data
-        test_predictions = []
-        for h in range(1, TEST_PERIODS + 1):
-            forecast = level_v + h * trend_v + seasonal_v[(len(train_series) + h - 1) % SEASON_LENGTH]
-            test_predictions.append(max(0.0, forecast))
+        # Try to fit Holt-Winters. If it fails (e.g., numerical instability),
+        # we catch the exception and force a fallback to Moving Average.
+        hw_failed = False
+        try:
+            level_v, trend_v, seasonal_v, _ = _holt_winters_fit(
+                train_series, HW_ALPHA, HW_BETA, HW_GAMMA, SEASON_LENGTH
+            )
             
-        out_of_sample_mape = _compute_mape(test_actuals, test_predictions)
+            # Forecast TEST_PERIODS steps ahead using only training data
+            test_predictions = []
+            for h in range(1, TEST_PERIODS + 1):
+                forecast = level_v + h * trend_v + seasonal_v[(len(train_series) + h - 1) % SEASON_LENGTH]
+                test_predictions.append(max(0.0, forecast))
+                
+            out_of_sample_mape = _compute_mape(test_actuals, test_predictions)
+        except Exception as e:
+            logger.error(f"   ❌ Holt-Winters fitting failed: {e}. Forcing fallback to Moving Average.")
+            hw_failed = True
+            out_of_sample_mape = 100.0 # Force high error to trigger fallback logic
+            
         logger.info(f"   📊 Out-of-sample MAPE: {out_of_sample_mape:.2f}%")
         
         # ── 4. Decide whether to use Holt-Winters or fall back ────────────
-        is_overfit = out_of_sample_mape > OVERFIT_MAPE_THRESHOLD
+        # Fallback triggers if:
+        # 1. MAPE exceeds threshold (overfitting/poor performance)
+        # 2. HW fitting threw an exception (numerical instability)
+        is_overfit = out_of_sample_mape > OVERFIT_MAPE_THRESHOLD or hw_failed
+        
         if is_overfit:
             logger.warning(
                 f"   ⚠️ MAPE {out_of_sample_mape:.1f}% exceeds overfitting threshold "
-                f"({OVERFIT_MAPE_THRESHOLD}%). Falling back to 8-period moving average."
+                f"({OVERFIT_MAPE_THRESHOLD}%) or HW failed. Falling back to 8-period moving average."
             )
         else:
             logger.info(
@@ -253,17 +266,27 @@ def run_demand_forecasting(conn):
         # Note: we always fit on the full series for the production forecast,
         # regardless of the overfitting decision. The overfitting flag only
         # determines whether we trust those forecasts or use MA instead.
-        level_f, trend_f, seasonal_f, _ = _holt_winters_fit(
-            revenue_series, HW_ALPHA, HW_BETA, HW_GAMMA, SEASON_LENGTH
-        )
         
-        # Residuals for confidence interval estimation
-        _, _, _, fitted_full = _holt_winters_fit(
-            revenue_series, HW_ALPHA, HW_BETA, HW_GAMMA, SEASON_LENGTH
-        )
-        residuals = [revenue_series[t] - fitted_full[t] for t in range(n)]
-        residual_variance = float(np.var(residuals)) if residuals else 0.0
-        
+        # If HW failed earlier, we skip refitting and just use MA for everything
+        if not hw_failed:
+            try:
+                level_f, trend_f, seasonal_f, _ = _holt_winters_fit(
+                    revenue_series, HW_ALPHA, HW_BETA, HW_GAMMA, SEASON_LENGTH
+                )
+                
+                # Residuals for confidence interval estimation
+                _, _, _, fitted_full = _holt_winters_fit(
+                    revenue_series, HW_ALPHA, HW_BETA, HW_GAMMA, SEASON_LENGTH
+                )
+                residuals = [revenue_series[t] - fitted_full[t] for t in range(n)]
+                residual_variance = float(np.var(residuals)) if residuals else 0.0
+            except Exception as e:
+                logger.error(f"   ❌ Full-series Holt-Winters fit failed: {e}. Forcing MA fallback.")
+                hw_failed = True
+                residual_variance = 0.0
+        else:
+            residual_variance = 0.0
+            
         # ── 6. Fetch festival calendar ────────────────────────────────────
         cursor.execute("""
             SELECT name, start_date, end_date, boost_factor
@@ -285,16 +308,19 @@ def run_demand_forecasting(conn):
         # ── 7. Generate 6-month forward forecasts ─────────────────────────
         logger.info("   🔮 Generating 6-month forward forecasts...")
         
-        # Fallback series (if overfit)
+        # Fallback series (if overfit or HW failed)
         ma_forecasts = _moving_average_forecast(revenue_series, window=8, horizon=6)
         
         forecasts = []
         for h in range(1, 7):
             # 1. Base Forecast (No Festival Boost Yet)
-            hw_base = level_f + h * trend_f + seasonal_f[(n + h - 1) % SEASON_LENGTH]
-            hw_base = max(0.0, hw_base)
+            if not hw_failed:
+                hw_base = level_f + h * trend_f + seasonal_f[(n + h - 1) % SEASON_LENGTH]
+                hw_base = max(0.0, hw_base)
+            else:
+                hw_base = 0.0 # Unused if hw_failed is True
             
-            # Choose between HW and MA based on overfitting check
+            # Choose between HW and MA based on overfitting/check failure
             base_value = ma_forecasts[h - 1] if is_overfit else hw_base
             
             # 2. Calculate Confidence Intervals on the BASE value
@@ -302,9 +328,13 @@ def run_demand_forecasting(conn):
             # σ²_h = σ²_ε × (1 + h × α²)
             # This avoids unstable trend terms (β) which are hard to estimate 
             # reliably with small Bangladeshi market datasets.
-            horizon_variance = residual_variance * (1 + h * HW_ALPHA * HW_ALPHA)
-            margin_of_error = 1.96 * np.sqrt(horizon_variance)
-            
+            if not hw_failed:
+                horizon_variance = residual_variance * (1 + h * HW_ALPHA * HW_ALPHA)
+                margin_of_error = 1.96 * np.sqrt(horizon_variance)
+            else:
+                # Wide CI for MA fallback since we don't have residuals
+                margin_of_error = base_value * 0.2 # 20% arbitrary margin
+                
             lower_bound = max(0.0, base_value - margin_of_error)
             upper_bound = base_value + margin_of_error
             

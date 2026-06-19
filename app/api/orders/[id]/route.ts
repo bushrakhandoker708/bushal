@@ -14,7 +14,8 @@ export async function GET(_req: Request, { params }: Params) {
   
   const supabase = await auth.supabase
 
-  const { data: order, error } = await supabase
+  // First, fetch the order with order_items
+  const { data: order, error: orderError } = await supabase
     .from('orders')
     .select(`
       id,
@@ -36,65 +37,77 @@ export async function GET(_req: Request, { params }: Params) {
         id,
         quantity,
         unit_price,
-        product_id,
-        products (
-          id,
-          name,
-          image_url,
-          images,
-          cost_price,
-          delivery_charge
-        )
+        product_id
       )
     `)
     .eq('id', params.id)
     .single()
 
-  if (error || !order) {
+  if (orderError || !order) {
+    console.error('Error fetching order:', orderError)
     return NextResponse.json({ error: 'Order not found' }, { status: 404 })
   }
 
   // Fetch customer profile
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from('profiles')
     .select('full_name, email, phone')
     .eq('id', order.user_id)
     .single()
 
-  // Transform order_items
-  const items = (order.order_items ?? []).map((item: any) => {
-    let product = null
-    if (item.products) {
-      if (Array.isArray(item.products)) {
-        product = item.products[0] ?? null
-      } else {
-        product = item.products
-      }
-    }
-    
-    const costPrice: number = product?.cost_price ?? 0
-    const deliveryCharge: number = product?.delivery_charge ?? 0
-    const subtotal = item.unit_price * item.quantity
-    const itemProfit = subtotal - (costPrice * item.quantity) - (deliveryCharge * item.quantity)
-    
-    const productImage = 
-      (Array.isArray(product?.images) && product.images[0]) || 
-      product?.image_url || 
-      null
+  if (profileError) {
+    console.error('Error fetching profile:', profileError)
+  }
 
-    return {
-      id: item.id,
-      product_id: item.product_id,
-      product_name: product?.name ?? 'Unknown Product',
-      product_image: productImage,
-      quantity: item.quantity,
-      unit_price: item.unit_price,
-      cost_price: costPrice || null,
-      delivery_charge: deliveryCharge || null,
-      subtotal,
-      item_profit: itemProfit,
-    }
-  })
+  // Fetch products for each order item (including soft-deleted ones)
+  const orderItemsWithProducts = await Promise.all(
+    (order.order_items ?? []).map(async (item: any) => {
+      // Fetch product data - include soft-deleted products for historical accuracy
+      const { data: product, error: productError } = await supabase
+        .from('products')
+        .select(`
+          id,
+          name,
+          image_url,
+          images,
+          cost_price,
+          delivery_charge,
+          price,
+          is_deleted
+        `)
+        .eq('id', item.product_id)
+        .single()
+
+      if (productError) {
+        console.error(`Error fetching product ${item.product_id}:`, productError)
+      }
+
+      const costPrice: number = product?.cost_price ?? 0
+      const deliveryCharge: number = product?.delivery_charge ?? 0
+      const subtotal = item.unit_price * item.quantity
+      const itemProfit = subtotal - (costPrice * item.quantity) - (deliveryCharge * item.quantity)
+      
+      // Get the first image from images array or use image_url
+      const productImage = 
+        (Array.isArray(product?.images) && product.images.length > 0 && product.images[0]) || 
+        product?.image_url || 
+        null
+
+      return {
+        id: item.id,
+        product_id: item.product_id,
+        product_name: product?.name ?? 'Unknown Product',
+        product_image: productImage,
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        cost_price: costPrice || null,
+        delivery_charge: deliveryCharge || null,
+        subtotal,
+        item_profit: itemProfit,
+        is_product_deleted: product?.is_deleted ?? false,
+      }
+    })
+  )
 
   // Parse delivery address
   let deliveryAddressObj = null
@@ -118,6 +131,7 @@ export async function GET(_req: Request, { params }: Params) {
     phone: order.phone,
     payment_method: order.payment_method ?? 'cod',
     bkash_invoice: order.bkash_invoice ?? null,
+    bkash_trx_id: order.bkash_trx_id ?? null,
     total: order.total,
     status: order.status,
     delivery_status: order.delivery_status ?? 'order_placed',
@@ -125,7 +139,7 @@ export async function GET(_req: Request, { params }: Params) {
     inventory_reduced: order.inventory_reduced ?? false,
     created_at: order.created_at,
     updated_at: order.updated_at,
-    items,
+    items: orderItemsWithProducts,
   }
 
   return NextResponse.json(shapedOrder)
@@ -165,8 +179,6 @@ export async function PATCH(request: Request, { params }: Params) {
     'pending'
 
   // SECURITY FIX: Verify order exists and get user_id BEFORE calling the RPC.
-  // This prevents unauthorized calls from manipulating stock if the RPC's 
-  // internal security is ever compromised.
   const { data: existingOrder, error: fetchError } = await supabase
     .from('orders')
     .select('id, user_id, total, bkash_invoice')
@@ -178,8 +190,6 @@ export async function PATCH(request: Request, { params }: Params) {
   }
 
   // Call the atomic RPC to update status and reduce stock if confirming
-  // NOTE: The SQL function itself still needs to be patched in migration 040
-  // to remove SECURITY DEFINER or add explicit ownership checks.
   const { data: rpcData, error: rpcError } = await supabase.rpc('confirm_order_and_reduce_stock', {
     p_order_id: params.id,
     p_new_status: delivery_status,

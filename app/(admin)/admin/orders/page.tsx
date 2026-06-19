@@ -1,28 +1,8 @@
-// ============================================================================
-// FILE ADDRESS: app/(admin)/admin/orders/page.tsx
-// ============================================================================
-// EXPLANATION:
-// This is the admin orders page that displays all orders with filtering,
-// search, and status management capabilities.
-//
-// BUG FIX: Type Safety & Supabase Join Shape Handling
-// Previously, this file used `any` types throughout and relied on runtime
-// `Array.isArray` checks to handle Supabase's PostgREST join responses.
-// This indicated a lack of understanding of how PostgREST serializes foreign
-// key joins (it returns arrays for FK joins unless limited to single rows).
-//
-// THE FIX: We now define strict TypeScript interfaces matching the exact shape
-// Supabase returns, eliminating all `any` types and runtime type checks.
-// This provides compile-time type safety and makes the code more maintainable.
-// ============================================================================
-
+// app/(admin)/admin/orders/page.tsx
 import { createServerClient } from '@/lib/supabase/server'
 import AdminOrdersClient from '@/app/components/admin/AdminOrderClient'
 
-// ─── Strict Type Definitions for Supabase Responses ─────────────────────────
-// PostgREST returns arrays for FK joins. We define the exact shape to ensure
-// type safety and eliminate the need for runtime type checks.
-
+// Type definitions
 interface OrderProduct {
   id: string
   name: string
@@ -35,7 +15,6 @@ interface OrderItem {
   quantity: number
   unit_price: number
   product_id: string
-  // PostgREST returns an array for FK joins unless limited
   products: OrderProduct[] | null
 }
 
@@ -53,7 +32,6 @@ interface Order {
   delivery_address: string | null
   phone: string | null
   customer_note: string | null
-  // PostgREST returns an array for FK joins
   order_items: OrderItem[] | null
 }
 
@@ -97,21 +75,25 @@ interface EnrichedOrder {
   total_product_lines: number
 }
 
-// ─── Helper Function ────────────────────────────────────────────────────────
-// Safely extracts the first product from the Supabase join response.
-// PostgREST returns an array for FK joins, so we always take the first element.
-const getProductData = (item: OrderItem): OrderProduct | null => {
+// Helper to safely get first product image
+const getProductImage = (item: OrderItem): string | null => {
   if (!item.products || item.products.length === 0) return null
-  return item.products[0]
+  
+  const product = item.products[0]
+  
+  // Prioritize: first image in images array > image_url > null
+  if (product.images && Array.isArray(product.images) && product.images.length > 0) {
+    return product.images[0]
+  }
+  
+  return product.image_url || null
 }
 
-// ─── Main Page Component ───────────────────────────────────────────────────
 export default async function AdminOrdersPage() {
   const supabase = await createServerClient()
 
   // Fetch orders with properly nested order_items and products
-  // Using strict type casting to ensure TypeScript knows the exact shape
-  const { data: orders, error } = await (await supabase)
+  const { data: orders, error } = await supabase
     .from('orders')
     .select(`
       id,
@@ -140,7 +122,7 @@ export default async function AdminOrdersPage() {
         )
       )
     `)
-    .order('created_at', { ascending: false }) as { data: Order[] | null; error: any }
+    .order('created_at', { ascending: false })
 
   if (error) {
     console.error('Orders fetch error:', error)
@@ -148,14 +130,13 @@ export default async function AdminOrdersPage() {
 
   // Fetch customer profiles for all unique user IDs
   const userIds = Array.from(new Set((orders ?? []).map((o) => o.user_id)))
-  
   let profilesMap: Record<string, CustomerProfile> = {}
   
   if (userIds.length > 0) {
-    const { data: profiles } = await (await supabase)
+    const { data: profiles } = await supabase
       .from('profiles')
       .select('id, full_name, email, phone')
-      .in('id', userIds) as { data: CustomerProfile[] | null; error: any }
+      .in('id', userIds)
 
     if (profiles) {
       profiles.forEach((p) => {
@@ -169,53 +150,60 @@ export default async function AdminOrdersPage() {
     }
   }
 
-  // ─── Transform Orders with Strict Typing ──────────────────────────────────
-  // Map orders to the enriched format expected by AdminOrdersClient
-  // Using the typed helper function to safely extract product data
+  // Transform orders with proper image handling
   const enrichedOrders: EnrichedOrder[] = (orders ?? []).map((o) => {
-    // Transform order items with proper type handling
+    // Transform order items with proper image extraction
     const orderItems: EnrichedOrderItem[] = (o.order_items ?? []).map((item) => {
-      const product = getProductData(item)
+      // Safely extract product data - handle null/undefined cases
+      let productData = null
+      
+      if (item.products && Array.isArray(item.products) && item.products.length > 0) {
+        const product = item.products[0]
+        
+        // Ensure we have valid product data
+        if (product && product.id) {
+          productData = {
+            id: product.id,
+            name: product.name ?? 'Unknown Product',
+            image_url: product.image_url ?? null,
+            images: Array.isArray(product.images) ? product.images : [],
+          }
+        }
+      }
       
       return {
         id: item.id,
-        quantity: item.quantity ?? 0,
-        unit_price: item.unit_price ?? 0,
+        quantity: typeof item.quantity === 'number' ? item.quantity : 0,
+        unit_price: typeof item.unit_price === 'number' ? item.unit_price : 0,
         product_id: item.product_id,
-        products: product ? {
-          id: product.id,
-          name: product.name ?? 'Unknown Product',
-          image_url: product.image_url ?? null,
-          images: Array.isArray(product.images) ? product.images : [],
-        } : null,
+        products: productData,
       }
     })
 
     // Calculate totals
-    const totalItemsCount = orderItems.reduce((sum, item) => sum + (item.quantity ?? 0), 0)
+    const totalItemsCount = orderItems.reduce((sum, item) => sum + item.quantity, 0)
     const totalProductLines = orderItems.length
 
     return {
       id: o.id,
-      total: o.total,
-      status: o.status,
-      delivery_status: o.delivery_status,
-      // FIX: Ensure delivery_steps is always an array, never null
-      delivery_steps: o.delivery_steps ?? [],
-      bkash_trx_id: o.bkash_trx_id,
-      bkash_invoice: o.bkash_invoice,
+      total: typeof o.total === 'number' ? o.total : 0,
+      status: o.status ?? 'pending',
+      delivery_status: o.delivery_status ?? 'order_placed',
+      delivery_steps: Array.isArray(o.delivery_steps) ? o.delivery_steps : [],
+      bkash_trx_id: o.bkash_trx_id ?? null,
+      bkash_invoice: o.bkash_invoice ?? null,
       payment_method: o.payment_method ?? 'cod',
       created_at: o.created_at,
       user_id: o.user_id,
-      delivery_address: o.delivery_address,
-      phone: o.phone,
-      customer_note: o.customer_note,
+      delivery_address: o.delivery_address ?? null,
+      phone: o.phone ?? null,
+      customer_note: o.customer_note ?? null,
       order_items: orderItems,
-      customer: profilesMap[o.user_id] ?? { 
+      customer: profilesMap[o.user_id] ?? {
         id: o.user_id,
-        full_name: null, 
-        email: null, 
-        phone: null 
+        full_name: null,
+        email: null,
+        phone: null
       },
       total_items_count: totalItemsCount,
       total_product_lines: totalProductLines,

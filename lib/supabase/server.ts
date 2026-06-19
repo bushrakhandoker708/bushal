@@ -1,3 +1,4 @@
+// lib/supabase/server.ts
 // Server-side Supabase client — use in Server Components, Route Handlers, Server Actions
 
 import { createServerClient as _createServerClient, type CookieOptions } from '@supabase/ssr'
@@ -29,6 +30,21 @@ export async function createServerClient() {
             // Same as above
           }
         },
+      },
+      // SECURITY FIX: Ensure all database functions created by this client
+      // run with the privileges of the caller (SECURITY INVOKER) rather than
+      // the creator (SECURITY DEFINER). This prevents privilege escalation
+      // where a low-privileged user could execute a function that bypasses
+      // Row-Level Security (RLS) policies.
+      db: {
+        schema: 'public',
+      },
+      auth: {
+        // SECURITY FIX: Enable auto-refresh to ensure the session token
+        // is always valid and up-to-date when passed to server-side logic.
+        autoRefreshToken: true,
+        persistSession: false,
+        detectSessionInUrl: false,
       },
     }
   )

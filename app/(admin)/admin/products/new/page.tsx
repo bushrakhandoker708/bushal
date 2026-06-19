@@ -10,7 +10,7 @@ export default async function NewProductPage() {
     .order('sort_order', { ascending: true })
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className="max-w-6xl mx-auto">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-bushal-forest">Add New Product</h1>
         <p className="text-sm text-bushal-inkSoft mt-0.5">Fill in the details below to list a new product</p>

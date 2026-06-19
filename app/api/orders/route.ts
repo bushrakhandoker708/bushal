@@ -1,27 +1,11 @@
-// ============================================================================
-// FILE ADDRESS: app/api/orders/route.ts
-// ============================================================================
-// EXPLANATION:
+// app/api/orders/route.ts
+
 // Handles fetching customer orders (GET) and creating new orders (POST).
-// 
-// BUG FIX 1: Supabase Join Shape Assumptions (Type Safety)
-// Previously, we used `Array.isArray(item.products) ? item.products[0] : item.products`
-// as a runtime band-aid. This indicates a lack of understanding of how PostgREST 
-// serializes foreign key joins. We now define strict TypeScript interfaces 
-// matching the exact shape Supabase returns, and use a dedicated helper function 
-// to safely extract the product data without relying on `any` types.
-//
-// BUG FIX 2: Admin Email Spam on Order Confirmation
-// We have explicitly verified the email triggers. The admin notification email 
-// is ONLY sent during initial order creation (this POST route, and the bKash callback).
-// It is NEVER sent when an order status is updated to 'confirmed' via PATCH routes.
-// This prevents the admin from receiving duplicate/spam emails every time they 
-// manually update an order's delivery status in the dashboard.
-// ============================================================================
 
 import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth'
 import { sendAdminOrderNotification, sendCustomerOrderConfirmation } from '@/lib/email'
+import { createServerClient } from '@/lib/supabase/server'
 
 // ─── Strict Type Definitions for Supabase Responses ─────────────────────────
 // PostgREST returns an array for FK joins unless the relationship is explicitly 
@@ -85,7 +69,8 @@ export async function POST(request: Request) {
     payment_method = 'cod',
     delivery_address,
     customer_note,
-    phone
+    phone,
+    bkash_trx_id // Added for bKash verification
   } = body
 
   if (!Array.isArray(items) || items.length === 0) {
@@ -111,7 +96,8 @@ export async function POST(request: Request) {
   // Round total to 2 decimal places
   const roundedTotal = Math.round((total ?? 0) * 100) / 100
 
-  // 1. Create order atomically
+  // 1. Create order atomically using the new RPC with row-level locking
+  // This prevents race conditions by locking product rows during stock check
   const { data: orderId, error: rpcError } = await supabase.rpc('create_order_with_stock_check', {
     p_user_id: auth.userId,
     p_items: rpcItems,
@@ -137,7 +123,9 @@ export async function POST(request: Request) {
       delivery_address: delivery_address.trim(),
       customer_note: customer_note?.trim() || null,
       phone: phone.trim(),
-      payment_method
+      payment_method,
+      // If bKash, store the trx_id immediately for later verification
+      bkash_trx_id: payment_method === 'bkash' ? bkash_trx_id : null
     })
     .eq('id', orderId)
 
@@ -192,6 +180,7 @@ export async function POST(request: Request) {
       items: emailItems,
       deliveryAddress: delivery_address ?? null,
       customerNote: customer_note ?? null,
+      bkashTrxId: bkash_trx_id ?? null
     }),
     profile?.email
       ? sendCustomerOrderConfirmation({

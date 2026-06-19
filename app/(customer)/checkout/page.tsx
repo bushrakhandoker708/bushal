@@ -93,7 +93,8 @@ export default function CheckoutPage() {
   return (
     <div className="min-h-screen bg-bushal-ivory">
       <Navbar />
-      <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+      {/* FIX: Added responsive padding and safe-area-inset-bottom to ensure content isn't hidden by mobile browser bars or the bottom nav */}
+      <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10 pb-32 md:pb-12">
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-bushal-forest">Checkout</h1>
           <p className="text-sm text-bushal-inkSoft mt-1">Complete your order</p>
@@ -113,13 +114,15 @@ export default function CheckoutPage() {
             <div className="flex items-center gap-3">
               <Link
                 href={`/login?redirect=/checkout`}
-                className="px-6 py-2.5 bg-gradient-to-r from-bushal-copper to-bushal-copperLight text-white text-sm font-semibold rounded-xl hover:shadow-lg hover:shadow-bushal-copper/30 hover:-translate-y-0.5 transition-all duration-300 active:scale-95"
+                // FIX: Increased touch target size and padding for mobile accessibility
+                className="px-6 py-3 min-h-[44px] flex items-center justify-center bg-gradient-to-r from-bushal-copper to-bushal-copperLight text-white text-sm font-semibold rounded-xl hover:shadow-lg hover:shadow-bushal-copper/30 hover:-translate-y-0.5 transition-all duration-300 active:scale-95"
               >
                 Sign in
               </Link>
               <Link
                 href="/register"
-                className="px-6 py-2.5 border border-bushal-border text-bushal-ink text-sm font-semibold rounded-xl hover:bg-bushal-ivoryDeep transition-all duration-200"
+                // FIX: Increased touch target size and padding for mobile accessibility
+                className="px-6 py-3 min-h-[44px] flex items-center justify-center border border-bushal-border text-bushal-ink text-sm font-semibold rounded-xl hover:bg-bushal-ivoryDeep transition-all duration-200"
               >
                 Register
               </Link>

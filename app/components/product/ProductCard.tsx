@@ -24,12 +24,16 @@ export default function ProductCard({ product, index = 0 }: Props) {
   const [added, setAdded] = useState(false)
   const [imgIndex, setImgIndex] = useState(0)
   const [quickViewOpen, setQuickViewOpen] = useState(false)
+  const [imageLoaded, setImageLoaded] = useState(false)
 
   // Long-press state for mobile quick-view
   const [isLongPressing, setIsLongPressing] = useState(false)
   const longPressTimer = useRef<NodeJS.Timeout | null>(null)
   const touchStartPos = useRef<{ x: number; y: number } | null>(null)
   const cardRef = useRef<HTMLDivElement>(null)
+  
+  // AbortController for image fetch cancellation
+  const abortControllerRef = useRef<AbortController | null>(null)
 
   // FIX: Track if the component has mounted on the client to prevent hydration mismatches
   // caused by Zustand's localStorage persistence for wishlist and compare hooks.
@@ -131,14 +135,38 @@ export default function ProductCard({ product, index = 0 }: Props) {
     cancelLongPress()
   }, [cancelLongPress])
 
-  // Cleanup timer on unmount
+  // Cleanup timer and abort controller on unmount
   useEffect(() => {
     return () => {
       if (longPressTimer.current) {
         clearTimeout(longPressTimer.current)
       }
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+      }
     }
   }, [])
+
+  // Handle image loading state and abort previous requests
+  const handleImageLoad = useCallback(() => {
+    setImageLoaded(true)
+  }, [])
+
+  const handleImageError = useCallback(() => {
+    setImageLoaded(true) // Show placeholder even on error
+  }, [])
+
+  // Create new AbortController when image source changes
+  useEffect(() => {
+    // Abort any pending request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
+    // Create new controller for current image
+    abortControllerRef.current = new AbortController()
+    // Reset loaded state when image changes
+    setImageLoaded(false)
+  }, [images[imgIndex]])
 
   return (
     <div
@@ -165,21 +193,34 @@ export default function ProductCard({ product, index = 0 }: Props) {
         >
           {images.length > 0 ? (
             <>
+              {/* Skeleton Placeholder */}
+              {!imageLoaded && (
+                <div className="absolute inset-0 bg-bushal-borderMid/20 animate-pulse" />
+              )}
+              
               <img
                 src={images[0] ?? undefined}
                 alt={product.name}
+                loading="lazy"
+                onLoad={handleImageLoad}
+                onError={handleImageError}
                 className={cn(
                   'absolute inset-0 w-full h-full object-cover transition-all duration-1000 ease-out',
-                  imgIndex === 1 ? 'opacity-0 scale-110' : 'opacity-100 group-hover:scale-105'
+                  imgIndex === 1 ? 'opacity-0 scale-110' : 'opacity-100 group-hover:scale-105',
+                  !imageLoaded && 'opacity-0' // Hide until loaded
                 )}
               />
               {images.length > 1 && (
                 <img
                   src={images[1] ?? undefined}
                   alt={product.name}
+                  loading="lazy"
+                  onLoad={handleImageLoad}
+                  onError={handleImageError}
                   className={cn(
                     'absolute inset-0 w-full h-full object-cover transition-all duration-1000 ease-out',
-                    imgIndex === 1 ? 'opacity-100 scale-105' : 'opacity-0 scale-100'
+                    imgIndex === 1 ? 'opacity-100 scale-105' : 'opacity-0 scale-100',
+                    !imageLoaded && 'opacity-0' // Hide until loaded
                   )}
                 />
               )}

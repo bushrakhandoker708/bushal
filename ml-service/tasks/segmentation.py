@@ -1,50 +1,30 @@
 # ml-service/tasks/segmentation.py
 # ============================================================================
-# CUSTOMER SEGMENTATION — K-MEANS CLUSTERING ON RFM FEATURES
+# CUSTOMER SEGMENTATION - K-MEANS CLUSTERING
 # ============================================================================
 #
-# WHAT THIS DOES:
-#   Clusters customers into segments (VIP, Loyal, Normal, High Risk,
-#   Anomalous) using K-Means on RFM (Recency, Frequency, Monetary)
-#   features derived from fulfilled order history.
+# This module implements a K-Means clustering algorithm to segment customers
+# based on their purchasing behavior. It analyzes three key features:
+# 1. Total Spent (Monetary value)
+# 2. Order Frequency (How often they buy)
+# 3. Order Redundancy/Variance (Detects bots or fake orders)
 #
-# OVERFITTING PROBLEM AND FIX:
-#   K-Means cannot overfit in the gradient-descent sense, but it can produce
-#   degenerate results:
+# The algorithm automatically assigns customers to one of five segments:
+# - VIP: High spenders, frequent buyers
+# - Loyal: Consistent buyers, good lifetime value
+# - Normal: Average purchasing behavior
+# - High Risk: Declining engagement, churn risk
+# - Anomalous: Statistical outliers requiring manual review (was "Fake Orders")
 #
-#   1. Too many clusters for the data density.
-#      With 20 customers and K=5, each cluster has ~4 people. The "VIP"
-#      segment might be a single outlier order, and the "Loyal" segment
-#      3 regular customers — an artificial distinction the business cannot
-#      act on. The silhouette score captures this: clusters that barely
-#      separate get scores near 0 or negative.
+# MATHEMATICAL FOUNDATION:
+# - K-Means: Iteratively assigns points to nearest centroid and updates centroids
+#   until convergence. Uses Euclidean distance in 3D feature space.
+# - Feature Normalization: Min-Max scaling ensures all features contribute equally.
 #
-#   2. Segment label assignment is arbitrary (random init).
-#      K-Means++ initialization reduces variance, but the labels (0,1,2,3,4)
-#      don't mean anything — we assign business names based on centroid
-#      characteristics (highest monetary = VIP, etc.).
-#
-#   Fixes applied:
-#     a. Dynamic K selection: test K=3..7, pick the K that maximises
-#        silhouette score, with a preference for K=5 if it's within 10%
-#        of the best score (business requirement: 5 named segments).
-#     b. Minimum data guard: if fewer than 5 unique customers exist,
-#        skip clustering (not enough data for meaningful groups).
-#     c. Silhouette quality check: if the best achievable silhouette
-#        score is below MIN_SILHOUETTE_THRESHOLD (0.15), skip writing
-#        results and log a warning — the clusters are too noisy to be
-#        useful. This prevents overwriting good historical segments with
-#        garbage clusters from a bad run.
-#     d. Log silhouette score to ml_model_accuracy after every run so
-#        drift_detection.py can alert when clustering quality degrades.
-#
-# BUG FIXES (retained from previous version):
-#   1. conn parameter from main.py (no internal get_db_connection).
-#   2. Correct column names: customer_segments uses customer_id, segment,
-#      recency, frequency, monetary, cluster_id.
-#   3. ml_model_accuracy uses evaluated_at (not created_at).
-#   4. Does NOT close the connection (main.py handles lifecycle).
+# USAGE:
+# const segments = segmentCustomers(customerData, k=5);
 # ============================================================================
+
 import logging
 import numpy as np
 import pandas as pd
@@ -69,6 +49,465 @@ MAX_K = 7
 # If K=5 silhouette is within PREFERRED_K_TOLERANCE of the best, use K=5.
 PREFERRED_K = 5
 PREFERRED_K_TOLERANCE = 0.10  # 10% below best is acceptable for K=5
+
+# Minimum number of unique customers required to run clustering
+MIN_CUSTOMERS_FOR_CLUSTERING = 5
+
+# ─── Helper Functions ───────────────────────────────────────────────────────
+"""
+Calculate Euclidean distance between two 3D points
+"""
+def euclidean_distance(a: list, b: list) -> float:
+    return np.sqrt(
+        np.power(a[0] - b[0], 2) +
+        np.power(a[1] - b[1], 2) +
+        np.power(a[2] - b[2], 2)
+    )
+
+"""
+Min-Max normalization to scale features between 0 and 1
+"""
+def normalize_features(
+    data: list,
+    min_vals: list,
+    max_vals: list
+) -> list:
+    normalized = []
+    for row in data:
+        norm_row = []
+        for i, val in enumerate(row):
+            range_val = max_vals[i] - min_vals[i]
+            norm_row.append(0 if range_val == 0 else (val - min_vals[i]) / range_val)
+        normalized.append(norm_row)
+    return normalized
+
+"""
+Initialize centroids using K-Means++ algorithm for better convergence
+"""
+def initialize_centroids_kmeans_plus_plus(
+    data: list,
+    k: int
+) -> list:
+    centroids = []
+    n = len(data)
+    
+    # 1. Choose first centroid randomly
+    first_idx = np.random.randint(0, n)
+    centroids.append(list(data[first_idx]))
+    
+    # 2. Choose remaining centroids
+    for c in range(1, k):
+        # Calculate distances to nearest existing centroid
+        distances = []
+        for point in data:
+            min_dist = float('inf')
+            for centroid in centroids:
+                dist = euclidean_distance(point, centroid)
+                if dist < min_dist:
+                    min_dist = dist
+            distances.append(min_dist * min_dist)  # Square distances for probability
+        
+        total_dist = sum(distances)
+        
+        # Weighted random selection
+        rand_val = np.random.random() * total_dist
+        chosen_idx = 0
+        cumulative = 0
+        for i, d in enumerate(distances):
+            cumulative += d
+            if cumulative >= rand_val:
+                chosen_idx = i
+                break
+                
+        centroids.append(list(data[chosen_idx]))
+    
+    return centroids
+
+# ─── K-Means Clustering Algorithm ───────────────────────────────────────────
+"""
+Core K-Means clustering implementation.
+
+@param data: Normalized feature matrix (n x 3)
+@param k: Number of clusters
+@param max_iterations: Maximum iterations before stopping
+@param tolerance: Minimum centroid movement to continue
+@returns Object containing assignments and final centroids
+"""
+def k_means_cluster(
+    data: list,
+    k: int,
+    max_iterations: int = 100,
+    tolerance: float = 0.0001
+) -> dict:
+    n = len(data)
+    centroids = initialize_centroids_kmeans_plus_plus(data, k)
+    assignments = [0] * n
+    
+    for iter_count in range(max_iterations):
+        # 1. Assign each point to nearest centroid
+        new_assignments = []
+        for point in data:
+            min_dist = float('inf')
+            closest_centroid = 0
+            for c, centroid in enumerate(centroids):
+                dist = euclidean_distance(point, centroid)
+                if dist < min_dist:
+                    min_dist = dist
+                    closest_centroid = c
+            new_assignments.append(closest_centroid)
+        
+        # 2. Check for convergence
+        if new_assignments == assignments:
+            break
+            
+        assignments = new_assignments
+        
+        # 3. Update centroids
+        new_centroids = []
+        for c in range(k):
+            cluster_points = [data[i] for i in range(n) if assignments[i] == c]
+            if not cluster_points:
+                new_centroids.append(centroids[c])  # Keep old centroid if empty
+                continue
+            
+            dim = len(data[0])
+            new_center = []
+            for d in range(dim):
+                center_val = sum(p[d] for p in cluster_points) / len(cluster_points)
+                new_center.append(center_val)
+            new_centroids.append(new_center)
+        
+        # 4. Check centroid movement
+        max_movement = max(
+            euclidean_distance(old_c, new_c) 
+            for old_c, new_c in zip(centroids, new_centroids)
+        )
+        
+        centroids = new_centroids
+        if max_movement < tolerance:
+            break
+            
+    return {"assignments": assignments, "centroids": centroids}
+
+# ─── Segment Mapping Logic ──────────────────────────────────────────────────
+"""
+Map cluster indices to meaningful business segments.
+This uses heuristic rules based on the normalized centroid values:
+[Total Spent, Order Frequency, Order Variance]
+
+FIX: Changed 'Fake Orders' label to 'Anomalous'. K-Means finds geometric
+outliers, not intent. Low variance + high frequency indicates bot-like
+patterns that warrant human review, not automatic fraud classification.
+"""
+def map_clusters_to_segments(
+    centroids: list,
+    assignments: list,
+    customers: list
+) -> dict:
+    cluster_metrics = []
+    for idx, centroid in enumerate(centroids):
+        spent, freq, variance = centroid
+        customers_in_cluster = [c for i, c in enumerate(customers) if assignments[i] == idx]
+        
+        avg_days_since = 0
+        if customers_in_cluster:
+            avg_days_since = sum(c['days_since_last_order'] for c in customers_in_cluster) / len(customers_in_cluster)
+            
+        cluster_metrics.append({
+            'idx': idx,
+            'spent': spent,
+            'freq': freq,
+            'variance': variance,
+            'avg_days_since': avg_days_since,
+            'count': len(customers_in_cluster),
+        })
+    
+    # Sort by spent * frequency (revenue potential)
+    cluster_metrics.sort(key=lambda m: m['spent'] * m['freq'], reverse=True)
+    
+    mapping = {}
+    # Heuristic assignment based on normalized features
+    for m in cluster_metrics:
+        # FIX: Renamed from 'Fake Orders' to 'Anomalous'
+        # Very low variance (identical orders) OR extremely high frequency with low spend
+        if m['variance'] < 0.1 and m['freq'] > 0.7:
+            mapping[m['idx']] = 'Anomalous'
+        # VIP: High spend, high frequency
+        elif m['spent'] > 0.7 and m['freq'] > 0.6:
+            mapping[m['idx']] = 'VIP'
+        # Loyal: Medium-high spend, good frequency
+        elif m['spent'] > 0.4 and m['freq'] > 0.4:
+            mapping[m['idx']] = 'Loyal'
+        # High Risk: Low recent activity (high days since last order)
+        elif m['avg_days_since'] > 60 or (m['spent'] < 0.3 and m['freq'] < 0.3):
+            mapping[m['idx']] = 'High Risk'
+        # Normal: Everything else
+        else:
+            mapping[m['idx']] = 'Normal'
+    
+    # Ensure all 5 segments are represented if possible
+    used_segments = set(mapping.values())
+    # FIX: Updated array to include 'Anomalous' instead of 'Fake Orders'
+    all_segments = ['VIP', 'Loyal', 'Normal', 'High Risk', 'Anomalous']
+    
+    for seg in all_segments:
+        if seg not in used_segments:
+            # Find the cluster with the lowest count that hasn't been mapped
+            unmapped = next((m for m in cluster_metrics if m['idx'] not in mapping), None)
+            if unmapped:
+                mapping[unmapped['idx']] = seg
+                
+    return mapping
+
+# ─── Main Segmentation Function ─────────────────────────────────────────────
+"""
+Segment customers using K-Means clustering.
+
+@param customers: Array of customer metrics
+@param config: Clustering configuration
+@returns Array of segmented customers with recommendations
+"""
+def segment_customers(
+    customers: list,
+    config: dict = None
+) -> list:
+    if config is None:
+        config = {"k": 5, "max_iterations": 100, "tolerance": 0.0001}
+        
+    if len(customers) < config["k"]:
+        # Fallback: assign all to 'Normal' if not enough data
+        return [{
+            "user_id": c["user_id"],
+            "segment": "Normal",
+            "total_spent": c["total_spent"],
+            "order_count": c["order_count"],
+            "confidence_score": 1,
+            "recommended_discount": 10,
+            "top_category": next(iter(sorted(c.get("category_preferences", {}).items(), key=lambda x: x[1], reverse=True)), ["General"])[0] if c.get("category_preferences") else "General",
+        } for c in customers]
+    
+    # 1. Extract features: [Total Spent, Order Frequency, Order Variance]
+    raw_features = [[
+        c["total_spent"],
+        c["order_count"],
+        c["order_variance"],
+    ] for c in customers]
+    
+    # 2. Calculate min/max for normalization
+    min_vals = [min(f[i] for f in raw_features) for i in range(3)]
+    max_vals = [max(f[i] for f in raw_features) for i in range(3)]
+    
+    # 3. Normalize features
+    normalized_data = normalize_features(raw_features, min_vals, max_vals)
+    
+    # 4. Run K-Means
+    result = k_means_cluster(
+        normalized_data,
+        config["k"],
+        config["max_iterations"],
+        config["tolerance"]
+    )
+    assignments = result["assignments"]
+    centroids = result["centroids"]
+    
+    # 5. Map clusters to segments
+    cluster_to_segment = map_clusters_to_segments(centroids, assignments, customers)
+    
+    # 6. Build final results
+    results = []
+    for idx, customer in enumerate(customers):
+        cluster_idx = assignments[idx]
+        segment = cluster_to_segment.get(cluster_idx, "Normal")
+        centroid = centroids[cluster_idx]
+        
+        # Calculate confidence score (inverse of distance to centroid)
+        dist = euclidean_distance(normalized_data[idx], centroid)
+        confidence = max(0, 1 - dist)
+        
+        # Determine top category
+        top_category = next(iter(sorted(customer.get("category_preferences", {}).items(), key=lambda x: x[1], reverse=True)), ["General"])[0] if customer.get("category_preferences") else "General"
+        
+        # Calculate recommended discount based on segment and value
+        recommended_discount = 5
+        if segment == 'VIP':
+            recommended_discount = 15  # Reward VIPs
+        elif segment == 'Loyal':
+            recommended_discount = 10
+        elif segment == 'High Risk':
+            recommended_discount = 25  # Aggressive retention
+        # FIX: Removed discount logic for 'Fake Orders' since it's now 'Anomalous'
+        # Anomalous customers should be reviewed manually, not given automated discounts
+        elif segment == 'Anomalous':
+            recommended_discount = 0
+            
+        # Boost discount if high value but high risk
+        if segment == 'High Risk' and customer["total_spent"] > (max_vals[0] * 0.7):
+            recommended_discount = 30
+            
+        results.append({
+            "user_id": customer["user_id"],
+            "segment": segment,
+            "total_spent": customer["total_spent"],
+            "order_count": customer["order_count"],
+            "confidence_score": round(confidence * 100) / 100,
+            "recommended_discount": recommended_discount,
+            "top_category": top_category,
+        })
+        
+    return results
+
+# ─── Category Discount Recommendations ──────────────────────────────────────
+"""
+Analyze segment purchase history to recommend category-specific discounts.
+Uses mathematical analysis of category affinity vs. overall store performance.
+
+@param segments: Segmented customers
+@param all_categories: List of all available categories
+@param global_category_sales: Global sales distribution by category
+@returns Array of discount recommendations per segment
+"""
+def recommend_category_discounts(
+    segments: list,
+    all_categories: list,
+    global_category_sales: dict
+) -> list:
+    recommendations = []
+    
+    # FIX: Excluded 'Anomalous' from discount recommendations.
+    # These customers require manual review, not automated marketing.
+    segment_types = ['VIP', 'Loyal', 'Normal', 'High Risk']
+    
+    for seg_type in segment_types:
+        segment_customers = [s for s in segments if s["segment"] == seg_type]
+        if not segment_customers:
+            continue
+            
+        # Aggregate category preferences for this segment
+        segment_category_counts = {}
+        for c in segment_customers:
+            # We don't have full category_preferences here, so we use top_category as a proxy
+            # In a real implementation, you'd pass the full metrics
+            cat = c["top_category"]
+            segment_category_counts[cat] = segment_category_counts.get(cat, 0) + 1
+            
+        total_segment_customers = len(segment_customers)
+        global_total = sum(global_category_sales.values())
+        
+        for category in all_categories:
+            segment_affinity = (segment_category_counts.get(category, 0) / total_segment_customers) if total_segment_customers > 0 else 0
+            global_affinity = (global_category_sales.get(category, 0) / global_total) if global_total > 0 else 0
+            
+            # Calculate lift: how much more likely this segment is to buy this category
+            lift = (segment_affinity / global_affinity) if global_affinity > 0 else 0
+            
+            if lift > 1.2:
+                # High affinity category - offer targeted discount
+                discount = 10
+                if seg_type == 'VIP':
+                    discount = 20
+                elif seg_type == 'Loyal':
+                    discount = 15
+                elif seg_type == 'High Risk':
+                    discount = 30
+                    
+                recommendations.append({
+                    "segment": seg_type,
+                    "category": category,
+                    "recommended_discount": discount,
+                    "reasoning": f"{seg_type} customers show {round(lift * 100)}% higher affinity for {category} compared to average. Targeted discount recommended to boost conversion.",
+                })
+                
+    return sorted(recommendations, key=lambda x: x["recommended_discount"], reverse=True)
+
+# ─── Summary Generation ─────────────────────────────────────────────────────
+"""
+Generate summary statistics for each segment.
+"""
+def generate_segment_summary(segments: list) -> list:
+    summary_map = {}
+    # FIX: Updated to include 'Anomalous' instead of 'Fake Orders'
+    all_segments = ['VIP', 'Loyal', 'Normal', 'High Risk', 'Anomalous']
+    
+    for s in all_segments:
+        summary_map[s] = {"count": 0, "total_spent": 0, "total_orders": 0, "customers": []}
+        
+    for seg in segments:
+        data = summary_map[seg["segment"]]
+        data["count"] += 1
+        data["total_spent"] += seg["total_spent"]
+        data["total_orders"] += seg["order_count"]
+        data["customers"].append(seg)
+        
+    # FIX: Updated action text for 'Anomalous' to reflect review status rather than fraud blocking
+    actions = {
+        'VIP': 'Provide exclusive early access and personalized offers. Maintain high service levels.',
+        'Loyal': 'Implement loyalty rewards program. Encourage referrals with incentives.',
+        'Normal': 'Send regular promotional emails. Upsell related products based on history.',
+        'High Risk': 'Launch re-engagement campaign with aggressive discounts. Survey for feedback.',
+        'Anomalous': 'Review for unusual behavioral patterns. Verify account legitimacy before taking action.',
+    }
+    
+    summaries = []
+    for segment, data in summary_map.items():
+        summaries.append({
+            "segment": segment,
+            "count": data["count"],
+            "avg_spent": data["total_spent"] / data["count"] if data["count"] > 0 else 0,
+            "avg_orders": data["total_orders"] / data["count"] if data["count"] > 0 else 0,
+            "total_revenue": data["total_spent"],
+            "recommended_action": actions[segment],
+        })
+        
+    return summaries
+
+# ─── Data Preparation Helper ────────────────────────────────────────────────
+"""
+Prepare raw order data into CustomerMetrics format for clustering.
+"""
+def prepare_customer_metrics(
+    orders: list
+) -> list:
+    user_map = {}
+    now = datetime.now()
+    
+    for order in orders:
+        uid = order["user_id"]
+        if uid not in user_map:
+            user_map[uid] = {"totals": [], "dates": [], "categories": {}}
+            
+        data = user_map[uid]
+        data["totals"].append(order["total"])
+        data["dates"].append(datetime.fromisoformat(order["created_at"]))
+        
+        if order.get("category"):
+            cat = order["category"]
+            data["categories"][cat] = data["categories"].get(cat, 0) + 1
+            
+    metrics = []
+    for uid, data in user_map.items():
+        total_spent = sum(data["totals"])
+        order_count = len(data["totals"])
+        avg_order_value = total_spent / order_count if order_count > 0 else 0
+        
+        # Calculate variance in order values (low variance = suspicious)
+        mean = avg_order_value
+        variance = sum((val - mean) ** 2 for val in data["totals"]) / order_count if order_count > 0 else 0
+        
+        # Days since last order
+        last_order_date = max(data["dates"])
+        days_since_last_order = (now - last_order_date).days
+        
+        metrics.append({
+            "user_id": uid,
+            "total_spent": total_spent,
+            "order_count": order_count,
+            "avg_order_value": avg_order_value,
+            "days_since_last_order": days_since_last_order,
+            "order_variance": variance,
+            "category_preferences": data["categories"],
+        })
+        
+    return metrics
 
 # ─── Main task function ───────────────────────────────────────────────────────
 def run_customer_segmentation(conn):
@@ -140,9 +579,10 @@ def run_customer_segmentation(conn):
         n_customers = len(df)
         logger.info(f"   👥 {n_customers} unique customers with order history.")
 
-        if n_customers < 5:
+        # FIX: Check for minimum data volume before running K-Means
+        if n_customers < MIN_CUSTOMERS_FOR_CLUSTERING:
             logger.warning(
-                f"   ⏭️ Only {n_customers} unique customers. Need at least 5 for clustering."
+                f"   ⏭️ Only {n_customers} unique customers. Need at least {MIN_CUSTOMERS_FOR_CLUSTERING} for clustering."
             )
             return {
                 "status": "skipped",

@@ -766,11 +766,11 @@ export default function AdminOverviewClient({
     <div className={cn('space-y-5 pb-12 transition-opacity duration-500', mounted ? 'opacity-100' : 'opacity-0')}>
 
       {/* ── Header ────────────────────────────────────────────────────── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mt-10">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="w-1.5 h-1.5 rounded-full bg-bushal-success animate-pulse" />
-            <span className="text-[10px] font-bold text-bushal-success uppercase tracking-widest">Live · Bushal Admin</span>
+            <span className="text-[10px] font-bold text-bushal-success uppercase tracking-widest"> Bushal Admin</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-bushal-forest tracking-tight">Store Overview</h1>
           <p className="text-[11px] text-bushal-inkSoft mt-1">

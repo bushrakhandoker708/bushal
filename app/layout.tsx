@@ -21,6 +21,13 @@ export const metadata: Metadata = {
   creator: 'Bushra Khandoker',
   publisher: 'Bushal',
   formatDetection: { email: false, address: false, telephone: false },
+  // FIX: Added viewport configuration to prevent iOS zoom issues and ensure proper scaling
+  viewport: {
+    width: 'device-width',
+    initialScale: 1,
+    maximumScale: 1,
+    userScalable: false,
+  },
   openGraph: {
     type: 'website',
     locale: 'en_BD',

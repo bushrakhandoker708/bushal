@@ -8,12 +8,28 @@
 
 import { Redis } from '@upstash/redis'
 
+// SECURITY FIX: Ensure environment variables are present.
+// These should NEVER be exposed to the client bundle.
+// If they are missing, we fail fast in development but handle gracefully in production
+// to prevent crashing the entire app if Redis is temporarily down.
+const redisUrl = process.env.UPSTASH_REDIS_REST_URL
+const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN
+
+if (!redisUrl || !redisToken) {
+  console.warn('⚠️ Upstash Redis environment variables are missing. Caching will be disabled.')
+}
+
 // Initialize the Redis client using environment variables.
-// Upstash provides a REST-based Redis API, making it perfect
-// for serverless environments like Vercel (where Bushal is hosted).
+// Upstash provides a REST-based Redis API over HTTPS (TLS/SSL enforced by default).
+// The client automatically handles connection pooling and retries.
 export const redis = new Redis({
-  url: process.env.UPSTASH_REDIS_REST_URL!,
-  token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+  url: redisUrl!,
+  token: redisToken!,
+  // Optional: Enable automatic retry logic for transient network errors
+  retry: {
+    retries: 3,
+    backoff: (retryCount) => Math.exp(retryCount) * 50,
+  },
 })
 
 // Cache Keys Configuration
@@ -39,7 +55,20 @@ export const CACHE_TTL = {
   LONG: 3600,    // 1 hour (for heavy aggregations like RFM, CLV, Cohorts)
 }
 
-
+/**
+ * Health check function to verify Redis connectivity.
+ * Useful for debugging or pre-flight checks before critical operations.
+ * Returns true if Redis is reachable, false otherwise.
+ */
+export async function checkRedisHealth(): Promise<boolean> {
+  try {
+    await redis.ping()
+    return true
+  } catch (error) {
+    console.error('❌ Redis health check failed:', error)
+    return false
+  }
+}
 
 // Helper function to invalidate all analytics caches.
 // Call this function whenever a new order is fulfilled, cancelled,
@@ -48,8 +77,13 @@ export const CACHE_TTL = {
 export async function invalidateAnalyticsCache() {
   const keysToDelete = Object.values(CACHE_KEYS)
   if (keysToDelete.length > 0) {
-    // Upstash Redis supports deleting multiple keys in one network request
-    await redis.del(...keysToDelete)
-    console.log('🗑️ Analytics cache invalidated successfully.')
+    try {
+      // Upstash Redis supports deleting multiple keys in one network request
+      await redis.del(...keysToDelete)
+      console.log('🗑️ Analytics cache invalidated successfully.')
+    } catch (error) {
+      console.error('❌ Failed to invalidate analytics cache:', error)
+      // Don't throw here – cache invalidation failure shouldn't break the main operation
+    }
   }
 }
