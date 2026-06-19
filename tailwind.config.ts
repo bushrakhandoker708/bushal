@@ -1,5 +1,6 @@
 // tailwind.config.ts
 import type { Config } from "tailwindcss";
+import plugin from "tailwindcss/plugin";
 
 const config: Config = {
   content: ["./src/**/*.{js,ts,jsx,tsx,mdx}", "./app/**/*.{js,ts,jsx,tsx,mdx}"],
@@ -10,15 +11,15 @@ const config: Config = {
           forest:      "#1B3A2D",
           forestMid:   "#2D5A42",
           forestLight: "#3D7A5A",
-          forestMuted: "#F4F7F6", // New: Subtle forest tint for selected states
+          forestMuted: "#F4F7F6",
           copper:      "#B87333",
           copperLight: "#D4954A",
           copperGlow:  "#F0B96A",
-          copperMuted: "#FBF6F1", // New: Subtle copper tint for hover states
+          copperMuted: "#FBF6F1",
           ivory:       "#F9F6F0",
           ivoryDeep:   "#F0EBE1",
-          surface:     "#FEFCF8", // Updated: Warmer white (was #FFFFFF)
-          surfaceAlt:  "#F5F1EA", // New: Second surface level for nested cards
+          surface:     "#FEFCF8",
+          surfaceAlt:  "#F5F1EA",
           ink:         "#1A1A18",
           inkMid:      "#3D3D3A",
           inkSoft:     "#6B6B65",
@@ -55,6 +56,31 @@ const config: Config = {
         copperHover:"0 10px 30px rgba(184, 115, 51, 0.38)",
         inset:      "inset 0 1px 3px rgba(27, 58, 45, 0.08)",
       },
+      // NEW: Touch target utilities for mobile accessibility (44x44px minimum)
+      minHeight: {
+        touch: "44px",
+      },
+      minWidth: {
+        touch: "44px",
+      },
+      // NEW: Safe area padding utilities for notched devices (iPhone X+, etc.)
+      padding: {
+        "safe-top":    "env(safe-area-inset-top, 0px)",
+        "safe-right":  "env(safe-area-inset-right, 0px)",
+        "safe-bottom": "env(safe-area-inset-bottom, 0px)",
+        "safe-left":   "env(safe-area-inset-left, 0px)",
+      },
+      margin: {
+        "safe-top":    "env(safe-area-inset-top, 0px)",
+        "safe-right":  "env(safe-area-inset-right, 0px)",
+        "safe-bottom": "env(safe-area-inset-bottom, 0px)",
+        "safe-left":   "env(safe-area-inset-left, 0px)",
+      },
+      // NEW: Mobile-first breakpoints (in addition to Tailwind defaults)
+      screens: {
+        "xs": "375px",    // Small phones (iPhone SE, etc.)
+        "3xl": "1920px",  // Ultra-wide desktops
+      },
       animation: {
         "fade-up":    "fadeUp 0.55s cubic-bezier(0.16, 1, 0.3, 1) forwards",
         "fade-in":    "fadeIn 0.3s ease-out forwards",
@@ -64,8 +90,8 @@ const config: Config = {
         "shimmer":    "shimmer 1.8s infinite linear",
         "shake":      "shake 0.35s ease-in-out",
         "pulse-soft": "pulseSoft 2.8s cubic-bezier(0.4, 0, 0.6, 1) infinite",
-        "float":      "float 3s ease-in-out infinite", // New
-        "glow":       "glow 2s ease-in-out infinite",   // New
+        "float":      "float 3s ease-in-out infinite",
+        "glow":       "glow 2s ease-in-out infinite",
       },
       keyframes: {
         fadeUp: {
@@ -119,7 +145,53 @@ const config: Config = {
       },
     },
   },
-  plugins: [],
+  plugins: [
+    // NEW: Safe area utility plugin for combined padding/margin
+    plugin(function({ addUtilities }) {
+      addUtilities({
+        ".safe-area-inset": {
+          paddingTop: "env(safe-area-inset-top, 0px)",
+          paddingRight: "env(safe-area-inset-right, 0px)",
+          paddingBottom: "env(safe-area-inset-bottom, 0px)",
+          paddingLeft: "env(safe-area-inset-left, 0px)",
+        },
+        ".safe-area-inset-y": {
+          paddingTop: "env(safe-area-inset-top, 0px)",
+          paddingBottom: "env(safe-area-inset-bottom, 0px)",
+        },
+        ".safe-area-inset-x": {
+          paddingRight: "env(safe-area-inset-right, 0px)",
+          paddingLeft: "env(safe-area-inset-left, 0px)",
+        },
+        // Touch-friendly interaction utilities
+        ".touch-manipulation": {
+          touchAction: "manipulation",
+        },
+        ".touch-pan-x": {
+          touchAction: "pan-x",
+        },
+        ".touch-pan-y": {
+          touchAction: "pan-y",
+        },
+        ".touch-none": {
+          touchAction: "none",
+        },
+        // Prevent text selection on interactive elements
+        ".select-none-touch": {
+          userSelect: "none",
+          WebkitUserSelect: "none",
+          WebkitTapHighlightColor: "transparent",
+        },
+        // iOS-specific: Prevent zoom on input focus (requires font-size >= 16px)
+        ".input-no-zoom": {
+          fontSize: "16px",
+          "@media (min-width: 768px)": {
+            fontSize: "inherit",
+          },
+        },
+      });
+    }),
+  ],
 };
 
 export default config;

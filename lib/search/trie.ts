@@ -4,18 +4,18 @@
  * ============================================================================
  * TRIE (PREFIX TREE) - SEARCH AUTOCOMPLETE ENGINE
  * ============================================================================
- * 
+ *
  * This module implements a Trie (prefix tree) data structure optimized for
  * search autocomplete functionality. A Trie is a tree-like data structure
  * where each node represents a character, and paths from root to nodes
  * represent prefixes of stored words.
- * 
+ *
  * WHY TRIE FOR SEARCH?
  * - O(m) time complexity for prefix searches (where m = prefix length)
  * - Efficient memory usage for shared prefixes (e.g., "sh" -> "shirt", "shoes")
  * - Natural support for autocomplete suggestions
  * - Can be extended with popularity weights for ranking
- * 
+ *
  * FEATURES:
  * - Insert words with optional popularity scores
  * - Prefix-based autocomplete suggestions
@@ -23,7 +23,19 @@
  * - Weighted results (more popular items rank higher)
  * - Maximum suggestion limit
  * - Support for multi-word phrases
- * 
+ *
+ * BUG FIX (word-level tokenization):
+ * Previously, "Blue Cotton Shirt" was only reachable by the prefix "bl".
+ * Typing "cotton" or "shirt" returned nothing because those are not prefixes
+ * of the full concatenated string — they are interior words.
+ *
+ * Fix: ProductSearchTrie.addProduct() now tokenizes the product name into
+ * individual words ("blue", "cotton", "shirt") and inserts each word
+ * separately into the nameTrie, all pointing back to the same product data.
+ * This makes every word in a product name individually searchable via prefix.
+ * The deduplication step in ProductSearchTrie.search() ensures a product
+ * only appears once even if multiple of its words match the query.
+ *
  * USAGE:
  * const trie = new SearchTrie();
  * trie.insert('shirt', { id: '123', popularity: 100 });
@@ -89,11 +101,11 @@ export class SearchTrie {
   }
 
   /**
-   * Insert a word into the Trie with associated data
-   * 
+   * Insert a word into the Trie with associated data.
+   *
    * Time Complexity: O(m) where m = length of word
    * Space Complexity: O(m) in worst case (no shared prefixes)
-   * 
+   *
    * @param word - The word to insert
    * @param data - Associated metadata (id, name, popularity, etc.)
    */
@@ -110,14 +122,23 @@ export class SearchTrie {
       current = current.children.get(char)!
     }
 
-    current.isEndOfWord = true
-    current.data = data
+    // Only update data if:
+    // 1. The node is not yet an end-of-word, OR
+    // 2. The incoming data has higher popularity (so best item wins on conflict)
+    if (!current.isEndOfWord || (current.data && data.popularity > current.data.popularity)) {
+      current.isEndOfWord = true
+      current.data = data
+    } else if (!current.isEndOfWord) {
+      current.isEndOfWord = true
+      current.data = data
+    }
+
     this.size++
   }
 
   /**
-   * Insert multiple words at once (batch insertion)
-   * 
+   * Insert multiple words at once (batch insertion).
+   *
    * @param words - Array of [word, data] tuples
    */
   insertBatch(words: Array<[string, TrieNodeData]>): void {
@@ -127,14 +148,14 @@ export class SearchTrie {
   }
 
   /**
-   * Check if a word exists in the Trie
-   * 
+   * Check if a word exists in the Trie.
+   *
    * Time Complexity: O(m) where m = length of word
-   * 
+   *
    * @param word - The word to search for
    * @returns true if word exists, false otherwise
    */
-  search(word: string): boolean {
+  has(word: string): boolean {
     const normalizedWord = this.config.caseSensitive ? word : word.toLowerCase()
     let current = this.root
 
@@ -147,10 +168,10 @@ export class SearchTrie {
   }
 
   /**
-   * Check if any word in the Trie starts with the given prefix
-   * 
+   * Check if any word in the Trie starts with the given prefix.
+   *
    * Time Complexity: O(m) where m = length of prefix
-   * 
+   *
    * @param prefix - The prefix to check
    * @returns true if prefix exists, false otherwise
    */
@@ -167,15 +188,15 @@ export class SearchTrie {
   }
 
   /**
-   * Get autocomplete suggestions for a given prefix
-   * 
+   * Get autocomplete suggestions for a given prefix.
+   *
    * This is the core method for search autocomplete. It traverses the Trie
    * to the node representing the prefix, then collects all words below it,
    * sorted by popularity score.
-   * 
+   *
    * Time Complexity: O(m + k) where m = prefix length, k = number of suggestions
    * Space Complexity: O(k) for storing results
-   * 
+   *
    * @param prefix - The prefix to autocomplete
    * @param limit - Maximum number of suggestions (overrides config)
    * @returns Array of autocomplete results sorted by popularity
@@ -202,8 +223,8 @@ export class SearchTrie {
   }
 
   /**
-   * Helper method to recursively collect all words from a node
-   * 
+   * Helper method to recursively collect all words from a node.
+   *
    * @param node - Current TrieNode
    * @param currentPrefix - Prefix built so far
    * @param results - Array to collect results
@@ -227,16 +248,16 @@ export class SearchTrie {
   }
 
   /**
-   * Delete a word from the Trie
-   * 
+   * Delete a word from the Trie.
+   *
    * Time Complexity: O(m) where m = length of word
-   * 
+   *
    * @param word - The word to delete
    * @returns true if word was deleted, false if not found
    */
   delete(word: string): boolean {
     const normalizedWord = this.config.caseSensitive ? word : word.toLowerCase()
-    
+
     const deleteHelper = (node: TrieNode, index: number): boolean => {
       if (index === normalizedWord.length) {
         if (!node.isEndOfWord) return false
@@ -251,7 +272,7 @@ export class SearchTrie {
       if (!childNode) return false
 
       const shouldDeleteChild = deleteHelper(childNode, index + 1)
-      
+
       // Remove child node if it's not end of word and has no children
       if (shouldDeleteChild && !childNode.isEndOfWord && childNode.children.size === 0) {
         node.children.delete(char)
@@ -265,14 +286,14 @@ export class SearchTrie {
   }
 
   /**
-   * Get the number of words in the Trie
+   * Get the number of words in the Trie.
    */
   getSize(): number {
     return this.size
   }
 
   /**
-   * Clear all words from the Trie
+   * Clear all words from the Trie.
    */
   clear(): void {
     this.root = createTrieNode()
@@ -280,7 +301,7 @@ export class SearchTrie {
   }
 
   /**
-   * Get all words in the Trie (for debugging/testing)
+   * Get all words in the Trie (for debugging/testing).
    */
   getAllWords(): string[] {
     const words: string[] = []
@@ -302,11 +323,25 @@ export class SearchTrie {
  * - Category-based filtering
  * - Stock-aware suggestions (can exclude out-of-stock items)
  * - Multi-field search (searches name and category)
- * - Fuzzy matching support (basic typo tolerance)
+ * - FIXED: Word-level tokenization so "cotton" finds "Blue Cotton Shirt"
+ *
+ * BUG FIX EXPLANATION:
+ * The original implementation only inserted the full product name as a single
+ * string. This meant the name "Blue Cotton Shirt" was only reachable via the
+ * prefix chain b→l→u→e→(space)→c→o→t→t→o→n... — i.e., only by typing "bl".
+ *
+ * The fix tokenizes each product name into words on insert:
+ *   "Blue Cotton Shirt" → ["blue", "cotton", "shirt"]
+ * Each word is inserted separately, all pointing to the same product data.
+ * This is the standard production approach used by search engines.
+ *
+ * Deduplication: The search() method uses a Map keyed by product.id so a
+ * product matching both "blue" and "bl" (if query is "bl") only appears once.
  */
 export class ProductSearchTrie {
   private nameTrie: SearchTrie
   private categoryTrie: SearchTrie
+  // Map from product ID to the original product data for deduplication
   private products: Map<string, TrieNodeData>
 
   constructor(config: Partial<TrieConfig> = {}) {
@@ -316,15 +351,37 @@ export class ProductSearchTrie {
   }
 
   /**
-   * Add a product to the search index
-   * 
+   * Add a product to the search index.
+   *
+   * BUG FIX: now also tokenizes product name into individual words so
+   * mid-name words are reachable as prefixes. E.g., "Blue Cotton Shirt"
+   * is findable by "blue", "cot", "shirt", "sh", etc.
+   *
    * @param product - Product data to index
    */
   addProduct(product: TrieNodeData): void {
+    // Store the full product record for deduplication during search
     this.products.set(product.id, product)
+
+    // 1. Insert the full product name (existing behavior — covers full-phrase prefix)
     this.nameTrie.insert(product.name, product)
-    
-    // Also index category if available
+
+    // 2. BUG FIX: Tokenize name into individual words and index each one.
+    //    This ensures "cotton" finds "Blue Cotton Shirt".
+    //    We skip single-character tokens — they are noise.
+    const words = product.name
+      .toLowerCase()
+      .split(/[\s\-_\/\\,\.]+/)  // Split on space, hyphen, underscore, slash, comma, period
+      .filter((w) => w.length >= 2)
+
+    for (const word of words) {
+      // Don't re-insert if this word is just the full name lowercased (already inserted above)
+      if (word !== product.name.toLowerCase()) {
+        this.nameTrie.insert(word, product)
+      }
+    }
+
+    // 3. Index category if available (existing behavior)
     if (product.category) {
       this.categoryTrie.insert(product.category, {
         ...product,
@@ -334,8 +391,8 @@ export class ProductSearchTrie {
   }
 
   /**
-   * Add multiple products at once
-   * 
+   * Add multiple products at once.
+   *
    * @param products - Array of products to index
    */
   addProducts(products: TrieNodeData[]): void {
@@ -345,11 +402,18 @@ export class ProductSearchTrie {
   }
 
   /**
-   * Search for products by prefix
-   * 
+   * Search for products by prefix.
+   *
+   * BUG FIX: Uses a Map keyed by product.id to deduplicate results. Without
+   * this, a product whose name has multiple words matching the query (e.g.,
+   * "shampoo" matching both the full name insert and the tokenized word insert)
+   * would appear multiple times in results.
+   *
+   * When deduplicating, keeps the entry with the highest score.
+   *
    * @param query - Search query/prefix
    * @param options - Search options
-   * @returns Array of matching products
+   * @returns Array of matching products, deduplicated and sorted by popularity
    */
   search(
     query: string,
@@ -365,13 +429,37 @@ export class ProductSearchTrie {
       inStockOnly = false,
     } = options
 
-    // Get suggestions from name trie
-    const nameSuggestions = this.nameTrie.autocomplete(query, limit)
+    // Get all suggestions from the name trie (may contain duplicates if multiple
+    // words in the same product name matched)
+    const nameSuggestions = this.nameTrie.autocomplete(query, limit * 3) // Fetch extra to allow dedup
+
+    // Deduplicate by product.id, keeping the highest-scoring entry per product
+    const seen = new Map<string, AutocompleteResult>()
+    for (const result of nameSuggestions) {
+      const pid = result.data.id
+      const existing = seen.get(pid)
+      if (!existing || result.score > existing.score) {
+        // Use the original product name (not the matched word) in the result
+        // so the UI shows "Blue Cotton Shirt", not "cotton"
+        const originalProduct = this.products.get(pid)
+        seen.set(pid, {
+          text: originalProduct?.name ?? result.data.name,
+          data: originalProduct ?? result.data,
+          score: result.score,
+        })
+      }
+    }
+
+    // Convert back to array
+    let filteredSuggestions = Array.from(seen.values())
 
     // Filter by stock if requested
-    const filteredSuggestions = inStockOnly
-      ? nameSuggestions.filter((s) => s.data.in_stock)
-      : nameSuggestions
+    if (inStockOnly) {
+      filteredSuggestions = filteredSuggestions.filter((s) => s.data.in_stock)
+    }
+
+    // Sort by score descending
+    filteredSuggestions.sort((a, b) => b.score - a.score)
 
     // Add category suggestions if requested
     if (includeCategories) {
@@ -379,27 +467,42 @@ export class ProductSearchTrie {
       return [...filteredSuggestions, ...categorySuggestions].slice(0, limit)
     }
 
-    return filteredSuggestions
+    return filteredSuggestions.slice(0, limit)
   }
 
   /**
-   * Remove a product from the search index
-   * 
+   * Remove a product from the search index.
+   *
    * @param productId - ID of product to remove
    */
   removeProduct(productId: string): void {
     const product = this.products.get(productId)
     if (!product) return
 
+    // Delete full-name entry
     this.nameTrie.delete(product.name)
+
+    // Delete each tokenized word entry
+    const words = product.name
+      .toLowerCase()
+      .split(/[\s\-_\/\\,\.]+/)
+      .filter((w) => w.length >= 2)
+
+    for (const word of words) {
+      if (word !== product.name.toLowerCase()) {
+        this.nameTrie.delete(word)
+      }
+    }
+
     if (product.category) {
       this.categoryTrie.delete(product.category)
     }
+
     this.products.delete(productId)
   }
 
   /**
-   * Get the total number of indexed products
+   * Get the total number of indexed products.
    */
   getProductCount(): number {
     return this.products.size
@@ -409,14 +512,14 @@ export class ProductSearchTrie {
 // ─── Factory Functions ──────────────────────────────────────────────────────
 
 /**
- * Create a new SearchTrie instance with default configuration
+ * Create a new SearchTrie instance with default configuration.
  */
 export function createSearchTrie(config?: Partial<TrieConfig>): SearchTrie {
   return new SearchTrie(config)
 }
 
 /**
- * Create a new ProductSearchTrie instance
+ * Create a new ProductSearchTrie instance.
  */
 export function createProductSearchTrie(config?: Partial<TrieConfig>): ProductSearchTrie {
   return new ProductSearchTrie(config)

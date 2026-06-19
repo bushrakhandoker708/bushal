@@ -1,21 +1,50 @@
+# ml-service/tasks/segmentation.py
 # ============================================================================
-# FILE ADDRESS: ml-service/tasks/segmentation.py
+# CUSTOMER SEGMENTATION — K-MEANS CLUSTERING ON RFM FEATURES
 # ============================================================================
-# EXPLANATION:
-# This module implements Customer Segmentation using K-Means clustering on 
-# RFM (Recency, Frequency, Monetary) features. It replaces the previous 
-# TypeScript implementation that ran inside Vercel serverless functions.
 #
-# BUG FIXES APPLIED:
-# 1. Function signature now accepts `conn` parameter from main.py
-# 2. Uses correct column names matching actual DB schema:
-#    - customer_segments: customer_id, segment, recency, frequency, monetary, cluster_id
-#    - ml_model_accuracy: model_name, metric_name, metric_value, records_evaluated, evaluated_at
-# 3. Gracefully returns "skipped" status when insufficient data exists
-# 4. Does NOT close the connection (main.py handles that)
-# 5. Proper error handling with rollback on failure
+# WHAT THIS DOES:
+#   Clusters customers into segments (VIP, Loyal, Normal, High Risk,
+#   Anomalous) using K-Means on RFM (Recency, Frequency, Monetary)
+#   features derived from fulfilled order history.
+#
+# OVERFITTING PROBLEM AND FIX:
+#   K-Means cannot overfit in the gradient-descent sense, but it can produce
+#   degenerate results:
+#
+#   1. Too many clusters for the data density.
+#      With 20 customers and K=5, each cluster has ~4 people. The "VIP"
+#      segment might be a single outlier order, and the "Loyal" segment
+#      3 regular customers — an artificial distinction the business cannot
+#      act on. The silhouette score captures this: clusters that barely
+#      separate get scores near 0 or negative.
+#
+#   2. Segment label assignment is arbitrary (random init).
+#      K-Means++ initialization reduces variance, but the labels (0,1,2,3,4)
+#      don't mean anything — we assign business names based on centroid
+#      characteristics (highest monetary = VIP, etc.).
+#
+#   Fixes applied:
+#     a. Dynamic K selection: test K=3..7, pick the K that maximises
+#        silhouette score, with a preference for K=5 if it's within 10%
+#        of the best score (business requirement: 5 named segments).
+#     b. Minimum data guard: if fewer than 5 unique customers exist,
+#        skip clustering (not enough data for meaningful groups).
+#     c. Silhouette quality check: if the best achievable silhouette
+#        score is below MIN_SILHOUETTE_THRESHOLD (0.15), skip writing
+#        results and log a warning — the clusters are too noisy to be
+#        useful. This prevents overwriting good historical segments with
+#        garbage clusters from a bad run.
+#     d. Log silhouette score to ml_model_accuracy after every run so
+#        drift_detection.py can alert when clustering quality degrades.
+#
+# BUG FIXES (retained from previous version):
+#   1. conn parameter from main.py (no internal get_db_connection).
+#   2. Correct column names: customer_segments uses customer_id, segment,
+#      recency, frequency, monetary, cluster_id.
+#   3. ml_model_accuracy uses evaluated_at (not created_at).
+#   4. Does NOT close the connection (main.py handles lifecycle).
 # ============================================================================
-
 import logging
 import numpy as np
 import pandas as pd
@@ -23,322 +52,337 @@ from datetime import datetime
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import silhouette_score
-from psycopg2.extras import RealDictCursor, Json
+from psycopg2.extras import RealDictCursor
 
 logger = logging.getLogger("bushal-ml.segmentation")
 
+# ─── Configuration ────────────────────────────────────────────────────────────
+# Minimum silhouette score to consider clusters valid enough to write.
+# Below this threshold, the clusters are too overlapping to be meaningful.
+MIN_SILHOUETTE_THRESHOLD = 0.15
 
+# K range to search for optimal cluster count
+MIN_K = 3
+MAX_K = 7
+
+# Business target: we want exactly 5 named segments if the data supports it.
+# If K=5 silhouette is within PREFERRED_K_TOLERANCE of the best, use K=5.
+PREFERRED_K = 5
+PREFERRED_K_TOLERANCE = 0.10  # 10% below best is acceptable for K=5
+
+# ─── Main task function ───────────────────────────────────────────────────────
 def run_customer_segmentation(conn):
     """
-    Runs K-Means clustering on customer RFM data and writes results to 
-    the customer_segments table.
-    
+    Runs K-Means RFM clustering and writes segments to customer_segments.
     Args:
         conn: psycopg2 connection object (passed from main.py)
-    
     Returns:
-        dict: Status and metrics of the segmentation run
+        dict: Status and summary metrics
     """
-    logger.info("📊 Starting Customer Segmentation (K-Means)...")
+    logger.info("📊 Starting Customer Segmentation (K-Means RFM)...")
     cursor = None
-    
     try:
         cursor = conn.cursor(cursor_factory=RealDictCursor)
-        
-        # ─── 1. Fetch Fulfilled Orders ─────────────────────────────────────
-        logger.info("   📥 Fetching order history...")
+
+        # ── 1. Fetch fulfilled orders ──────────────────────────────────────
+        logger.info("   📥 Fetching fulfilled order history...")
         cursor.execute("""
-            SELECT 
+            SELECT
                 o.user_id,
                 o.total,
                 o.created_at,
-                EXTRACT(DAY FROM (NOW() - MAX(o.created_at) OVER (PARTITION BY o.user_id))) as recency_days
+                -- Recency: days since this customer's most recent order
+                EXTRACT(DAY FROM (NOW() - MAX(o.created_at) OVER (PARTITION BY o.user_id)))::int
+                AS recency_days
             FROM public.orders o
             WHERE o.status = 'fulfilled'
             ORDER BY o.user_id, o.created_at DESC
         """)
-        
         orders = cursor.fetchall()
-        
+
         if not orders or len(orders) < 10:
-            logger.warning("   ⏭️ Insufficient order data for segmentation. Need at least 10 fulfilled orders.")
+            logger.warning(
+                f"   ⏭️ Insufficient data ({len(orders) if orders else 0} rows). "
+                "Need at least 10 fulfilled orders."
+            )
             return {
                 "status": "skipped",
-                "reason": "Insufficient data",
-                "orders_found": len(orders) if orders else 0
+                "reason": "insufficient_data",
+                "orders_found": len(orders) if orders else 0,
             }
-        
-        # ─── 2. Calculate RFM Metrics ──────────────────────────────────────
-        logger.info("   🧮 Calculating RFM metrics...")
-        
-        # Group by customer
-        customer_data = {}
-        for order in orders:
-            uid = str(order['user_id'])
+
+        logger.info(f"   📊 {len(orders)} order rows found.")
+
+        # ── 2. Aggregate RFM per customer ──────────────────────────────────
+        logger.info("   🧮 Computing RFM features per customer...")
+        customer_data: dict[str, dict] = {}
+        for row in orders:
+            uid = str(row['user_id'])
             if uid not in customer_data:
                 customer_data[uid] = {
-                    'recency': order['recency_days'] or 0,
+                    'recency': int(row['recency_days'] or 0),
                     'frequency': 0,
-                    'monetary': 0.0
+                    'monetary': 0.0,
                 }
             customer_data[uid]['frequency'] += 1
-            customer_data[uid]['monetary'] += float(order['total'] or 0)
-        
-        # Convert to DataFrame
+            customer_data[uid]['monetary'] += float(row['total'] or 0)
+
         df = pd.DataFrame([
             {
                 'customer_id': uid,
-                'recency': data['recency'],
-                'frequency': data['frequency'],
-                'monetary': data['monetary']
+                'recency':   d['recency'],
+                'frequency': d['frequency'],
+                'monetary':  d['monetary'],
             }
-            for uid, data in customer_data.items()
+            for uid, d in customer_data.items()
         ])
-        
-        logger.info(f"   📊 Found {len(df)} unique customers with order history.")
-        
-        if len(df) < 5:
-            logger.warning("   ⏭️ Too few unique customers for meaningful clustering. Need at least 5.")
+
+        n_customers = len(df)
+        logger.info(f"   👥 {n_customers} unique customers with order history.")
+
+        if n_customers < 5:
+            logger.warning(
+                f"   ⏭️ Only {n_customers} unique customers. Need at least 5 for clustering."
+            )
             return {
                 "status": "skipped",
-                "reason": "Too few unique customers",
-                "customers_found": len(df)
+                "reason": "too_few_customers",
+                "customers_found": n_customers,
             }
-        
-        # ─── 3. Prepare Features for Clustering ────────────────────────────
+
+        # ── 3. Standardise features ────────────────────────────────────────
+        # K-Means uses Euclidean distance, so all features must be on the same
+        # scale. Without this, monetary (৳thousands) would dominate recency
+        # (days) and frequency (count).
         features = ['recency', 'frequency', 'monetary']
         X = df[features].values
-        
-        # Standardize features (K-Means is distance-based)
         scaler = StandardScaler()
         X_scaled = scaler.fit_transform(X)
-        
-        # ─── 4. Find Optimal K (Elbow Method + Silhouette) ─────────────────
-        logger.info("   🔍 Finding optimal number of clusters (K)...")
-        
-        # We want 5 segments: VIP, Loyal, Normal, High Risk, Fake Orders
-        # But we test K=3 to K=7 to find the best silhouette score
-        min_k = 3
-        max_k = min(7, len(df) - 1)  # Can't have more clusters than data points
-        
-        if max_k < min_k:
-            max_k = min_k
-        
-        best_k = 5  # Default target
-        best_score = -1
-        best_std = 0
+
+        # ── 4. Dynamic K selection (silhouette maximisation) ───────────────
+        logger.info("   🔍 Finding optimal K via silhouette score (K=3..7)...")
+        effective_max_k = min(MAX_K, n_customers - 1)
+        effective_min_k = min(MIN_K, effective_max_k)
+
+        best_k = PREFERRED_K
+        best_score = -1.0
         best_labels = None
         best_model = None
-        
-        k_range = range(min_k, max_k + 1)
-        scores = []
-        
-        for k in k_range:
+        k_scores: list[tuple[int, float]] = []
+
+        for k in range(effective_min_k, effective_max_k + 1):
             try:
-                kmeans = KMeans(n_clusters=k, random_state=42, n_init=10, max_iter=300)
+                kmeans = KMeans(
+                    n_clusters=k,
+                    init='k-means++',  # K-Means++ reduces variance from random init
+                    n_init=10,
+                    max_iter=300,
+                    random_state=42,
+                )
                 labels = kmeans.fit_predict(X_scaled)
-                
-                # Need at least 2 clusters for silhouette score
+
+                # Silhouette requires at least 2 distinct clusters in the output
                 if len(set(labels)) < 2:
+                    logger.warning(f"      K={k}: all points assigned to one cluster, skipping.")
                     continue
-                
-                score = silhouette_score(X_scaled, labels)
-                scores.append((k, score))
-                
-                logger.info(f"      K={k}: Silhouette Score = {score:.4f}")
-                
-                # Prefer K=5 if it's within 10% of the best score
-                if k == 5 and score >= best_score * 0.9:
-                    best_k = 5
-                    best_score = score
-                    best_labels = labels
-                    best_model = kmeans
+
+                score = float(silhouette_score(X_scaled, labels))
+                k_scores.append((k, score))
+                logger.info(f"      K={k}: silhouette = {score:.4f}")
+
+                # Prefer K=PREFERRED_K if within tolerance of the best score.
+                # This encodes the business constraint: we want exactly 5 segments
+                # if the data can support them without sacrificing much quality.
+                if k == PREFERRED_K:
+                    if score >= best_score * (1.0 - PREFERRED_K_TOLERANCE):
+                        best_k = PREFERRED_K
+                        best_score = score
+                        best_labels = labels
+                        best_model = kmeans
                 elif score > best_score:
-                    best_score = score
-                    best_k = k
-                    best_labels = labels
-                    best_model = kmeans
-                    
-            except Exception as e:
-                logger.warning(f"      K={k} failed: {e}")
+                    # Only update best if this is strictly better than preferred K
+                    if best_k != PREFERRED_K or score > best_score * (1.0 + PREFERRED_K_TOLERANCE):
+                        best_score = score
+                        best_k = k
+                        best_labels = labels
+                        best_model = kmeans
+
+            except Exception as ex:
+                logger.warning(f"      K={k} clustering failed: {ex}")
                 continue
-        
+
         if best_labels is None:
-            logger.error("   ❌ Could not find any valid clustering. Aborting.")
+            logger.error("   ❌ No valid clustering found across K range. Aborting.")
+            return {"status": "error", "error": "No valid clustering found"}
+
+        logger.info(f"   🎯 Optimal K={best_k}, silhouette={best_score:.4f}")
+
+        # ── 5. Overfitting / quality guard ────────────────────────────────
+        # If the best achievable silhouette score is below the threshold,
+        # the clusters are too overlapping to be useful. We log the metric
+        # (so drift detection can track this) but skip writing to the DB
+        # to avoid overwriting valid historical segment data with garbage.
+        if best_score < MIN_SILHOUETTE_THRESHOLD:
+            logger.warning(
+                f"   ⚠️ Best silhouette score {best_score:.4f} is below minimum threshold "
+                f"{MIN_SILHOUETTE_THRESHOLD}. Clusters are too overlapping. "
+                "Logging metric but NOT overwriting customer_segments table."
+            )
+            # Still log the poor score so drift_detection sees it
+            cursor.execute("""
+                INSERT INTO public.ml_model_accuracy
+                (model_name, metric_name, metric_value, records_evaluated, evaluated_at)
+                VALUES (%s, %s, %s, %s, NOW())
+            """, ('kmeans_segmentation', 'silhouette_score', best_score, n_customers))
+            conn.commit()
             return {
-                "status": "error",
-                "error": "No valid clustering found"
+                "status": "skipped",
+                "reason": "silhouette_too_low",
+                "silhouette_score": round(best_score, 4),
+                "customers": n_customers,
             }
-        
-        # Calculate standard deviation of scores for stability metric
-        if len(scores) > 1:
-            best_std = np.std([s[1] for s in scores])
-        else:
-            best_std = 0
-        
-        logger.info(f"   🎯 Optimal K determined: {best_k} (Score: {best_score:.4f})")
-        
-        # ─── 5. Assign Segment Labels ──────────────────────────────────────
-        logger.info("   🏷️ Assigning segment labels...")
-        
+
+        # ── 6. Assign business segment labels ─────────────────────────────
+        logger.info("   🏷️ Assigning business segment labels...")
         df['cluster_id'] = best_labels
-        
-        # Calculate cluster centroids in original scale
-        centroids_scaled = best_model.cluster_centers_
-        centroids_original = scaler.inverse_transform(centroids_scaled)
-        
-        # Map clusters to business segments based on centroid characteristics
-        # Sort clusters by monetary value (highest spenders first)
-        cluster_monetary_avg = []
-        for i in range(best_k):
-            mask = df['cluster_id'] == i
-            avg_monetary = df.loc[mask, 'monetary'].mean()
-            avg_frequency = df.loc[mask, 'frequency'].mean()
-            avg_recency = df.loc[mask, 'recency'].mean()
-            cluster_monetary_avg.append({
-                'cluster': i,
-                'monetary': avg_monetary,
-                'frequency': avg_frequency,
-                'recency': avg_recency,
-                'count': mask.sum()
+
+        # Compute per-cluster mean RFM in original (un-scaled) space
+        cluster_stats = []
+        for cid in range(best_k):
+            mask = df['cluster_id'] == cid
+            cluster_stats.append({
+                'cluster': cid,
+                'monetary':  df.loc[mask, 'monetary'].mean(),
+                'frequency': df.loc[mask, 'frequency'].mean(),
+                'recency':   df.loc[mask, 'recency'].mean(),
+                'count':     int(mask.sum()),
             })
-        
-        # Sort by monetary value descending
-        cluster_monetary_avg.sort(key=lambda x: x['monetary'], reverse=True)
-        
-        # Assign segment names based on rank and characteristics
-        segment_mapping = {}
-        segment_names = ['VIP', 'Loyal', 'Normal', 'High Risk', 'Fake Orders']
-        
-        for idx, cluster_info in enumerate(cluster_monetary_avg):
-            cluster_id = cluster_info['cluster']
-            
+
+        # Sort clusters by mean monetary spend (highest = VIP)
+        cluster_stats.sort(key=lambda x: x['monetary'], reverse=True)
+
+        # FIX: Renamed 'Fake Orders' to 'Anomalous' to reflect statistical
+        # outlier status rather than intent. This prevents flagging legitimate
+        # customers (e.g., new users or bulk buyers) as fraudulent.
+        segment_names = ['VIP', 'Loyal', 'Normal', 'High Risk', 'Anomalous']
+        segment_mapping: dict[int, str] = {}
+
+        for idx, cs in enumerate(cluster_stats):
+            cid = cs['cluster']
             if idx == 0:
-                # Highest monetary = VIP
-                segment_mapping[cluster_id] = 'VIP'
+                # Highest spend → VIP
+                segment_mapping[cid] = 'VIP'
             elif idx == 1:
-                # Second highest = Loyal
-                segment_mapping[cluster_id] = 'Loyal'
-            elif idx == len(cluster_monetary_avg) - 1:
-                # Check if this cluster has very low frequency (possible fake orders)
-                if cluster_info['frequency'] <= 1.2 and cluster_info['count'] <= max(2, len(df) * 0.05):
-                    segment_mapping[cluster_id] = 'Fake Orders'
-                else:
-                    segment_mapping[cluster_id] = 'High Risk'
-            elif idx == len(cluster_monetary_avg) - 2:
-                segment_mapping[cluster_id] = 'High Risk'
+                # Second highest spend → Loyal
+                segment_mapping[cid] = 'Loyal'
+            elif idx == len(cluster_stats) - 1:
+                # Last (lowest spend/outlier): Check if it looks like anomalous behavior.
+                # Characteristics: very low frequency, very small cluster,
+                # anomalously low or zero spend.
+                is_likely_anomalous = (
+                    cs['frequency'] <= 1.2 and
+                    cs['count'] <= max(2, int(n_customers * 0.05)) and
+                    cs['monetary'] < df['monetary'].quantile(0.10)
+                )
+                # FIX: Label as 'Anomalous' instead of 'Fake Orders'
+                segment_mapping[cid] = 'Anomalous' if is_likely_anomalous else 'High Risk'
+            elif idx == len(cluster_stats) - 2:
+                # Second from bottom → High Risk (declining/at-risk customers)
+                segment_mapping[cid] = 'High Risk'
             else:
-                segment_mapping[cluster_id] = 'Normal'
-        
-        # Handle edge case: if we have fewer than 5 clusters, fill remaining
-        used_segments = set(segment_mapping.values())
+                # Middle cluster(s) → Normal
+                segment_mapping[cid] = 'Normal'
+
+        # Fill any unmapped clusters (edge case: best_k < 5)
+        used = set(segment_mapping.values())
         for name in segment_names:
-            if name not in used_segments and len(segment_mapping) < best_k:
-                # Find an unassigned cluster
+            if name not in used:
                 for cid in range(best_k):
                     if cid not in segment_mapping:
                         segment_mapping[cid] = name
                         break
-        
-        # Apply segment labels to DataFrame
+
         df['segment'] = df['cluster_id'].map(segment_mapping)
-        
+
         # Log cluster characteristics
-        for cluster_id, segment_name in segment_mapping.items():
-            mask = df['cluster_id'] == cluster_id
-            info = cluster_monetary_avg[next(i for i, c in enumerate(cluster_monetary_avg) if c['cluster'] == cluster_id)]
+        for cs in cluster_stats:
+            seg = segment_mapping[cs['cluster']]
             logger.info(
-                f"      Cluster {cluster_id} → {segment_name}: "
-                f"Count={info['count']}, "
-                f"R={info['recency']:.1f}d, F={info['frequency']:.1f}, M=৳{info['monetary']:.0f}"
+                f"      Cluster {cs['cluster']} → {seg}: "
+                f"N={cs['count']}, "
+                f"R={cs['recency']:.0f}d, "
+                f"F={cs['frequency']:.1f}, "
+                f"M=৳{cs['monetary']:,.0f}"
             )
+
+        # ── 7. Write to customer_segments ──────────────────────────────────
+        logger.info("   💾 Writing segments to customer_segments...")
         
-        # ─── 6. Write Results to Database ──────────────────────────────────
-        logger.info("💾 Writing segmentation results to database...")
+        # Note: Ensure the database constraint allows 'Anomalous'
+        # If you have a CHECK constraint on the segment column, you may need
+        # to update it via migration: 
+        # ALTER TABLE customer_segments DROP CONSTRAINT ...; 
+        # ALTER TABLE customer_segments ADD CONSTRAINT ... CHECK (segment IN (... 'Anomalous'));
         
-        # Clear old segments
         cursor.execute("TRUNCATE TABLE public.customer_segments;")
-        
-        # Insert new segments
-        insert_query = """
-            INSERT INTO public.customer_segments 
-            (customer_id, segment, recency, frequency, monetary, cluster_id, updated_at) 
+        insert_sql = """
+            INSERT INTO public.customer_segments
+            (customer_id, segment, recency, frequency, monetary, cluster_id, updated_at)
             VALUES (%s, %s, %s, %s, %s, %s, NOW())
         """
-        
-        records = []
-        for _, row in df.iterrows():
-            records.append((
+        records = [
+            (
                 str(row['customer_id']),
                 row['segment'],
                 int(row['recency']),
                 int(row['frequency']),
                 float(row['monetary']),
-                int(row['cluster_id'])
-            ))
-        
-        cursor.executemany(insert_query, records)
-        logger.info(f"   ✅ Inserted {len(records)} customer segments.")
-        
-        # ─── 7. Log Model Accuracy ─────────────────────────────────────────
-        logger.info("📝 Logging training metadata...")
-        
-        metadata = {
-            "optimal_k": best_k,
-            "silhouette_score": round(best_score, 4),
-            "silhouette_std": round(best_std, 4),
-            "segment_distribution": {name: sum(1 for s in df['segment'] if s == name) for name in segment_names},
-            "cluster_centroids": {
-                str(cid): {
-                    "recency": round(centroids_original[cid][0], 2),
-                    "frequency": round(centroids_original[cid][1], 2),
-                    "monetary": round(centroids_original[cid][2], 2)
-                }
-                for cid in range(best_k)
-            }
-        }
-        
-        # Insert into ml_model_accuracy (using correct column name: evaluated_at)
-        insert_accuracy = """
-            INSERT INTO public.ml_model_accuracy 
-            (model_name, metric_name, metric_value, records_evaluated, evaluated_at) 
+                int(row['cluster_id']),
+            )
+            for _, row in df.iterrows()
+        ]
+        cursor.executemany(insert_sql, records)
+        logger.info(f"   ✅ {len(records)} customer segments written.")
+
+        # ── 8. Log accuracy metrics ────────────────────────────────────────
+        logger.info("   📝 Logging silhouette score to ml_model_accuracy...")
+        # Primary metric: silhouette score (monitored by drift_detection.py)
+        cursor.execute("""
+            INSERT INTO public.ml_model_accuracy
+            (model_name, metric_name, metric_value, records_evaluated, evaluated_at)
             VALUES (%s, %s, %s, %s, NOW())
-        """
-        
-        cursor.execute(insert_accuracy, (
-            'kmeans_segmentation',
-            'silhouette_score',
-            best_score,
-            len(df)
-        ))
-        
+        """, ('kmeans_segmentation', 'silhouette_score', best_score, n_customers))
+
+        # Secondary metric: optimal K chosen (useful for debugging unexpected shifts)
+        cursor.execute("""
+            INSERT INTO public.ml_model_accuracy
+            (model_name, metric_name, metric_value, records_evaluated, evaluated_at)
+            VALUES (%s, %s, %s, %s, NOW())
+        """, ('kmeans_segmentation', 'optimal_k', float(best_k), n_customers))
+
         conn.commit()
-        cursor.close()
-        
-        # ─── 8. Generate Summary ───────────────────────────────────────────
+
         segment_counts = df['segment'].value_counts().to_dict()
         logger.info(f"✅ Segmentation complete. Distribution: {segment_counts}")
-        
+
         return {
             "status": "success",
-            "customers_analyzed": len(df),
+            "customers_analyzed": n_customers,
             "optimal_k": best_k,
             "silhouette_score": round(best_score, 4),
-            "silhouette_std": round(best_std, 4),
+            "quality_check_passed": best_score >= MIN_SILHOUETTE_THRESHOLD,
             "segment_distribution": segment_counts,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
-        
-    except Exception as e:
-        logger.error(f"❌ Segmentation failed: {str(e)}", exc_info=True)
-        if conn:
-            try:
-                conn.rollback()
-            except:
-                pass
-        return {"status": "error", "error": str(e)}
+
+    except Exception as exc:
+        logger.error(f"❌ Segmentation failed: {exc}", exc_info=True)
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return {"status": "error", "error": str(exc)}
     finally:
-        # NOTE: We do NOT close the connection here. 
-        # main.py is responsible for managing the connection lifecycle.
+        # main.py owns the connection lifecycle — do NOT close conn here.
         if cursor and not cursor.closed:
             cursor.close()

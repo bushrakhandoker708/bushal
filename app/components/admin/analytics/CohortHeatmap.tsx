@@ -1,9 +1,7 @@
 // app/components/admin/analytics/CohortHeatmap.tsx
 // Renders a month-by-month cohort retention table as a colour-coded heatmap.
 // Each row is a cohort (first purchase month); each column is months since first buy.
-
 'use client'
-
 import { cn } from '@/app/lib/utils/cn'
 import { formatPrice } from '@/app/lib/utils/formatPrice'
 
@@ -28,11 +26,21 @@ function retentionColour(rate: number): string {
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
-export default function CohortHeatmap({ data }: { data: CohortRow[] }) {
-  if (!data?.length) {
+export default function CohortHeatmap({ data }: { data: CohortRow[] | null }) {
+  // FIX: Explicit empty state for null/missing data
+  if (!data || data.length === 0) {
     return (
       <div className="rounded-2xl border border-bushal-border bg-bushal-surface p-8 text-center">
-        <p className="text-sm text-bushal-inkSoft">Not enough repeat-purchase data for cohort analysis yet.</p>
+        <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-bushal-ivoryDeep flex items-center justify-center">
+          <svg className="w-6 h-6 text-bushal-inkSoft/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+          </svg>
+        </div>
+        <p className="text-sm font-semibold text-bushal-inkSoft">No Cohort Data Available</p>
+        <p className="text-xs text-bushal-inkSoft/60 mt-1 max-w-md mx-auto">
+          Cohort analysis requires historical order data. 
+          Run the nightly ML pipeline or wait for more repeat purchases to generate this view.
+        </p>
       </div>
     )
   }
@@ -40,7 +48,6 @@ export default function CohortHeatmap({ data }: { data: CohortRow[] }) {
   // Build pivot
   const cohorts = Array.from(new Set(data.map(d => d.cohort_month)))
   const maxMonths = Math.max(0, ...data.map(d => d.months_since))
-
   const lookup = new Map(data.map(d => [`${d.cohort_month}::${d.months_since}`, d]))
 
   return (
@@ -50,7 +57,6 @@ export default function CohortHeatmap({ data }: { data: CohortRow[] }) {
           <h3 className="text-sm font-bold text-bushal-forest">Cohort Retention</h3>
           <p className="text-[11px] text-bushal-inkSoft mt-0.5">% of each cohort still active after N months</p>
         </div>
-
         {/* Legend */}
         <div className="flex items-center gap-1.5 text-[10px] text-bushal-inkSoft shrink-0">
           <div className="flex items-center gap-0.5">
@@ -61,7 +67,6 @@ export default function CohortHeatmap({ data }: { data: CohortRow[] }) {
           <span>Low → High</span>
         </div>
       </div>
-
       <div className="overflow-x-auto">
         <table className="min-w-full text-xs border-separate border-spacing-0.5">
           <thead>
@@ -116,7 +121,6 @@ export default function CohortHeatmap({ data }: { data: CohortRow[] }) {
           </tbody>
         </table>
       </div>
-
       <div className="mt-4 pt-4 border-t border-bushal-border">
         <p className="text-[10px] text-bushal-inkSoft leading-relaxed">
           <span className="font-bold text-bushal-copper">Playbook —</span>{' '}

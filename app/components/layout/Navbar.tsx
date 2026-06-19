@@ -1,4 +1,3 @@
-// app/components/layout/Navbar.tsx
 'use client'
 
 import { useAuth } from '@/app/hooks/useAuth'
@@ -7,6 +6,7 @@ import { useWishlist } from '@/app/hooks/useWishList'
 import { useCompare } from '@/app/hooks/useCompare'
 import Link from 'next/link'
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/app/lib/utils/cn'
 import CartDrawer from '@/app/components/cart/CardDrawer'
 import { createBrowserClient } from '@/lib/supabase/client'
@@ -34,6 +34,76 @@ function useDebounce<T>(value: T, delay: number): T {
   return debounced
 }
 
+// ─── Search Cache Utilities ───────────────────────────────────────────────────
+const SEARCH_CACHE_KEY = 'bushal_search_cache_v1'
+const SEARCH_HISTORY_KEY = 'bushal_search_history_v1'
+const MAX_CACHE_SIZE = 30
+const MAX_HISTORY_SIZE = 10
+
+const getCachedResults = (query: string): SearchResult[] | null => {
+  if (typeof window === 'undefined') return null
+  try {
+    const cache = JSON.parse(localStorage.getItem(SEARCH_CACHE_KEY) || '{}')
+    return cache[query.toLowerCase().trim()] || null
+  } catch {
+    return null
+  }
+}
+
+const setCachedResults = (query: string, results: SearchResult[]) => {
+  if (typeof window === 'undefined') return
+  try {
+    const cache = JSON.parse(localStorage.getItem(SEARCH_CACHE_KEY) || '{}')
+    cache[query.toLowerCase().trim()] = results
+    
+    // LRU Eviction: Keep only the last MAX_CACHE_SIZE searches
+    const keys = Object.keys(cache)
+    if (keys.length > MAX_CACHE_SIZE) {
+      delete cache[keys[0]]
+    }
+    
+    localStorage.setItem(SEARCH_CACHE_KEY, JSON.stringify(cache))
+  } catch (error) {
+    console.warn('Failed to cache search results:', error)
+  }
+}
+
+const getSearchHistory = (): string[] => {
+  if (typeof window === 'undefined') return []
+  try {
+    return JSON.parse(localStorage.getItem(SEARCH_HISTORY_KEY) || '[]')
+  } catch {
+    return []
+  }
+}
+
+const addToSearchHistory = (query: string) => {
+  if (typeof window === 'undefined' || !query.trim()) return
+  try {
+    const history = getSearchHistory()
+    const normalizedQuery = query.toLowerCase().trim()
+    
+    // Remove if already exists
+    const filtered = history.filter(h => h !== normalizedQuery)
+    
+    // Add to front
+    const newHistory = [normalizedQuery, ...filtered].slice(0, MAX_HISTORY_SIZE)
+    
+    localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(newHistory))
+  } catch (error) {
+    console.warn('Failed to save search history:', error)
+  }
+}
+
+const clearSearchHistory = () => {
+  if (typeof window === 'undefined') return
+  try {
+    localStorage.removeItem(SEARCH_HISTORY_KEY)
+  } catch (error) {
+    console.warn('Failed to clear search history:', error)
+  }
+}
+
 export default function Navbar() {
   const { items } = useCart()
   const { user, signOut } = useAuth()
@@ -55,6 +125,7 @@ export default function Navbar() {
   const [searching, setSearching] = useState(false)
   const [showResults, setShowResults] = useState(false)
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false)
+  const [searchHistory, setSearchHistory] = useState<string[]>([])
 
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [notifOpen, setNotifOpen] = useState(false)
@@ -72,9 +143,17 @@ export default function Navbar() {
   const unreadCount = notifications.filter((n) => !n.read).length
   const isAdmin = userRole === 'admin'
 
-  // Scroll listener
+  // Load search history on mount
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 60)
+    setSearchHistory(getSearchHistory())
+  }, [])
+
+  // Scroll listener with compression effect
+  useEffect(() => {
+    const onScroll = () => {
+      const y = window.scrollY
+      setScrolled(y > 20)
+    }
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => window.removeEventListener('scroll', onScroll)
   }, [])
@@ -200,9 +279,9 @@ export default function Navbar() {
 
       const { error } = await q
 
-      if (error) { 
+      if (error) {
         console.error('Error marking notifications as read:', error)
-        return 
+        return
       }
 
       setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
@@ -219,7 +298,7 @@ export default function Navbar() {
     }
   }, [notifOpen, unreadCount, markAllRead])
 
-  // Search logic
+  // Search logic with caching and history
   useEffect(() => {
     if (debouncedQuery.length < 2) {
       setResults([])
@@ -228,42 +307,99 @@ export default function Navbar() {
       return
     }
 
+    // 1. INSTANT: Check localStorage cache first
+    const cached = getCachedResults(debouncedQuery)
+    if (cached) {
+      setResults(cached)
+      setShowResults(true)
+      setSearching(false)
+      return
+    }
+
+    // 2. FALLBACK: Fetch from API
     let cancelled = false
     setSearching(true)
 
-    fetch(`/api/search/autocomplete?q=${encodeURIComponent(debouncedQuery)}&limit=6`)
-      .then((r) => { 
-        if (!r.ok) throw new Error()
-        return r.json() 
-      })
-      .then((data: any) => {
+    const fetchSearchResults = async () => {
+      try {
+        const response = await fetch(`/api/search/autocomplete?q=${encodeURIComponent(debouncedQuery)}&limit=6`)
+        
+        if (!response.ok) {
+          console.error('Search API error:', response.status, response.statusText)
+          if (!cancelled) {
+            setResults([])
+            setShowResults(false)
+            setSearching(false)
+          }
+          return
+        }
+
+        const data = await response.json()
+        
         if (cancelled) return
+        
         if (data.success && Array.isArray(data.suggestions)) {
-          setResults(data.suggestions.map((s: any) => ({
+          const mappedResults = data.suggestions.map((s: any) => ({
             id: s.id,
             name: s.name,
             price: s.price,
             image_url: s.image_url,
-            images: [],
-            discount_percent: null,
+            images: s.images || [],
+            discount_percent: s.discount_percent,
             in_stock: s.in_stock,
-          })))
+          }))
+          
+          setResults(mappedResults)
+          setShowResults(true)
+          
+          // 3. SAVE: Cache the result for next time
+          setCachedResults(debouncedQuery, mappedResults)
         } else {
           setResults([])
+          setShowResults(false)
         }
-        setShowResults(true)
-        setSearching(false)
-      })
-      .catch(() => {
-        if (!cancelled) { 
+      } catch (error) {
+        console.error('Search fetch error:', error)
+        if (!cancelled) {
           setResults([])
-          setShowResults(false) 
-          setSearching(false) 
+          setShowResults(false)
         }
-      })
+      } finally {
+        if (!cancelled) {
+          setSearching(false)
+        }
+      }
+    }
+
+    fetchSearchResults()
 
     return () => { cancelled = true }
   }, [debouncedQuery])
+
+  // Keyboard navigation for search
+  const handleSearchKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (!showResults || results.length === 0) return
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      // Navigate to first result
+      if (results[0]) {
+        window.location.href = `/product/${results[0].id}`
+      }
+    } else if (e.key === 'Enter') {
+      e.preventDefault()
+      if (results[0]) {
+        addToSearchHistory(query)
+        window.location.href = `/product/${results[0].id}`
+      } else if (query.trim()) {
+        addToSearchHistory(query)
+        window.location.href = `/dashboard?q=${encodeURIComponent(query)}`
+      }
+    } else if (e.key === 'Escape') {
+      setShowResults(false)
+      inputRef.current?.blur()
+    }
+  }, [showResults, results, query])
 
   // Click outside handlers
   useEffect(() => {
@@ -290,21 +426,63 @@ export default function Navbar() {
     return () => document.removeEventListener('mousedown', handler)
   }, [notifOpen, unreadCount, markAllRead])
 
+  // Close overlays on Escape key
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setMobileMenuOpen(false)
+        setMobileSearchOpen(false)
+        setNotifOpen(false)
+        setShowResults(false)
+      }
+    }
+
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [])
+
+  // Lock body scroll when mobile overlays are open
+  useEffect(() => {
+    if (mobileMenuOpen || mobileSearchOpen) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => { document.body.style.overflow = '' }
+  }, [mobileMenuOpen, mobileSearchOpen])
+
   const handleResultClick = useCallback(() => {
+    addToSearchHistory(query)
     setShowResults(false)
     setMobileSearchOpen(false)
     setMobileMenuOpen(false)
     setQuery('')
     setResults([])
+  }, [query])
+
+  const handleClearHistory = useCallback(() => {
+    clearSearchHistory()
+    setSearchHistory([])
+  }, [])
+
+  const handleHistoryClick = useCallback((historyItem: string) => {
+    setQuery(historyItem)
+    inputRef.current?.focus()
   }, [])
 
   const NotificationPanel = () => (
-    <div className={cn(
-      "absolute right-0 top-full mt-2 bg-bushal-surface rounded-2xl border border-bushal-border shadow-2xl z-50 overflow-hidden animate-scale-in",
-      "w-[calc(100vw-5rem)] max-w-[calc(100vw-2rem)] sm:w-96",
-      "max-h-[calc(100vh-300px)]",
-      "flex flex-col"
-    )}>
+    <motion.div
+      initial={{ opacity: 0, y: 8, scale: 0.96 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: 8, scale: 0.96 }}
+      transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+      className={cn(
+        "absolute right-0 top-full mt-2 bg-bushal-surface rounded-2xl border border-bushal-border shadow-2xl z-50 overflow-hidden",
+        "w-[calc(100vw-5rem)] max-w-[calc(100vw-2rem)] sm:w-96",
+        "max-h-[calc(100vh-300px)]",
+        "flex flex-col"
+      )}
+    >
       <div className="flex items-center justify-between px-4 py-3 border-b border-bushal-border flex-shrink-0">
         <p className="text-sm font-semibold text-bushal-ink">
           {isAdmin ? 'Admin Notifications' : 'Notifications'}
@@ -377,39 +555,58 @@ export default function Navbar() {
           </div>
         )}
       </div>
-    </div>
+    </motion.div>
   )
+
+  // Calculate navbar height compression based on scroll
+  const navHeight = scrolled ? 'h-14 lg:h-16' : 'h-16 lg:h-20'
+  const logoSize = scrolled ? 'w-8 h-8' : 'w-10 h-10'
+  const logoTextSize = scrolled ? 'text-xl' : 'text-2xl'
 
   return (
     <>
       <div className="fixed top-0 left-0 right-0 z-50 pointer-events-none">
-        <nav className={cn(
-          'pointer-events-auto transition-all duration-500 ease-out',
-          scrolled
-            ? 'bg-bushal-forest/95 backdrop-blur-xl shadow-2xl shadow-bushal-forest/30'
-            : 'bg-bushal-forest'
-        )}>
-          <div className="h-[2px]" />
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center justify-between h-16 lg:h-20">
+        <motion.nav
+          className={cn(
+            'pointer-events-auto transition-all duration-300 ease-out',
+            navHeight,
+            scrolled
+              ? 'bg-bushal-forest/95 backdrop-blur-xl shadow-2xl shadow-bushal-forest/30 border-b border-white/[0.06]'
+              : 'bg-bushal-forest'
+          )}
+          initial={false}
+        >
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-full">
+            <div className="flex items-center justify-between h-full">
               {/* Logo */}
-              <Link href="/dashboard" className="flex items-center gap-3 flex-shrink-0 group">
+              <Link href="/dashboard" className="flex items-center gap-2.5 flex-shrink-0 group">
                 <div className="relative">
                   <img
                     src="/logo.png"
                     alt="Bushal"
-                    className="w-10 h-10 rounded-xl object-cover transition-all duration-300 group-hover:scale-110"
+                    className={cn(logoSize, "rounded-xl object-cover transition-all duration-300 group-hover:scale-110")}
                   />
                   <div className="absolute -inset-1 bg-bushal-copper/20 rounded-xl blur-md opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                 </div>
                 <div className="flex flex-col">
                   <span
-                    className="text-2xl font-heading font-bold tracking-wide text-white group-hover:text-bushal-copperLight transition-colors duration-300"
+                    className={cn(logoTextSize, "font-heading font-bold tracking-wide text-white group-hover:text-bushal-copperLight transition-all duration-300 leading-none")}
                     style={{ fontFamily: "'Cormorant Garamond', Georgia, serif" }}
                   >
                     Bushal
                   </span>
-                  <span className="text-[10px] uppercase tracking-widest -mt-1 text-white/60 transition-colors duration-300">Quality Delivered</span>
+                  <AnimatePresence>
+                    {!scrolled && (
+                      <motion.span
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="text-[10px] uppercase tracking-widest text-white/60 transition-colors duration-300 overflow-hidden"
+                      >
+                        Quality Delivered
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
                 </div>
               </Link>
 
@@ -430,6 +627,7 @@ export default function Navbar() {
                     onChange={(e) => setQuery(e.target.value)}
                     onFocus={() => { setSearchFocused(true); if (results.length > 0) setShowResults(true) }}
                     onBlur={() => setSearchFocused(false)}
+                    onKeyDown={handleSearchKeyDown}
                     placeholder="Search products..."
                     className={cn(
                       'relative w-full bg-white/10 text-white placeholder-white/50 pl-12 pr-12 py-3 rounded-xl border border-white/10 text-sm transition-all duration-300',
@@ -453,23 +651,67 @@ export default function Navbar() {
                       </svg>
                     </button>
                   )}
-                  <SearchDropdown
-                    results={results}
-                    query={query}
-                    showResults={showResults}
-                    searching={searching}
-                    onResultClick={handleResultClick}
-                  />
+                  
+                  {/* Search Results Dropdown with History */}
+                  <AnimatePresence>
+                    {(showResults || (searchFocused && query.length < 2 && searchHistory.length > 0)) && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -10, scale: 0.98 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -10, scale: 0.98 }}
+                        transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+                        className="absolute z-50 w-full mt-3 bg-bushal-surface rounded-2xl border border-bushal-border shadow-2xl shadow-bushal-ink/10 overflow-hidden"
+                      >
+                        {query.length < 2 && searchHistory.length > 0 ? (
+                          // Show search history
+                          <div className="p-3">
+                            <div className="flex items-center justify-between px-2 pb-2">
+                              <p className="text-xs font-semibold text-bushal-inkSoft uppercase tracking-wide">Recent Searches</p>
+                              <button
+                                onClick={handleClearHistory}
+                                className="text-xs text-bushal-copper hover:text-bushal-copperLight transition-colors"
+                              >
+                                Clear
+                              </button>
+                            </div>
+                            <div className="space-y-1">
+                              {searchHistory.slice(0, 5).map((item, idx) => (
+                                <button
+                                  key={idx}
+                                  onClick={() => handleHistoryClick(item)}
+                                  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-bushal-ivoryDeep transition-colors text-left"
+                                >
+                                  <svg className="w-4 h-4 text-bushal-inkSoft flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                  </svg>
+                                  <span className="text-sm text-bushal-ink truncate">{item}</span>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        ) : (
+                          // Show search results
+                          <SearchDropdown
+                            results={results}
+                            query={query}
+                            showResults={showResults}
+                            searching={searching}
+                            onResultClick={handleResultClick}
+                          />
+                        )}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
               </div>
 
               {/* Right Actions */}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 {/* MOBILE: Minimal top bar */}
-                <div className="flex items-center gap-1 md:hidden">
+                <div className="flex items-center gap-0.5 md:hidden">
                   <button
-                    onClick={() => { setMobileSearchOpen((v) => !v); setTimeout(() => mobileInputRef.current?.focus(), 50) }}
-                    className="p-2.5 rounded-xl transition-all duration-200 hover:scale-110 text-white/70 hover:text-white hover:bg-white/10"
+                    onClick={() => { setMobileSearchOpen(true); setTimeout(() => mobileInputRef.current?.focus(), 300) }}
+                    className="w-11 h-11 flex items-center justify-center rounded-xl transition-all duration-200 text-white/70 hover:text-white hover:bg-white/10 active:scale-95"
                     aria-label="Search"
                   >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -481,28 +723,51 @@ export default function Navbar() {
                     <div className="relative" ref={notifRef}>
                       <button
                         onClick={handleNotifToggle}
-                        className="relative p-2.5 rounded-xl transition-all duration-200 hover:scale-110 text-white/70 hover:text-white hover:bg-white/10"
+                        className="relative w-11 h-11 flex items-center justify-center rounded-xl transition-all duration-200 text-white/70 hover:text-white hover:bg-white/10 active:scale-95"
                         aria-label="Notifications"
                       >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                         </svg>
                         {unreadCount > 0 && (
-                          <span suppressHydrationWarning className="absolute -top-1 -right-1 min-w-[20px] h-5 bg-gradient-to-r from-bushal-danger to-rose-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1.5 leading-none shadow-lg shadow-rose-500/40 animate-bounce-pop">
+                          <span suppressHydrationWarning className="absolute top-1 right-1 min-w-[18px] h-[18px] bg-gradient-to-r from-bushal-danger to-rose-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-1 leading-none shadow-lg shadow-rose-500/40 animate-bounce-pop">
                             {unreadCount > 9 ? '9+' : unreadCount}
                           </span>
                         )}
                       </button>
-                      {notifOpen && <NotificationPanel />}
+                      <AnimatePresence>
+                        {notifOpen && <NotificationPanel />}
+                      </AnimatePresence>
                     </div>
+                  )}
+
+                  {/* Cart button visible on mobile */}
+                  {!isAdmin && (
+                    <button
+                      onClick={() => setCartOpen(true)}
+                      className="relative w-11 h-11 flex items-center justify-center rounded-xl transition-all duration-200 text-white/70 hover:text-white hover:bg-white/10 active:scale-95"
+                      aria-label="Cart"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13l-1.5 6h13M7 13L5.4 5M10 21a1 1 0 100-2 1 1 0 000 2zm7 0a1 1 0 100-2 1 1 0 000 2z" />
+                      </svg>
+                      {cartCount > 0 && (
+                        <span suppressHydrationWarning className={cn(
+                          'absolute top-1 right-1 min-w-[18px] h-[18px] bg-gradient-to-r from-bushal-copper to-bushal-copperLight text-white text-[9px] font-bold rounded-full flex items-center justify-center px-1 leading-none shadow-lg shadow-bushal-copper/40',
+                          cartBump && 'animate-bounce-pop'
+                        )}>
+                          {cartCount > 99 ? '99+' : cartCount}
+                        </span>
+                      )}
+                    </button>
                   )}
 
                   <button
                     onClick={() => setMobileMenuOpen((v) => !v)}
-                    className="p-2.5 rounded-xl transition-all duration-200 hover:scale-110 text-white/70 hover:text-white hover:bg-white/10"
+                    className="w-11 h-11 flex items-center justify-center rounded-xl transition-all duration-200 text-white/70 hover:text-white hover:bg-white/10 active:scale-95"
                     aria-label="Menu"
                   >
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       {mobileMenuOpen
                         ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                         : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
@@ -585,7 +850,9 @@ export default function Navbar() {
                           </span>
                         )}
                       </button>
-                      {notifOpen && <NotificationPanel />}
+                      <AnimatePresence>
+                        {notifOpen && <NotificationPanel />}
+                      </AnimatePresence>
                     </div>
                   )}
 
@@ -629,141 +896,337 @@ export default function Navbar() {
               </div>
             </div>
           </div>
-        </nav>
+        </motion.nav>
       </div>
 
-      {/* Mobile Search Overlay */}
-      {mobileSearchOpen && (
-        <div className="fixed inset-0 z-[60] bg-bushal-forest pt-20 px-4" ref={mobileSearchRef}>
-          <div className="relative max-w-2xl mx-auto">
-            <button
+      {/* Mobile Search Bottom Sheet */}
+      <AnimatePresence>
+        {mobileSearchOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
               onClick={() => { setMobileSearchOpen(false); setQuery(''); setResults([]) }}
-              className="absolute -left-2 top-1/2 -translate-y-1/2 p-2 text-white/70 hover:text-white"
-            >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-            </button>
-            <input
-              ref={mobileInputRef}
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search products..."
-              className="w-full bg-white/10 text-white placeholder-white/50 pl-12 pr-4 py-4 rounded-xl border border-white/10 text-base focus:outline-none focus:border-bushal-copper/60 focus:bg-white/15"
-              autoFocus
+              className="fixed inset-0 z-[55] bg-bushal-ink/50 backdrop-blur-sm md:hidden"
             />
-          </div>
-          {results.length > 0 && (
-            <div className="max-w-2xl mx-auto mt-4 space-y-2">
-              {results.map((result) => (
-                <Link
-                  key={result.id}
-                  href={`/product/${result.id}`}
-                  onClick={handleResultClick}
-                  className="flex items-center gap-4 p-4 bg-white/5 rounded-xl hover:bg-white/10 transition-colors"
-                >
-                  <div className="w-16 h-16 rounded-lg bg-white/10 overflow-hidden flex-shrink-0">
-                    {result.image_url ? (
-                      <img src={result.image_url} alt={result.name} className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-white/30">
-                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                      </div>
-                    )}
+            <motion.div
+              ref={mobileSearchRef}
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', stiffness: 400, damping: 36 }}
+              className="fixed inset-x-0 bottom-0 z-[60] md:hidden bg-bushal-forest rounded-t-3xl shadow-2xl flex flex-col"
+              style={{ maxHeight: '85dvh' }}
+            >
+              {/* Drag handle */}
+              <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
+                <div className="w-10 h-1 rounded-full bg-white/20" />
+              </div>
+
+              {/* Search form */}
+              <div className="px-4 pb-3 flex-shrink-0">
+                <div className="flex items-center gap-3 bg-white/10 rounded-2xl px-4 py-3 border border-white/10 focus-within:border-bushal-copper/50 focus-within:bg-white/15 transition-all">
+                  <svg className="w-5 h-5 text-white/50 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                  <input
+                    ref={mobileInputRef}
+                    type="search"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="Search products..."
+                    className="flex-1 bg-transparent text-white placeholder-white/40 text-base outline-none"
+                    autoComplete="off"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    enterKeyHint="search"
+                  />
+                  {searching && (
+                    <div className="w-5 h-5 border-2 border-bushal-copper/60 border-t-transparent rounded-full animate-spin flex-shrink-0" />
+                  )}
+                  {query && !searching && (
+                    <button
+                      onClick={() => { setQuery(''); setResults([]); mobileInputRef.current?.focus() }}
+                      className="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center flex-shrink-0"
+                    >
+                      <svg className="w-3.5 h-3.5 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Results or History */}
+              <div className="flex-1 overflow-y-auto overscroll-contain px-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
+                {query.length < 2 && searchHistory.length > 0 ? (
+                  // Show search history
+                  <div>
+                    <div className="flex items-center justify-between px-1 pb-3">
+                      <p className="text-xs font-semibold text-white/40 uppercase tracking-wide">Recent Searches</p>
+                      <button
+                        onClick={handleClearHistory}
+                        className="text-xs text-bushal-copper hover:text-bushal-copperLight transition-colors"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                    <div className="space-y-1">
+                      {searchHistory.map((item, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => handleHistoryClick(item)}
+                          className="w-full flex items-center gap-3 px-3 py-3 rounded-xl active:bg-white/10 transition-colors text-left"
+                        >
+                          <svg className="w-5 h-5 text-white/30 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <span className="text-sm text-white/80 truncate">{item}</span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-white font-semibold truncate">{result.name}</p>
-                    <p className="text-white/60 text-sm">৳{result.price.toLocaleString()}</p>
+                ) : results.length > 0 ? (
+                  // Show search results
+                  <div className="space-y-1">
+                    <p className="text-xs font-semibold text-white/40 uppercase tracking-wide px-1 pb-3">
+                      {results.length} result{results.length !== 1 ? 's' : ''}
+                    </p>
+                    {results.map((result) => (
+                      <Link
+                        key={result.id}
+                        href={`/product/${result.id}`}
+                        onClick={handleResultClick}
+                        className="flex items-center gap-4 p-3 rounded-2xl active:bg-white/10 transition-colors"
+                      >
+                        <div className="w-14 h-14 rounded-xl overflow-hidden bg-white/10 border border-white/10 flex-shrink-0">
+                          {result.image_url ? (
+                            <img src={result.image_url} alt={result.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-white/30">
+                              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                              </svg>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-white truncate">{result.name}</p>
+                          <p className="text-bushal-copperGlow text-sm font-bold mt-0.5">৳{result.price.toLocaleString()}</p>
+                        </div>
+                        {!result.in_stock && (
+                          <span className="text-[10px] font-bold text-bushal-danger bg-bushal-danger/20 px-2 py-1 rounded-lg flex-shrink-0">
+                            Sold out
+                          </span>
+                        )}
+                      </Link>
+                    ))}
+                    <button
+                      onClick={() => {
+                        if (query.trim()) {
+                          addToSearchHistory(query)
+                          window.location.href = `/dashboard?q=${encodeURIComponent(query)}`
+                        }
+                      }}
+                      className="w-full mt-2 py-4 text-sm font-semibold text-bushal-copperGlow border-t border-white/10 active:bg-white/5 transition-colors"
+                    >
+                      See all results for "{query}" →
+                    </button>
                   </div>
-                </Link>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+                ) : query.length >= 2 && !searching ? (
+                  <div className="py-12 text-center">
+                    <p className="text-white/50 text-sm">No results for "{query}"</p>
+                    <p className="text-white/30 text-xs mt-1">Try different keywords</p>
+                  </div>
+                ) : query.length < 2 ? (
+                  <div className="py-12 text-center">
+                    <p className="text-white/30 text-sm">Type at least 2 characters to search</p>
+                  </div>
+                ) : null}
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* Mobile Menu Overlay */}
-      {mobileMenuOpen && (
-        <div className="fixed inset-0 z-[60] bg-bushal-forest pt-20 px-4">
-          <div className="max-w-sm mx-auto space-y-2">
-            {!isAdmin && (
-              <>
-                <Link
-                  href="/dashboard"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="block p-4 text-white/90 hover:text-white hover:bg-white/5 rounded-xl transition-colors"
-                >
-                  <span className="font-medium">Home</span>
-                </Link>
-                <Link
-                  href="/orders"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="block p-4 text-white/90 hover:text-white hover:bg-white/5 rounded-xl transition-colors"
-                >
-                  <span className="font-medium">My Orders</span>
-                </Link>
-                <Link
-                  href="/wishlist"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="block p-4 text-white/90 hover:text-white hover:bg-white/5 rounded-xl transition-colors"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium">Wishlist</span>
-                    {wishlistCount > 0 && (
-                      <span className="bg-bushal-copper text-white text-xs font-bold px-2 py-0.5 rounded-full">
-                        {wishlistCount}
-                      </span>
-                    )}
+      <AnimatePresence>
+        {mobileMenuOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              onClick={() => setMobileMenuOpen(false)}
+              className="fixed inset-0 z-[55] bg-bushal-ink/60 backdrop-blur-sm md:hidden"
+            />
+            <motion.div
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', stiffness: 400, damping: 36 }}
+              className="fixed top-0 right-0 bottom-0 z-[60] w-80 max-w-[85vw] bg-bushal-forest flex flex-col md:hidden shadow-2xl"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between px-5 pt-6 pb-4 border-b border-white/[0.06]">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-bushal-copper to-bushal-copperLight flex items-center justify-center shadow-lg shadow-bushal-copper/20">
+                    <span className="text-white font-bold text-base" style={{ fontFamily: "'Cormorant Garamond', serif" }}>B</span>
                   </div>
-                </Link>
-              </>
-            )}
-            {user ? (
-              <>
-                <Link
-                  href={isAdmin ? '/admin' : '/profile'}
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="block p-4 text-white/90 hover:text-white hover:bg-white/5 rounded-xl transition-colors"
-                >
-                  <span className="font-medium">{isAdmin ? 'Admin Dashboard' : 'Profile'}</span>
-                </Link>
+                  <div>
+                    <p className="text-base font-bold text-white" style={{ fontFamily: "'Cormorant Garamond', serif" }}>Bushal</p>
+                    <p className="text-[9px] text-bushal-copperGlow font-semibold uppercase tracking-wider">Menu</p>
+                  </div>
+                </div>
                 <button
-                  onClick={() => { signOut(); setMobileMenuOpen(false) }}
-                  className="w-full text-left p-4 text-white/90 hover:text-white hover:bg-white/5 rounded-xl transition-colors"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="w-10 h-10 flex items-center justify-center rounded-xl text-white/40 hover:text-white hover:bg-white/10 transition-all"
                 >
-                  <span className="font-medium">Sign Out</span>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
                 </button>
-              </>
-            ) : (
-              <>
-                <Link
-                  href="/login"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="block p-4 text-white/90 hover:text-white hover:bg-white/5 rounded-xl transition-colors"
-                >
-                  <span className="font-medium">Sign In</span>
-                </Link>
-                <Link
-                  href="/register"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="block p-4 bg-bushal-copper text-white rounded-xl text-center font-semibold"
-                >
-                  <span>Create Account</span>
-                </Link>
-              </>
-            )}
-          </div>
-        </div>
-      )}
+              </div>
 
-            {/* Cart Drawer - Fixed: Added isOpen prop */}
-      <CartDrawer 
-        isOpen={cartOpen} 
-        onClose={() => setCartOpen(false)} 
-      />
+              {/* Menu Items */}
+              <nav className="flex-1 px-3 py-4 overflow-y-auto no-scrollbar">
+                <div className="space-y-1">
+                  {!isAdmin && (
+                    <>
+                      {[
+                        { href: '/dashboard', label: 'Home', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
+                        { href: '/orders', label: 'My Orders', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2' },
+                        { href: '/wishlist', label: 'Wishlist', icon: 'M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z', badge: wishlistCount },
+                      ].map((item, i) => (
+                        <motion.div
+                          key={item.href}
+                          initial={{ opacity: 0, x: 20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: i * 0.05, duration: 0.3 }}
+                        >
+                          <Link
+                            href={item.href}
+                            onClick={() => setMobileMenuOpen(false)}
+                            className="flex items-center gap-3 px-4 py-3 rounded-xl text-white/80 hover:text-white hover:bg-white/[0.06] transition-all active:scale-[0.98]"
+                          >
+                            <svg className="w-5 h-5 text-white/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d={item.icon} />
+                            </svg>
+                            <span className="font-medium flex-1">{item.label}</span>
+                            {item.badge && item.badge > 0 && (
+                              <span className="min-w-[20px] h-5 bg-bushal-copper text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1.5">
+                                {item.badge > 9 ? '9+' : item.badge}
+                              </span>
+                            )}
+                          </Link>
+                        </motion.div>
+                      ))}
+                    </>
+                  )}
+                  {user ? (
+                    <>
+                      <motion.div
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.15, duration: 0.3 }}
+                      >
+                        <Link
+                          href={isAdmin ? '/admin' : '/profile'}
+                          onClick={() => setMobileMenuOpen(false)}
+                          className="flex items-center gap-3 px-4 py-3 rounded-xl text-white/80 hover:text-white hover:bg-white/[0.06] transition-all active:scale-[0.98]"
+                        >
+                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-bushal-copper/30 to-bushal-copperLight/30 border border-bushal-copper/50 flex items-center justify-center">
+                            <svg className="w-4 h-4 text-bushal-copper" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                            </svg>
+                          </div>
+                          <span className="font-medium">{isAdmin ? 'Admin Dashboard' : 'Profile'}</span>
+                        </Link>
+                      </motion.div>
+                      <motion.div
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.2, duration: 0.3 }}
+                      >
+                        <button
+                          onClick={() => { signOut(); setMobileMenuOpen(false) }}
+                          className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-rose-400/80 hover:text-rose-400 hover:bg-rose-400/10 transition-all active:scale-[0.98]"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                          </svg>
+                          <span className="font-medium">Sign Out</span>
+                        </button>
+                      </motion.div>
+                    </>
+                  ) : (
+                    <>
+                      <motion.div
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.15, duration: 0.3 }}
+                      >
+                        <Link
+                          href="/login"
+                          onClick={() => setMobileMenuOpen(false)}
+                          className="flex items-center gap-3 px-4 py-3 rounded-xl text-white/80 hover:text-white hover:bg-white/[0.06] transition-all active:scale-[0.98]"
+                        >
+                          <svg className="w-5 h-5 text-white/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                          </svg>
+                          <span className="font-medium">Sign In</span>
+                        </Link>
+                      </motion.div>
+                      <motion.div
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.2, duration: 0.3 }}
+                        className="px-3 pt-2"
+                      >
+                        <Link
+                          href="/register"
+                          onClick={() => setMobileMenuOpen(false)}
+                          className="flex items-center justify-center gap-2 w-full py-3 bg-bushal-copper text-white rounded-xl font-semibold active:scale-[0.98] transition-transform"
+                        >
+                          Create Account
+                        </Link>
+                      </motion.div>
+                    </>
+                  )}
+                </div>
+              </nav>
+
+              {/* Footer */}
+              <div className="px-5 py-4 border-t border-white/[0.06] pb-[calc(env(safe-area-inset-bottom)+1rem)]">
+                <div className="flex items-center gap-3 text-[10px] text-white/30">
+                  <span className="flex items-center gap-1">
+                    <svg className="w-3 h-3 text-bushal-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                    SSL Secured
+                  </span>
+                  <span className="w-1 h-1 rounded-full bg-white/20" />
+                  <span className="flex items-center gap-1">
+                    <svg className="w-3 h-3 text-bushal-copper" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    bKash Verified
+                  </span>
+                  <span className="w-1 h-1 rounded-full bg-white/20" />
+                  <span>🇧 Bangladesh</span>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Cart Drawer */}
+      <CartDrawer isOpen={cartOpen} onClose={() => setCartOpen(false)} />
     </>
   )
 }

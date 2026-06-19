@@ -1,5 +1,4 @@
 // app/api/products/graph-similar/[productId]/route.ts
-
 /**
  * ============================================================================
  * GRAPH-BASED SIMILAR PRODUCTS API ENDPOINT
@@ -53,9 +52,9 @@ import {
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 interface RequestParams {
-  params: {
+  params: Promise<{
     productId: string
-  }
+  }>
 }
 
 interface GraphRecommendation {
@@ -202,8 +201,10 @@ export async function GET(
   { params }: RequestParams
 ) {
   try {
+    // FIX: Await params in Next.js 15
+    const { productId } = await params
+
     // 1. Validate product ID
-    const productId = params.productId
     if (!productId) {
       return NextResponse.json(
         { error: 'Product ID is required' },
@@ -361,7 +362,7 @@ export async function GET(
     return NextResponse.json(
       {
         success: false,
-        productId: params.productId ?? '',
+        productId: '',
         recommendations: [],
         totalProductsAnalyzed: 0,
         totalEdges: 0,

@@ -8,7 +8,6 @@ import {
 import RFMMatrix, { type RFMData } from './analytics/RFMMatrix'
 import CohortHeatmap, { type CohortRow } from './analytics/CohortHeatmap'
 import PredictiveInsights, { type CLVData, type ForecastData } from './analytics/PredictiveInsights'
-// FIX: Import the new ML Performance panel and its types
 import MLPerformancePanel, { type MLAccuracyRecord } from './analytics/MLPerformancePanel'
 import { formatPrice } from '@/app/lib/utils/formatPrice'
 
@@ -97,9 +96,9 @@ interface Props {
   cohortData: CohortRow[] | null
   clvData: CLVData | null
   advancedForecast: ForecastData | null
+  mlAccuracyData: MLAccuracyRecord[]
 }
 
-// FIX: Added the new 'ml-performance' tab
 const TABS = [
   { id: 'overview', label: 'Overview & Revenue' },
   { id: 'rfm', label: 'Customer Segments' },
@@ -108,14 +107,16 @@ const TABS = [
   { id: 'ml-performance', label: 'AI Model Trust' },
 ]
 
+// FIX: Updated RFM description to reflect "Anomalous" instead of "Fake Orders"
+// and clarified that segmentation is behavioral, not a fraud detector.
 const TAB_DESCRIPTIONS: Record<string, { what: string; how: string }> = {
   overview: {
     what: "Provides a high-level snapshot of store performance, including daily revenue, profit trends, and operational health.",
     how: "Revenue and profit are calculated by aggregating fulfilled orders and subtracting COGS (cost of goods). Operational metrics track inventory turnover and fulfillment speed."
   },
   rfm: {
-    what: "Segments customers using Recency, Frequency, and Monetary (RFM) analysis to identify key customer tiers.",
-    how: "Customers are scored (1-5) based on their last purchase date, order count, and total spend. They are then grouped into actionable segments like 'Champions', 'Loyal', or 'At Risk'."
+    what: "Segments customers using Recency, Frequency, and Monetary (RFM) analysis to identify key behavioral tiers.",
+    how: "Customers are scored (1-5) based on their last purchase date, order count, and total spend. They are grouped into actionable segments like 'Champions', 'Loyal', 'At Risk', and 'Anomalous' (statistical outliers requiring review)."
   },
   cohort: {
     what: "Tracks customer retention over time by grouping users by their first purchase month (cohort).",
@@ -125,7 +126,6 @@ const TAB_DESCRIPTIONS: Record<string, { what: string; how: string }> = {
     what: "Forecasts future demand and Customer Lifetime Value (CLV) using predictive algorithms.",
     how: "Demand is forecasted via a Weighted Moving Average (WMA) to react quickly to recent trends. CLV is predicted using historical purchase frequency, average order value, and customer lifespan."
   },
-  // FIX: Added description for the new AI Model Trust tab
   'ml-performance': {
     what: "Displays the real-time accuracy and health of the AI models powering your store's intelligence features.",
     how: "Fetches evaluation metrics (MAPE, Silhouette Score, Lift) logged by the Python ML microservice. This tells you exactly how much you can 'trust' the AI's predictions and recommendations."
@@ -143,37 +143,15 @@ export default function AdminAnalyticsClient({
   cohortData,
   clvData,
   advancedForecast,
+  mlAccuracyData,
 }: Props) {
   const [activeTab, setActiveTab] = useState('overview')
   const [chartData, setChartData] = useState<Array<{ date: string; Revenue: number; Profit: number }>>([])
-  
-  // NEW: State for ML Performance data
-  const [mlData, setMlData] = useState<MLAccuracyRecord[]>([])
-  const [mlLoading, setMlLoading] = useState(true)
-
-  // NEW: Fetch ML Accuracy data from the new API route
-  useEffect(() => {
-    const fetchMlData = async () => {
-      try {
-        const res = await fetch('/api/admin/ml-accuracy')
-        if (res.ok) {
-          const data = await res.json()
-          setMlData(data)
-        }
-      } catch (error) {
-        console.error('Failed to fetch ML accuracy data:', error)
-      } finally {
-        setMlLoading(false)
-      }
-    }
-    fetchMlData()
-  }, [])
 
   // Debug and transform data
   useEffect(() => {
     console.log('📊 Daily Revenue Raw Data:', dailyRevenue)
     console.log('📊 Summary Data:', summary)
-
     if (dailyRevenue && Array.isArray(dailyRevenue) && dailyRevenue.length > 0) {
       const transformed = dailyRevenue.map(d => {
         let dateStr = d.date
@@ -358,23 +336,16 @@ export default function AdminAnalyticsClient({
       )}
 
       {activeTab === 'rfm' && (rfmData ? <RFMMatrix data={rfmData} /> : <EmptyState msg="No RFM data available." />)}
-      
       {activeTab === 'cohort' && (cohortData ? <CohortHeatmap data={cohortData} /> : <EmptyState msg="No cohort data available." />)}
-      
       {activeTab === 'predictive' && (clvData && advancedForecast ? (
         <PredictiveInsights clvData={clvData} forecastData={advancedForecast} />
       ) : <EmptyState msg="No predictive data available." />)}
 
-      {/* NEW: ML Performance Tab Content */}
+      {/* ML Performance Tab Content */}
       {activeTab === 'ml-performance' && (
         <div className="space-y-6">
-          {mlLoading ? (
-            <div className="flex items-center justify-center py-12 bg-bushal-surface rounded-2xl border border-bushal-border">
-              <div className="w-8 h-8 border-2 border-bushal-copper border-t-transparent rounded-full animate-spin" />
-              <span className="ml-3 text-sm text-bushal-inkSoft">Loading AI model metrics...</span>
-            </div>
-          ) : mlData.length > 0 ? (
-            <MLPerformancePanel data={mlData} />
+          {mlAccuracyData.length > 0 ? (
+            <MLPerformancePanel data={mlAccuracyData} />
           ) : (
             <EmptyState msg="No AI model evaluations recorded yet. Run the ML pipeline to generate metrics." />
           )}

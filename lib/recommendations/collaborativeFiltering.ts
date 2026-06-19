@@ -1,8 +1,6 @@
 // lib/recommendations/collaborativeFiltering.ts
-
 /**
-  * COLLABORATIVE FILTERING RECOMMENDATION ENGINE
-
+ * COLLABORATIVE FILTERING RECOMMENDATION ENGINE
  * This module implements a hybrid collaborative filtering system that combines:
  * 1. User-Based Collaborative Filtering with Cosine Similarity
  * 2. K-Nearest Neighbors (KNN) for finding similar users
@@ -16,7 +14,7 @@
  * - Cosine Similarity: cos(θ) = (A · B) / (||A|| × ||B||)
  * - KNN: Find K users with highest similarity scores
  * - SVD: M = U × Σ × V^T (decomposes user-item matrix into latent factors)
-*/
+ */
 
 // ─── Types & Interfaces ─────────────────────────────────────────────────────
 
@@ -36,8 +34,8 @@ export interface ProductInfo {
   image_url: string | null
   images: string[]
   in_stock: boolean
-created_at?: string  // Add this optional property
-  updated_at?: string  // Add this optional property
+  created_at?: string
+  updated_at?: string
 }
 
 export interface Recommendation {
@@ -144,11 +142,31 @@ export function cosineSimilarity(userA: number[], userB: number[]): number {
 
 /**
  * Calculate adjusted cosine similarity (subtracts user mean ratings)
- * This accounts for different users having different baseline purchase frequencies
+ * This accounts for different users having different baseline purchase frequencies.
+ * 
+ * BUG FIX: Mean is now calculated over NON-ZERO entries only.
+ * In sparse e-commerce matrices, most entries are zero. Including zeros
+ * in the mean calculation makes the mean close to zero for almost all users,
+ * rendering the centering step useless. We only average actual purchases.
  */
 export function adjustedCosineSimilarity(userA: number[], userB: number[]): number {
-  const meanA = userA.reduce((s, v) => s + v, 0) / userA.length
-  const meanB = userB.reduce((s, v) => s + v, 0) / userB.length
+  // Calculate mean over non-zero entries only
+  let sumA = 0, countA = 0
+  let sumB = 0, countB = 0
+  
+  for (let i = 0; i < userA.length; i++) {
+    if (userA[i] > 0) {
+      sumA += userA[i]
+      countA++
+    }
+    if (userB[i] > 0) {
+      sumB += userB[i]
+      countB++
+    }
+  }
+  
+  const meanA = countA > 0 ? sumA / countA : 0
+  const meanB = countB > 0 ? sumB / countB : 0
   
   const centeredA = userA.map(v => v - meanA)
   const centeredB = userB.map(v => v - meanB)
@@ -214,8 +232,13 @@ export function findKNNSimilarUsers(
 }
 
 /**
- * Weighted KNN that applies distance-based weighting
- * Closer neighbors have more influence on recommendations
+ * Weighted KNN that applies inverse distance weighting.
+ * Closer neighbors have exponentially more influence on recommendations.
+ * 
+ * BUG FIX: Replaced incorrect formula similarity * (1/(1+(1-similarity)))
+ * with proper inverse distance weighting: 1 / (1 - similarity + ε).
+ * The old formula compressed weights (0.9→0.82, 0.5→0.33 giving only 2.5x ratio).
+ * The correct formula gives proper amplification (0.9→10, 0.5→2 giving 5x ratio).
  */
 export function findWeightedKNNSimilarUsers(
   targetUserId: string,
@@ -223,18 +246,19 @@ export function findWeightedKNNSimilarUsers(
   k: number = 5
 ): UserSimilarity[] {
   const neighbors = findKNNSimilarUsers(targetUserId, userVectors, k)
+  const EPSILON = 0.001 // Prevent division by zero when similarity = 1.0
   
   // Apply inverse distance weighting
   return neighbors.map(neighbor => ({
     ...neighbor,
-    similarity: neighbor.similarity * (1 / (1 + (1 - neighbor.similarity))),
+    similarity: 1 / (1 - neighbor.similarity + EPSILON),
   }))
 }
 
 // ─── 3. SINGULAR VALUE DECOMPOSITION (SVD) ────────────────────────────────
 
 /**
- * Simplified SVD implementation using Power Iteration method.
+ * Simplified SVD implementation using Power Iteration method WITH Gram-Schmidt.
  * 
  * For a user-item matrix M (m×n), SVD decomposes it into:
  * M = U × Σ × V^T
@@ -244,8 +268,11 @@ export function findWeightedKNNSimilarUsers(
  * - Σ (k×k): Diagonal matrix of singular values (feature importance)
  * - V^T (k×n): Product latent factors (product characteristics)
  * 
- * This implementation uses iterative approximation suitable for
- * sparse e-commerce matrices.
+ * BUG FIX: Added Gram-Schmidt orthogonalization after each power iteration.
+ * Without orthogonalization, all k columns of U/V converge to the SAME
+ * dominant eigenvector. The result is effectively a rank-1 approximation
+ * repeated k times, regardless of how large k is. Gram-Schmidt ensures
+ * each latent factor captures independent variance in the data.
  * 
  * @param matrix - User-item interaction matrix (m×n)
  * @param k - Number of latent factors (default: 10)
@@ -282,9 +309,33 @@ export function svdDecomposition(
     // Update U: U = M × V
     const U_new = matrixMultiply(matrix, V)
     
-    // Normalize U columns
+    // Normalize U columns AND apply Gram-Schmidt orthogonalization
     for (let j = 0; j < actualK; j++) {
+      // First normalize column j
       let norm = 0
+      for (let i = 0; i < m; i++) {
+        norm += U_new[i][j] * U_new[i][j]
+      }
+      norm = Math.sqrt(norm)
+      if (norm > 0) {
+        for (let i = 0; i < m; i++) {
+          U_new[i][j] /= norm
+        }
+      }
+      
+      // Gram-Schmidt: subtract projections onto previous orthogonal vectors
+      for (let prev = 0; prev < j; prev++) {
+        let dotProd = 0
+        for (let i = 0; i < m; i++) {
+          dotProd += U_new[i][j] * U_new[i][prev]
+        }
+        for (let i = 0; i < m; i++) {
+          U_new[i][j] -= dotProd * U_new[i][prev]
+        }
+      }
+      
+      // Re-normalize after orthogonalization
+      norm = 0
       for (let i = 0; i < m; i++) {
         norm += U_new[i][j] * U_new[i][j]
       }
@@ -300,9 +351,35 @@ export function svdDecomposition(
     const M_T = transpose(matrix)
     const V_new = matrixMultiply(M_T, U_new)
     
-    // Normalize V columns and compute singular values
+    // Normalize V columns, compute singular values, AND apply Gram-Schmidt
     for (let j = 0; j < actualK; j++) {
+      // First normalize column j
       let norm = 0
+      for (let i = 0; i < n; i++) {
+        norm += V_new[i][j] * V_new[i][j]
+      }
+      norm = Math.sqrt(norm)
+      Sigma[j] = norm
+      
+      if (norm > 0) {
+        for (let i = 0; i < n; i++) {
+          V_new[i][j] /= norm
+        }
+      }
+      
+      // Gram-Schmidt: subtract projections onto previous orthogonal vectors
+      for (let prev = 0; prev < j; prev++) {
+        let dotProd = 0
+        for (let i = 0; i < n; i++) {
+          dotProd += V_new[i][j] * V_new[i][prev]
+        }
+        for (let i = 0; i < n; i++) {
+          V_new[i][j] -= dotProd * V_new[i][prev]
+        }
+      }
+      
+      // Re-normalize after orthogonalization
+      norm = 0
       for (let i = 0; i < n; i++) {
         norm += V_new[i][j] * V_new[i][j]
       }

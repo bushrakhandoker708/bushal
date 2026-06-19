@@ -4,9 +4,9 @@
 @tailwind utilities;
 
 /* ─────────────────────────────────────────────────────────────
- BUSHAL PREMIUM THEME VARIABLES
-Ensures consistent luxury styling across all components.
-────────────────────────────────────────────────────────────── */
+   BUSHAL PREMIUM THEME VARIABLES
+   Ensures consistent luxury styling across all components.
+   ───────────────────────────────────────────────────────────── */
 :root {
   --bushal-forest: #1a362d;
   --bushal-forestMid: #2d5a42;
@@ -29,6 +29,12 @@ Ensures consistent luxury styling across all components.
   --bushal-successBg: #ecfdf5;
   --bushal-dangerBg: #fef2f2;
   --bushal-warningBg: #fffbeb;
+
+  /* Safe Area Variables with fallbacks for browsers that don't support env() */
+  --sat: env(safe-area-inset-top, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
 }
 
 @layer base {
@@ -36,33 +42,99 @@ Ensures consistent luxury styling across all components.
     /* Prevents iOS Safari tap highlight & improves mobile feel */
     -webkit-tap-highlight-color: transparent;
     scroll-behavior: smooth;
+    /* Prevent iOS text size adjust after orientation change */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
   }
+
   body {
     @apply bg-bushal-ivory text-bushal-ink antialiased;
     /* Respect device safe areas (notches, home indicators) */
     padding-bottom: env(safe-area-inset-bottom, 0px);
     /* Use dynamic viewport height to prevent mobile browser URL bar cutoff */
     min-height: 100dvh;
+    /* Prevent overscroll bounce on iOS */
+    overscroll-behavior-y: contain;
   }
+
+  /* ─── iOS Input Zoom Prevention ────────────────────────────────
+     iOS Safari auto-zooms when focusing inputs with font-size < 16px.
+     This rule ensures all form inputs meet the 16px minimum to prevent
+     the jarring zoom behavior on iPhone/iPad.
+     ─────────────────────────────────────────────────────────────── */
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+
+  /* Restore smaller font size on desktop where zoom isn't an issue */
+  @media (min-width: 768px) {
+    input,
+    select,
+    textarea {
+      font-size: inherit !important;
+    }
+  }
+
   /* Mobile-first touch targets (minimum 44x44px for accessibility) */
-  button, [role="button"], a, input, select, textarea {
-    @apply touch-manipulation cursor-pointer;
+  button,
+  [role="button"],
+  a,
+  input,
+  select,
+  textarea {
+    @apply touch-manipulation;
+  }
+
+  /* Ensure interactive elements have proper cursor on desktop */
+  @media (pointer: fine) {
+    button,
+    [role="button"],
+    a {
+      cursor: pointer;
+    }
   }
 }
 
 @layer components {
-  /*  FIX: Mobile Safe Padding for Bottom Nav / Sticky Elements */
+  /* ─── Mobile Safe Padding Utilities ────────────────────────────
+     These handle the combination of fixed bottom navigation bars
+     and device safe areas (iPhone home indicator, etc.)
+     ─────────────────────────────────────────────────────────────── */
   .pb-mobile-safe {
     padding-bottom: calc(5rem + env(safe-area-inset-bottom, 0px));
   }
 
-  /* 📱 FIX: Notification Panel Scrollable Area */
+  .pt-mobile-safe {
+    padding-top: calc(4rem + env(safe-area-inset-top, 0px));
+  }
+
+  .bottom-mobile-safe {
+    bottom: calc(env(safe-area-inset-bottom, 0px));
+  }
+
+  .top-mobile-safe {
+    top: calc(env(safe-area-inset-top, 0px));
+  }
+
+  /* Full safe area padding (all sides) */
+  .safe-area-inset {
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    padding-left: env(safe-area-inset-left, 0px);
+  }
+
+  /* ─── Notification Panel Scrollable Area ─────────────────────── */
   .notif-scroll-area {
     max-height: 60dvh;
     overflow-y: auto;
+    /* Smooth scrolling on iOS */
+    -webkit-overflow-scrolling: touch;
   }
 
-  /* Hide native scrollbars but keep functionality */
+  /* ─── Hide Native Scrollbars ─────────────────────────────────── */
   .no-scrollbar::-webkit-scrollbar {
     display: none;
   }
@@ -71,22 +143,41 @@ Ensures consistent luxury styling across all components.
     scrollbar-width: none;
   }
 
-  /* Premium Input Focus Ring */
+  /* ─── Premium Input Focus Ring ───────────────────────────────── */
   .input-luxury {
     @apply border border-bushal-border rounded-xl bg-bushal-surface px-4 py-2.5
-    text-sm text-bushal-ink placeholder-bushal-inkSoft/60
-    transition-all duration-200 focus:outline-none focus:border-bushal-copper focus:ring-2 focus:ring-bushal-copper/20;
+           text-bushal-ink placeholder-bushal-inkSoft/60
+           transition-all duration-200
+           focus:outline-none focus:border-bushal-copper focus:ring-2 focus:ring-bushal-copper/20;
   }
 
-  /* Subtle Card Hover Lift */
+  /* ─── Subtle Card Hover Lift ─────────────────────────────────── */
   .card-hover {
     @apply transition-all duration-300 hover:-translate-y-0.5 hover:shadow-cardHover;
   }
 
-  /* ──────────────────────────────────────────────────────────────
-     🎨 PREMIUM BUTTON CLASSES
+  /* ─── Touch-Friendly Button Base ───────────────────────────────
+     Ensures all buttons meet minimum 44x44px touch target size
+     and have appropriate active states for mobile.
+     ─────────────────────────────────────────────────────────────── */
+  .touch-button {
+    min-height: 44px;
+    min-width: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+  }
+
+  .touch-button:active {
+    transform: scale(0.97);
+    transition: transform 0.1s ease;
+  }
+
+  /* ─── Premium Button Classes ───────────────────────────────────
      Fixes invisible buttons across the app (Cart, Checkout, Forms).
-     ────────────────────────────────────────────────────────────── */
+     ─────────────────────────────────────────────────────────────── */
   .btn-copper {
     background: linear-gradient(135deg, #b87333 0%, #d49a5a 100%);
     color: #ffffff;
@@ -94,18 +185,22 @@ Ensures consistent luxury styling across all components.
     border-radius: 0.75rem;
     padding: 0.625rem 1.25rem;
     transition: all 0.2s ease;
-    box-shadow: 0 4px 6px -1px rgba(184, 115, 51, 0.2), 0 2px 4px -1px rgba(184, 115, 51, 0.1);
+    box-shadow: 0 4px 6px -1px rgba(184, 115, 51, 0.2),
+                0 2px 4px -1px rgba(184, 115, 51, 0.1);
     border: none;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
+    min-height: 44px; /* Touch target */
+    -webkit-tap-highlight-color: transparent;
   }
 
   .btn-copper:hover {
     background: linear-gradient(135deg, #d49a5a 0%, #b87333 100%);
     transform: translateY(-1px);
-    box-shadow: 0 10px 15px -3px rgba(184, 115, 51, 0.3), 0 4px 6px -2px rgba(184, 115, 51, 0.15);
+    box-shadow: 0 10px 15px -3px rgba(184, 115, 51, 0.3),
+                0 4px 6px -2px rgba(184, 115, 51, 0.15);
   }
 
   .btn-copper:active {
@@ -126,18 +221,22 @@ Ensures consistent luxury styling across all components.
     border-radius: 0.75rem;
     padding: 0.625rem 1.25rem;
     transition: all 0.2s ease;
-    box-shadow: 0 4px 6px -1px rgba(26, 54, 45, 0.2), 0 2px 4px -1px rgba(26, 54, 45, 0.1);
+    box-shadow: 0 4px 6px -1px rgba(26, 54, 45, 0.2),
+                0 2px 4px -1px rgba(26, 54, 45, 0.1);
     border: none;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
+    min-height: 44px; /* Touch target */
+    -webkit-tap-highlight-color: transparent;
   }
 
   .btn-forest:hover {
     background: linear-gradient(135deg, #2d5a42 0%, #1a362d 100%);
     transform: translateY(-1px);
-    box-shadow: 0 10px 15px -3px rgba(26, 54, 45, 0.3), 0 4px 6px -2px rgba(26, 54, 45, 0.15);
+    box-shadow: 0 10px 15px -3px rgba(26, 54, 45, 0.3),
+                0 4px 6px -2px rgba(26, 54, 45, 0.15);
   }
 
   .btn-forest:active {
@@ -150,10 +249,29 @@ Ensures consistent luxury styling across all components.
     transform: none;
     box-shadow: none;
   }
+
+  /* ─── Mobile Bottom Sheet ──────────────────────────────────────
+     Reusable class for bottom sheet overlays (search, filters, etc.)
+     ─────────────────────────────────────────────────────────────── */
+  .bottom-sheet {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 50;
+    background: var(--bushal-surface);
+    border-top-left-radius: 1.5rem;
+    border-top-right-radius: 1.5rem;
+    box-shadow: 0 -8px 40px rgba(27, 58, 45, 0.16);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    max-height: 90dvh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
 }
 
 @layer utilities {
-  /* Smooth Fade & Scale Animations for Mobile Interactions */
+  /* ─── Smooth Fade & Scale Animations ─────────────────────────── */
   @keyframes fade-in-up {
     from { opacity: 0; transform: translateY(12px); }
     to { opacity: 1; transform: translateY(0); }
@@ -178,8 +296,119 @@ Ensures consistent luxury styling across all components.
     animation: bounce-pop 0.4s ease-in-out;
   }
 
-  /* Clamp typography for consistent scaling across mobile & desktop */
-  .text-clamp-sm { font-size: clamp(0.75rem, 2vw, 0.875rem); }
-  .text-clamp-base { font-size: clamp(0.875rem, 2.5vw, 1rem); }
-  .text-clamp-lg { font-size: clamp(1rem, 3vw, 1.25rem); }
+  /* ─── Mobile-Only Utilities ──────────────────────────────────── */
+  @media (max-width: 767px) {
+    /* Hide on mobile */
+    .hidden-mobile {
+      display: none !important;
+    }
+
+    /* Larger touch targets on mobile */
+    .touch-target-mobile {
+      min-height: 44px;
+      min-width: 44px;
+    }
+  }
+
+  /* Desktop-only utilities */
+  @media (min-width: 768px) {
+    .hidden-desktop {
+      display: none !important;
+    }
+  }
+
+  /* ─── Dynamic Viewport Height ──────────────────────────────────
+     Prevents layout shift when mobile browser URL bar appears/disappears.
+     Use `h-dvh` instead of `h-screen` for full-height containers.
+     ─────────────────────────────────────────────────────────────── */
+  .h-dvh {
+    height: 100dvh;
+  }
+
+  .min-h-dvh {
+    min-height: 100dvh;
+  }
+
+  .max-h-dvh {
+    max-height: 100dvh;
+  }
+
+  /* ─── Clamp Typography ─────────────────────────────────────────
+     Consistent scaling across mobile & desktop.
+     ─────────────────────────────────────────────────────────────── */
+  .text-clamp-sm {
+    font-size: clamp(0.75rem, 2vw, 0.875rem);
+  }
+  .text-clamp-base {
+    font-size: clamp(0.875rem, 2.5vw, 1rem);
+  }
+  .text-clamp-lg {
+    font-size: clamp(1rem, 3vw, 1.25rem);
+  }
+
+  /* ─── Safe Area Padding Utilities ──────────────────────────────
+     Use these to add padding that respects device notches.
+     ─────────────────────────────────────────────────────────────── */
+  .pt-safe { padding-top: env(safe-area-inset-top, 0px); }
+  .pr-safe { padding-right: env(safe-area-inset-right, 0px); }
+  .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .pl-safe { padding-left: env(safe-area-inset-left, 0px); }
+
+  .px-safe {
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+  }
+
+  .py-safe {
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  /* ─── Touch Action Utilities ───────────────────────────────────
+     Control how touch gestures are handled on elements.
+     ─────────────────────────────────────────────────────────────── */
+  .touch-pan-x {
+    touch-action: pan-x;
+  }
+  .touch-pan-y {
+    touch-action: pan-y;
+  }
+  .touch-none {
+    touch-action: none;
+  }
+  .touch-manipulation {
+    touch-action: manipulation;
+  }
+
+  /* ─── Prevent Text Selection on Interactive Elements ─────────── */
+  .select-none-touch {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* ─── Smooth Scrolling Container ───────────────────────────────
+     Enables momentum scrolling on iOS for overflow containers.
+     ─────────────────────────────────────────────────────────────── */
+  .scroll-smooth-ios {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+  }
+
+  /* ─── Snap Scroll Utilities ────────────────────────────────────
+     For horizontal carousels and snap-scrolling containers.
+     ─────────────────────────────────────────────────────────────── */
+  .snap-x-touch {
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .snap-start-touch {
+    scroll-snap-align: start;
+  }
+
+  .snap-center-touch {
+    scroll-snap-align: center;
+  }
 }

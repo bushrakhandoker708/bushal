@@ -1,31 +1,31 @@
+// app/(admin)/admin/inventory/smart-restocking/page.tsx
 /**
  * ============================================================================
  * SMART INVENTORY RESTOCKING - ADMIN PAGE
  * ============================================================================
- * 
- * This page provides the admin with AI-powered inventory restocking 
+ *
+ * This page provides the admin with AI-powered inventory restocking
  * recommendations using advanced statistical algorithms:
- * 
+ *
  * 1. Reorder Point (ROP) = Lead Time Demand + Safety Stock
  * 2. Safety Stock = Z-score × σ_d × √(Lead Time)
  * 3. Economic Order Quantity (EOQ) = ((2 × D × S) / H)
  * 4. Lead Time Demand = Avg Daily Sales × Lead Time
- * 
+ *
  * FEATURES:
  * - Real-time stock-out risk analysis
- * - Urgency classification (Critical/High/Medium/Low)
+ * - Enhanced urgency classification with prominent visual indicators
  * - Financial impact projections
  * - Supplier lead time integration
  * - Service level configuration
  * - One-click restock actions
- * 
+ * - Mobile-responsive card-based layout
+ *
  * ALGORITHM: Statistical Inventory Management with Z-score modeling
  * ============================================================================
  */
-
 import { createServerClient } from '@/lib/supabase/server'
 import { requireAdmin } from '@/lib/auth'
-import { redirect } from 'next/navigation'
 import { Metadata } from 'next'
 import { formatPrice } from '@/app/lib/utils/formatPrice'
 import { cn } from '@/app/lib/utils/cn'
@@ -46,7 +46,6 @@ export const metadata: Metadata = {
 }
 
 // ─── Default Configuration ─────────────────────────────────────────────────
-
 const DEFAULT_RESTOCK_CONFIG: RestockConfig = {
   service_level: 0.95,        // 95% service level (Z = 1.645)
   review_period_days: 7,      // Weekly inventory reviews
@@ -54,45 +53,64 @@ const DEFAULT_RESTOCK_CONFIG: RestockConfig = {
   fixed_order_cost: 150,      // ৳150 average shipping/processing per order
 }
 
-// ─── Helper Functions ──────────────────────────────────────────────────────
-
+// ─── Enhanced Urgency Configuration ────────────────────────────────────────
 function getUrgencyConfig(urgency: string) {
   const configs = {
     critical: {
       color: 'text-bushal-danger',
-      bg: 'bg-bushal-dangerBg',
-      border: 'border-bushal-danger/20',
+      bg: 'bg-gradient-to-br from-bushal-dangerBg via-red-50 to-red-100/50',
+      border: 'border-bushal-danger/40',
       dot: 'bg-bushal-danger',
       icon: '🔴',
       label: 'CRITICAL',
       description: 'Will stock out before new order arrives',
+      badgeBg: 'bg-gradient-to-r from-bushal-danger to-red-600 text-white shadow-lg shadow-bushal-danger/30',
+      pulseColor: 'animate-pulse',
+      gradientFrom: 'from-bushal-danger/20',
+      gradientTo: 'to-bushal-danger/10',
+      progressBar: 'bg-gradient-to-r from-bushal-danger via-red-500 to-red-600',
     },
     high: {
       color: 'text-bushal-warning',
-      bg: 'bg-bushal-warningBg',
-      border: 'border-bushal-warning/20',
+      bg: 'bg-gradient-to-br from-bushal-warningBg via-amber-50 to-amber-100/50',
+      border: 'border-bushal-warning/40',
       dot: 'bg-bushal-warning',
-      icon: '',
+      icon: '🟠',
       label: 'HIGH',
       description: 'Stock out within lead time + 7 days',
+      badgeBg: 'bg-gradient-to-r from-bushal-warning to-amber-600 text-white shadow-md shadow-bushal-warning/20',
+      pulseColor: '',
+      gradientFrom: 'from-bushal-warning/15',
+      gradientTo: 'to-bushal-warning/5',
+      progressBar: 'bg-gradient-to-r from-bushal-warning via-amber-500 to-amber-600',
     },
     medium: {
       color: 'text-bushal-copper',
-      bg: 'bg-bushal-copper/10',
-      border: 'border-bushal-copper/20',
+      bg: 'bg-gradient-to-br from-bushal-copper/5 via-orange-50 to-orange-100/30',
+      border: 'border-bushal-copper/30',
       dot: 'bg-bushal-copper',
-      icon: '',
+      icon: '🟡',
       label: 'MEDIUM',
       description: 'Stock out within lead time + 14 days',
+      badgeBg: 'bg-gradient-to-r from-bushal-copper to-orange-500 text-white shadow-md shadow-bushal-copper/20',
+      pulseColor: '',
+      gradientFrom: 'from-bushal-copper/10',
+      gradientTo: 'to-bushal-copper/5',
+      progressBar: 'bg-gradient-to-r from-bushal-copper via-orange-400 to-orange-500',
     },
     low: {
       color: 'text-bushal-forest',
-      bg: 'bg-bushal-forest/10',
-      border: 'border-bushal-forest/20',
+      bg: 'bg-gradient-to-br from-bushal-forest/5 via-emerald-50 to-emerald-100/30',
+      border: 'border-bushal-forest/30',
       dot: 'bg-bushal-forest',
       icon: '🟢',
       label: 'LOW',
       description: 'Healthy but approaching review threshold',
+      badgeBg: 'bg-gradient-to-r from-bushal-forest to-emerald-600 text-white shadow-md shadow-bushal-forest/20',
+      pulseColor: '',
+      gradientFrom: 'from-bushal-forest/10',
+      gradientTo: 'to-bushal-forest/5',
+      progressBar: 'bg-gradient-to-r from-bushal-forest via-emerald-500 to-emerald-600',
     },
     none: {
       color: 'text-bushal-inkSoft',
@@ -102,6 +120,11 @@ function getUrgencyConfig(urgency: string) {
       icon: '⚪',
       label: 'NONE',
       description: 'No action required',
+      badgeBg: 'bg-bushal-inkSoft text-white',
+      pulseColor: '',
+      gradientFrom: 'from-bushal-inkSoft/5',
+      gradientTo: 'to-bushal-inkSoft/3',
+      progressBar: 'bg-bushal-inkSoft',
     },
   }
   return configs[urgency as keyof typeof configs] ?? configs.none
@@ -115,12 +138,168 @@ function formatDate(dateString: string): string {
   })
 }
 
-// ─── Main Page Component ───────────────────────────────────────────────────
+// ─── Enhanced Stock Level Progress Bar Component ────────────────────────────
+function StockProgressBar({ current, max, urgency }: { current: number; max: number; urgency: string }) {
+  const percentage = Math.min(100, (current / max) * 100)
+  const config = getUrgencyConfig(urgency)
+  
+  return (
+    <div className="w-full">
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="text-xs font-bold text-bushal-ink">{current} units</span>
+        <span className="text-xs font-bold text-bushal-inkSoft">{percentage.toFixed(0)}%</span>
+      </div>
+      <div className="h-2.5 bg-bushal-ivoryDeep rounded-full overflow-hidden shadow-inner">
+        <div
+          className={cn(
+            'h-full rounded-full transition-all duration-700 ease-out',
+            config.progressBar,
+            urgency === 'critical' && 'animate-pulse'
+          )}
+          style={{ width: `${percentage}%` }}
+        />
+      </div>
+    </div>
+  )
+}
 
+// ─── Enhanced Days Until Stockout Visual ────────────────────────────────────
+function DaysUntilStockout({ days }: { days: number }) {
+  if (days === 999) {
+    return (
+      <div className="flex flex-col items-center">
+        <span className="text-2xl font-bold text-bushal-success">∞</span>
+        <span className="text-[10px] text-bushal-inkSoft font-medium">Safe</span>
+      </div>
+    )
+  }
+
+  const percentage = Math.min(100, (days / 30) * 100)
+  const isCritical = days < 7
+  const isHigh = days < 14
+
+  return (
+    <div className="flex flex-col items-center">
+      <div className="relative w-14 h-14">
+        <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
+          <path
+            className="text-bushal-ivoryDeep"
+            strokeWidth="3"
+            stroke="currentColor"
+            fill="none"
+            d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+          />
+          <path
+            className={cn(
+              isCritical ? 'text-bushal-danger' : isHigh ? 'text-bushal-warning' : 'text-bushal-success',
+              isCritical && 'animate-pulse'
+            )}
+            strokeWidth="3"
+            strokeDasharray={`${percentage}, 100`}
+            stroke="currentColor"
+            fill="none"
+            d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+          />
+        </svg>
+        <div className="absolute inset-0 flex items-center justify-center">
+          <span className={cn(
+            'text-sm font-bold',
+            isCritical ? 'text-bushal-danger' : isHigh ? 'text-bushal-warning' : 'text-bushal-success'
+          )}>
+            {days}d
+          </span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Enhanced Mobile Card Component ─────────────────────────────────────────
+function RestockCard({ rec, image, category }: { rec: RestockRecommendation; image: string | null; category: string }) {
+  const config = getUrgencyConfig(rec.urgency)
+  
+  return (
+    <div className={cn(
+      'rounded-2xl border-2 p-5 shadow-lg transition-all hover:shadow-xl hover:-translate-y-1',
+      config.bg,
+      config.border,
+      rec.urgency === 'critical' && 'ring-2 ring-bushal-danger/30'
+    )}>
+      {/* Header */}
+      <div className="flex items-start gap-3 mb-4">
+        <div className="w-16 h-16 rounded-xl overflow-hidden bg-bushal-ivoryDeep border-2 border-bushal-border flex-shrink-0 shadow-md">
+          {image ? (
+            <img src={image} alt="" className="w-full h-full object-cover" />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-bushal-borderMid text-3xl">
+              📦
+            </div>
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-bold text-bushal-ink truncate">{rec.product_name}</p>
+          <p className="text-xs text-bushal-inkSoft mb-2">{category}</p>
+          <div className={cn(
+            'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold',
+            config.badgeBg,
+            config.pulseColor
+          )}>
+            <span className={cn('w-1.5 h-1.5 rounded-full', config.dot)} />
+            {config.label}
+          </div>
+        </div>
+      </div>
+
+      {/* Stock Level */}
+      <div className="mb-4">
+        <StockProgressBar 
+          current={rec.current_stock} 
+          max={rec.reorder_point * 2} 
+          urgency={rec.urgency}
+        />
+      </div>
+
+      {/* Days Until Stockout - Circular Progress */}
+      <div className="flex justify-center mb-4">
+        <DaysUntilStockout days={rec.days_until_stockout} />
+      </div>
+
+      {/* Metrics Grid */}
+      <div className="grid grid-cols-2 gap-3 mb-4">
+        <div className="bg-white/70 backdrop-blur-sm rounded-xl p-3 border border-white/50">
+          <p className="text-bushal-inkSoft text-[10px] font-semibold mb-1">Reorder Point</p>
+          <p className="text-lg font-bold text-bushal-ink">{rec.reorder_point}</p>
+        </div>
+        <div className="bg-white/70 backdrop-blur-sm rounded-xl p-3 border border-white/50">
+          <p className="text-bushal-inkSoft text-[10px] font-semibold mb-1">Order Qty</p>
+          <p className="text-lg font-bold text-bushal-forest">{rec.recommended_order_quantity}</p>
+        </div>
+        <div className="bg-white/70 backdrop-blur-sm rounded-xl p-3 border border-white/50 col-span-2">
+          <p className="text-bushal-inkSoft text-[10px] font-semibold mb-1">Estimated Cost</p>
+          <p className="text-xl font-bold text-bushal-copper">{formatPrice(rec.estimated_cost)}</p>
+        </div>
+      </div>
+
+      {/* Action Button */}
+      <Link
+        href={`/admin/products/${rec.product_id}/edit`}
+        className={cn(
+          'w-full py-3 rounded-xl text-sm font-bold tracking-wide uppercase transition-all text-center block',
+          rec.urgency === 'critical' || rec.urgency === 'high'
+            ? 'bg-gradient-to-r from-bushal-forest to-bushal-forestMid text-white hover:shadow-lg active:scale-[0.98] shadow-md'
+            : 'bg-bushal-surface text-bushal-forest border-2 border-bushal-border hover:border-bushal-forest/50 hover:shadow-md'
+        )}
+      >
+        Restock Now →
+      </Link>
+    </div>
+  )
+}
+
+// ─── Main Page Component ───────────────────────────────────────────────────
 export default async function SmartRestockingPage() {
   const auth = await requireAdmin()
   if (!auth.success) return auth.response
-
   const supabase = await auth.supabase
 
   // 1. Fetch all active products
@@ -150,12 +329,10 @@ export default async function SmartRestockingPage() {
 
   // 3. Build sales history per product
   const productSalesMap = new Map<string, Array<{ date: string; quantity_sold: number }>>()
-
   ;(orderItems ?? []).forEach((item: any) => {
     const productId = item.product_id
     const date = item.orders.created_at.split('T')[0]
     const quantity = item.quantity
-
     if (!productSalesMap.has(productId)) {
       productSalesMap.set(productId, [])
     }
@@ -201,12 +378,12 @@ export default async function SmartRestockingPage() {
 
   // 7. Calculate Financial Summaries
   const investmentSummary = calculateTotalRestockInvestment(recommendations)
-  
+
   // Estimate average selling price for stockout risk calculation
   const avgSellingPrice = (products ?? []).length > 0
     ? (products ?? []).reduce((sum: number, p: any) => sum + p.price, 0) / (products ?? []).length
     : 0
-  
+
   const potentialLostRevenue = calculateStockoutRiskCost(recommendations, avgSellingPrice)
 
   // 8. Filter and categorize recommendations
@@ -216,19 +393,14 @@ export default async function SmartRestockingPage() {
   const lowItems = recommendations.filter((r) => r.urgency === 'low')
   const healthyItems = recommendations.filter((r) => r.urgency === 'none')
 
-  // 9. Build product image map
+  // 9. Build product image and category maps
   const productImageMap = new Map<string, string | null>()
+  const productCategoryMap = new Map<string, string>()
   ;(products ?? []).forEach((p: any) => {
     const img = (Array.isArray(p.images) && p.images[0]) || p.image_url || null
     productImageMap.set(p.id, img)
-  })
-
-  const productCategoryMap = new Map<string, string>()
-  ;(products ?? []).forEach((p: any) => {
     productCategoryMap.set(p.id, p.category ?? 'General')
   })
-
-  // ─── Render UI ───────────────────────────────────────────────────────────
 
   return (
     <div className="space-y-8 animate-fade-in-up">
@@ -261,61 +433,57 @@ export default async function SmartRestockingPage() {
         </div>
       </div>
 
-      {/* KPI Cards */}
+      {/* Enhanced KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-        <div className="bg-bushal-surface rounded-2xl border border-bushal-border p-5 shadow-card">
-          <p className="text-[11px] font-bold uppercase tracking-widest text-bushal-inkSoft mb-2">
+        <div className="bg-gradient-to-br from-bushal-dangerBg via-red-50 to-red-100/50 rounded-2xl border-2 border-bushal-danger/40 p-5 shadow-lg">
+          <p className="text-[11px] font-bold uppercase tracking-widest text-bushal-danger mb-2">
             Critical Items
           </p>
-          <p className="text-2xl font-extrabold text-bushal-danger tabular-nums font-heading">
+          <p className="text-3xl font-extrabold text-bushal-danger tabular-nums font-heading">
             {criticalItems.length}
           </p>
-          <p className="text-xs text-bushal-inkSoft mt-1">Immediate action required</p>
+          <p className="text-xs text-bushal-inkSoft mt-1 font-medium">Immediate action required</p>
         </div>
-
-        <div className="bg-bushal-surface rounded-2xl border border-bushal-border p-5 shadow-card">
-          <p className="text-[11px] font-bold uppercase tracking-widest text-bushal-inkSoft mb-2">
+        <div className="bg-gradient-to-br from-bushal-warningBg via-amber-50 to-amber-100/50 rounded-2xl border-2 border-bushal-warning/40 p-5 shadow-lg">
+          <p className="text-[11px] font-bold uppercase tracking-widest text-bushal-warning mb-2">
             High Priority
           </p>
-          <p className="text-2xl font-extrabold text-bushal-warning tabular-nums font-heading">
+          <p className="text-3xl font-extrabold text-bushal-warning tabular-nums font-heading">
             {highItems.length}
           </p>
-          <p className="text-xs text-bushal-inkSoft mt-1">Restock within 7 days</p>
+          <p className="text-xs text-bushal-inkSoft mt-1 font-medium">Restock within 7 days</p>
         </div>
-
-        <div className="bg-bushal-surface rounded-2xl border border-bushal-border p-5 shadow-card">
-          <p className="text-[11px] font-bold uppercase tracking-widest text-bushal-inkSoft mb-2">
+        <div className="bg-gradient-to-br from-bushal-forest/5 via-emerald-50 to-emerald-100/30 rounded-2xl border-2 border-bushal-forest/30 p-5 shadow-lg">
+          <p className="text-[11px] font-bold uppercase tracking-widest text-bushal-forest mb-2">
             Restock Investment
           </p>
-          <p className="text-2xl font-extrabold text-bushal-forest tabular-nums font-heading">
+          <p className="text-3xl font-extrabold text-bushal-forest tabular-nums font-heading">
             {formatPrice(investmentSummary.total_cost)}
           </p>
-          <p className="text-xs text-bushal-inkSoft mt-1">{investmentSummary.total_units} units total</p>
+          <p className="text-xs text-bushal-inkSoft mt-1 font-medium">{investmentSummary.total_units} units total</p>
         </div>
-
-        <div className="bg-bushal-surface rounded-2xl border border-bushal-border p-5 shadow-card">
-          <p className="text-[11px] font-bold uppercase tracking-widest text-bushal-inkSoft mb-2">
+        <div className="bg-gradient-to-br from-bushal-copper/5 via-orange-50 to-orange-100/30 rounded-2xl border-2 border-bushal-copper/30 p-5 shadow-lg">
+          <p className="text-[11px] font-bold uppercase tracking-widest text-bushal-copper mb-2">
             Potential Lost Revenue
           </p>
-          <p className="text-2xl font-extrabold text-bushal-copper tabular-nums font-heading">
+          <p className="text-3xl font-extrabold text-bushal-copper tabular-nums font-heading">
             {formatPrice(potentialLostRevenue)}
           </p>
-          <p className="text-xs text-bushal-inkSoft mt-1">If critical items stock out</p>
+          <p className="text-xs text-bushal-inkSoft mt-1 font-medium">If critical items stock out</p>
         </div>
-
-        <div className="bg-bushal-surface rounded-2xl border border-bushal-border p-5 shadow-card">
-          <p className="text-[11px] font-bold uppercase tracking-widest text-bushal-inkSoft mb-2">
+        <div className="bg-gradient-to-br from-bushal-successBg via-emerald-50 to-emerald-100/30 rounded-2xl border-2 border-bushal-success/30 p-5 shadow-lg">
+          <p className="text-[11px] font-bold uppercase tracking-widest text-bushal-success mb-2">
             Healthy Stock
           </p>
-          <p className="text-2xl font-extrabold text-bushal-success tabular-nums font-heading">
+          <p className="text-3xl font-extrabold text-bushal-success tabular-nums font-heading">
             {healthyItems.length}
           </p>
-          <p className="text-xs text-bushal-inkSoft mt-1">No action needed</p>
+          <p className="text-xs text-bushal-inkSoft mt-1 font-medium">No action needed</p>
         </div>
       </div>
 
       {/* Algorithm Info Banner */}
-      <div className="bg-gradient-to-br from-bushal-forest to-bushal-forestMid rounded-2xl p-6 text-white shadow-lg">
+      <div className="bg-gradient-to-br from-bushal-forest to-bushal-forestMid rounded-2xl p-6 text-white shadow-xl">
         <div className="flex items-start gap-4">
           <div className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center flex-shrink-0">
             <svg className="w-6 h-6 text-bushal-copperGlow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -327,9 +495,9 @@ export default async function SmartRestockingPage() {
               About This Analysis
             </h3>
             <p className="text-xs text-white/80 leading-relaxed mb-3">
-              This system uses <strong className="text-white">statistical inventory management</strong> algorithms to predict 
-              when products will run out of stock. It calculates the <strong className="text-white">Reorder Point (ROP)</strong> using 
-              lead time demand and safety stock, and recommends the <strong className="text-white">Economic Order Quantity (EOQ)</strong> 
+              This system uses <strong className="text-white">statistical inventory management</strong> algorithms to predict
+              when products will run out of stock. It calculates the <strong className="text-white">Reorder Point (ROP)</strong> using
+              lead time demand and safety stock, and recommends the <strong className="text-white">Economic Order Quantity (EOQ)</strong>
               to minimize total inventory costs.
             </p>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-[10px]">
@@ -354,18 +522,18 @@ export default async function SmartRestockingPage() {
         </div>
       </div>
 
-      {/* Critical & High Priority Items */}
+      {/* Critical & High Priority Items - Enhanced Mobile Cards */}
       {(criticalItems.length > 0 || highItems.length > 0) && (
-        <div className="bg-bushal-surface rounded-2xl border border-bushal-border overflow-hidden shadow-card">
-          <div className="px-6 py-4 border-b border-bushal-border bg-bushal-dangerBg/30">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-bushal-danger/10 text-bushal-danger flex items-center justify-center">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="space-y-4">
+          <div className="bg-gradient-to-br from-bushal-dangerBg/30 via-red-50/50 to-red-100/30 rounded-2xl border-2 border-bushal-danger/30 p-4 sm:p-6 shadow-lg">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-bushal-danger/10 flex items-center justify-center text-bushal-danger">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
               </div>
               <div>
-                <h2 className="text-sm font-bold text-bushal-forest">
+                <h2 className="text-lg font-bold text-bushal-forest">
                   Urgent Restock Required
                 </h2>
                 <p className="text-xs text-bushal-inkSoft">
@@ -373,144 +541,141 @@ export default async function SmartRestockingPage() {
                 </p>
               </div>
             </div>
-          </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-bushal-ivoryDeep border-b border-bushal-border">
-                  <th className="px-4 py-3 text-left text-xs font-bold text-bushal-inkSoft uppercase tracking-wide">
-                    Product
-                  </th>
-                  <th className="px-4 py-3 text-center text-xs font-bold text-bushal-inkSoft uppercase tracking-wide">
-                    Current Stock
-                  </th>
-                  <th className="px-4 py-3 text-center text-xs font-bold text-bushal-inkSoft uppercase tracking-wide">
-                    Reorder Point
-                  </th>
-                  <th className="px-4 py-3 text-center text-xs font-bold text-bushal-inkSoft uppercase tracking-wide">
-                    Safety Stock
-                  </th>
-                  <th className="px-4 py-3 text-center text-xs font-bold text-bushal-inkSoft uppercase tracking-wide">
-                    Days Left
-                  </th>
-                  <th className="px-4 py-3 text-center text-xs font-bold text-bushal-inkSoft uppercase tracking-wide">
-                    Urgency
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-bold text-bushal-inkSoft uppercase tracking-wide">
-                    Restock Qty
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-bold text-bushal-inkSoft uppercase tracking-wide">
-                    Est. Cost
-                  </th>
-                  <th className="px-4 py-3 text-center text-xs font-bold text-bushal-inkSoft uppercase tracking-wide">
-                    Action
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-bushal-ivory">
-                {[...criticalItems, ...highItems].map((rec) => {
-                  const urgency = getUrgencyConfig(rec.urgency)
-                  const image = productImageMap.get(rec.product_id)
-                  const category = productCategoryMap.get(rec.product_id) ?? 'General'
-                  const isCritical = rec.urgency === 'critical'
+            {/* Mobile: Enhanced Card Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 lg:hidden">
+              {[...criticalItems, ...highItems].map((rec) => (
+                <RestockCard
+                  key={rec.product_id}
+                  rec={rec}
+                  image={productImageMap.get(rec.product_id) ?? null}
+                  category={productCategoryMap.get(rec.product_id) ?? 'General'}
+                />
+              ))}
+            </div>
 
-                  return (
-                    <tr
-                      key={rec.product_id}
-                      className={cn(
-                        'hover:bg-bushal-ivoryDeep/50 transition-colors',
-                        isCritical && 'bg-bushal-dangerBg/20'
-                      )}
-                    >
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-lg overflow-hidden bg-bushal-ivoryDeep border border-bushal-border flex-shrink-0">
-                            {image ? (
-                              <img src={image} alt="" className="w-full h-full object-cover" />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center text-bushal-borderMid text-xs">
-                                📦
-                              </div>
+            {/* Desktop: Enhanced Table */}
+            <div className="hidden lg:block overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-bushal-ivoryDeep/50 border-b border-bushal-border">
+                    <th className="px-4 py-3 text-left text-xs font-bold text-bushal-inkSoft uppercase tracking-wide">
+                      Product
+                    </th>
+                    <th className="px-4 py-3 text-center text-xs font-bold text-bushal-inkSoft uppercase tracking-wide">
+                      Stock Level
+                    </th>
+                    <th className="px-4 py-3 text-center text-xs font-bold text-bushal-inkSoft uppercase tracking-wide">
+                      Days Left
+                    </th>
+                    <th className="px-4 py-3 text-center text-xs font-bold text-bushal-inkSoft uppercase tracking-wide">
+                      Urgency
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-bold text-bushal-inkSoft uppercase tracking-wide">
+                      Order Qty
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-bold text-bushal-inkSoft uppercase tracking-wide">
+                      Est. Cost
+                    </th>
+                    <th className="px-4 py-3 text-center text-xs font-bold text-bushal-inkSoft uppercase tracking-wide">
+                      Action
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-bushal-ivory">
+                  {[...criticalItems, ...highItems].map((rec) => {
+                    const urgency = getUrgencyConfig(rec.urgency)
+                    const image = productImageMap.get(rec.product_id) ?? null
+                    const category = productCategoryMap.get(rec.product_id) ?? 'General'
+                    const isCritical = rec.urgency === 'critical'
+
+                    return (
+                      <tr
+                        key={rec.product_id}
+                        className={cn(
+                          'hover:bg-bushal-ivoryDeep/50 transition-colors',
+                          isCritical && 'bg-bushal-dangerBg/20'
+                        )}
+                      >
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-3">
+                            <div className="w-12 h-12 rounded-xl overflow-hidden bg-bushal-ivoryDeep border border-bushal-border flex-shrink-0">
+                              {image ? (
+                                <img src={image} alt="" className="w-full h-full object-cover" />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center text-bushal-borderMid text-xl">
+                                  📦
+                                </div>
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-bushal-ink truncate max-w-[200px]">
+                                {rec.product_name}
+                              </p>
+                              <p className="text-xs text-bushal-inkSoft">{category}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="w-32">
+                            <StockProgressBar 
+                              current={rec.current_stock} 
+                              max={rec.reorder_point * 2} 
+                              urgency={rec.urgency}
+                            />
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <DaysUntilStockout days={rec.days_until_stockout} />
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <span className={cn(
+                            'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border',
+                            urgency.bg,
+                            urgency.color,
+                            urgency.border,
+                            urgency.pulseColor
+                          )}>
+                            <span className={cn('w-1.5 h-1.5 rounded-full', urgency.dot)} />
+                            {urgency.label}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <span className="text-sm font-bold text-bushal-forest tabular-nums">
+                            {rec.recommended_order_quantity}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <span className="text-sm font-semibold text-bushal-copper tabular-nums">
+                            {formatPrice(rec.estimated_cost)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <Link
+                            href={`/admin/products/${rec.product_id}/edit`}
+                            className={cn(
+                              'inline-flex items-center gap-1 px-4 py-2 rounded-xl text-xs font-bold transition-all',
+                              isCritical
+                                ? 'bg-gradient-to-r from-bushal-forest to-bushal-forestMid text-white hover:shadow-lg active:scale-[0.98] shadow-md'
+                                : 'bg-bushal-surface text-bushal-forest border border-bushal-border hover:border-bushal-forest/30'
                             )}
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-sm font-semibold text-bushal-ink truncate max-w-[200px]">
-                              {rec.product_name}
-                            </p>
-                            <p className="text-xs text-bushal-inkSoft">{category}</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <span className={cn(
-                          'text-sm font-bold tabular-nums',
-                          rec.current_stock === 0 ? 'text-bushal-danger' : 'text-bushal-forest'
-                        )}>
-                          {rec.current_stock}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <span className="text-sm text-bushal-ink tabular-nums">
-                          {rec.reorder_point}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <span className="text-sm text-bushal-inkSoft tabular-nums">
-                          {rec.safety_stock}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <span className={cn(
-                          'text-xs font-bold tabular-nums px-2 py-1 rounded-full',
-                          rec.days_until_stockout < 7
-                            ? 'bg-bushal-dangerBg text-bushal-danger'
-                            : rec.days_until_stockout < 14
-                            ? 'bg-bushal-warningBg text-bushal-warning'
-                            : 'bg-bushal-ivoryDeep text-bushal-inkSoft'
-                        )}>
-                          {rec.days_until_stockout === 999 ? '∞' : `${rec.days_until_stockout}d`}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <span className={cn(
-                          'inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border',
-                          urgency.bg, urgency.color, urgency.border
-                        )}>
-                          <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: 'currentColor' }} />
-                          {urgency.label}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <span className="text-sm font-bold text-bushal-forest tabular-nums">
-                          {rec.recommended_order_quantity}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <span className="text-sm font-semibold text-bushal-copper tabular-nums">
-                          {formatPrice(rec.estimated_cost)}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <Link
-                          href={`/admin/products/${rec.product_id}/edit`}
-                          className="inline-flex items-center gap-1 text-xs font-semibold text-bushal-copper hover:text-bushal-copperLight transition-colors"
-                        >
-                          Restock →
-                        </Link>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+                          >
+                            Restock →
+                          </Link>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
 
       {/* Medium & Low Priority Items */}
       {(mediumItems.length > 0 || lowItems.length > 0) && (
-        <div className="bg-bushal-surface rounded-2xl border border-bushal-border overflow-hidden shadow-card">
+        <div className="bg-bushal-surface rounded-2xl border border-bushal-border overflow-hidden shadow-sm">
           <div className="px-6 py-4 border-b border-bushal-border bg-bushal-ivoryDeep/50">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-lg bg-bushal-copper/10 text-bushal-copper flex items-center justify-center">
@@ -528,7 +693,6 @@ export default async function SmartRestockingPage() {
               </div>
             </div>
           </div>
-
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
@@ -538,12 +702,6 @@ export default async function SmartRestockingPage() {
                   </th>
                   <th className="px-4 py-3 text-center text-xs font-bold text-bushal-inkSoft uppercase tracking-wide">
                     Current Stock
-                  </th>
-                  <th className="px-4 py-3 text-center text-xs font-bold text-bushal-inkSoft uppercase tracking-wide">
-                    Reorder Point
-                  </th>
-                  <th className="px-4 py-3 text-center text-xs font-bold text-bushal-inkSoft uppercase tracking-wide">
-                    EOQ
                   </th>
                   <th className="px-4 py-3 text-center text-xs font-bold text-bushal-inkSoft uppercase tracking-wide">
                     Days Left
@@ -562,9 +720,8 @@ export default async function SmartRestockingPage() {
               <tbody className="divide-y divide-bushal-ivory">
                 {[...mediumItems, ...lowItems].map((rec) => {
                   const urgency = getUrgencyConfig(rec.urgency)
-                  const image = productImageMap.get(rec.product_id)
+                  const image = productImageMap.get(rec.product_id) ?? null
                   const category = productCategoryMap.get(rec.product_id) ?? 'General'
-
                   return (
                     <tr key={rec.product_id} className="hover:bg-bushal-ivoryDeep/50 transition-colors">
                       <td className="px-4 py-3">
@@ -592,24 +749,14 @@ export default async function SmartRestockingPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-center">
-                        <span className="text-sm text-bushal-ink tabular-nums">
-                          {rec.reorder_point}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <span className="text-sm text-bushal-inkSoft tabular-nums">
-                          {rec.eoq}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <span className="text-xs font-semibold text-bushal-inkSoft tabular-nums">
-                          {rec.days_until_stockout === 999 ? '∞' : `${rec.days_until_stockout}d`}
-                        </span>
+                        <DaysUntilStockout days={rec.days_until_stockout} />
                       </td>
                       <td className="px-4 py-3 text-center">
                         <span className={cn(
                           'inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border',
-                          urgency.bg, urgency.color, urgency.border
+                          urgency.bg,
+                          urgency.color,
+                          urgency.border
                         )}>
                           {urgency.label}
                         </span>
@@ -635,7 +782,7 @@ export default async function SmartRestockingPage() {
 
       {/* Healthy Stock Summary */}
       {healthyItems.length > 0 && (
-        <div className="bg-bushal-surface rounded-2xl border border-bushal-border p-6 shadow-card">
+        <div className="bg-bushal-surface rounded-2xl border border-bushal-border p-6 shadow-sm">
           <div className="flex items-center gap-3 mb-4">
             <div className="w-8 h-8 rounded-lg bg-bushal-success/10 text-bushal-success flex items-center justify-center">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -653,7 +800,7 @@ export default async function SmartRestockingPage() {
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
             {healthyItems.slice(0, 12).map((rec) => {
-              const image = productImageMap.get(rec.product_id)
+              const image = productImageMap.get(rec.product_id) ?? null
               return (
                 <div key={rec.product_id} className="bg-bushal-successBg/30 rounded-xl p-3 border border-bushal-success/10">
                   <div className="flex items-center gap-2 mb-2">
@@ -686,7 +833,7 @@ export default async function SmartRestockingPage() {
 
       {/* Detailed Metrics Explanation */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-bushal-surface rounded-2xl border border-bushal-border p-6 shadow-card">
+        <div className="bg-bushal-surface rounded-2xl border border-bushal-border p-6 shadow-sm">
           <h3 className="text-sm font-bold text-bushal-forest mb-4">
             Key Metrics Explained
           </h3>
@@ -733,8 +880,7 @@ export default async function SmartRestockingPage() {
             </div>
           </div>
         </div>
-
-        <div className="bg-bushal-surface rounded-2xl border border-bushal-border p-6 shadow-card">
+        <div className="bg-bushal-surface rounded-2xl border border-bushal-border p-6 shadow-sm">
           <h3 className="text-sm font-bold text-bushal-forest mb-4">
             Urgency Classification
           </h3>
@@ -745,7 +891,8 @@ export default async function SmartRestockingPage() {
                 <div key={urgency} className="flex items-start gap-3">
                   <span className={cn(
                     'inline-flex items-center justify-center w-8 h-8 rounded-lg text-sm flex-shrink-0',
-                    config.bg, config.border
+                    config.bg,
+                    config.border
                   )}>
                     {config.icon}
                   </span>

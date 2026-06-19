@@ -11,8 +11,15 @@
  * - Fetches user purchase history from Supabase
  * - Uses collaborative filtering to find similar users
  * - Returns top N recommended products with scores
- * - Handles cold start (new users with no history)
+ * - Handles cold start (new users) with trending products fallback
  * - Caches results for performance
+ * 
+ * BUG FIXES:
+ * 1. Next.js 15 params handling: params is now a Promise, must be awaited
+ * 2. Cold start now returns trending products (recent purchase velocity)
+ *    instead of just popular products
+ * 3. Fixed type safety issues with explicit type annotations
+ * 4. Improved error handling with proper params access
  * 
  * USAGE:
  * GET /api/recommendations/user/[userId]?limit=10&useHybrid=true
@@ -22,7 +29,7 @@
  *   "success": true,
  *   "userId": "uuid",
  *   "recommendations": [...],
- *   "algorithm": "hybrid",
+ *   "algorithm": "hybrid" | "collaborative_filtering" | "cold_start_trending",
  *   "generatedAt": "timestamp"
  * }
  * ============================================================================
@@ -35,7 +42,6 @@ import {
   getRecommendationsForUser,
   getCollaborativeRecommendations,
   getHybridRecommendations,
-  handleColdStart,
   buildUserItemMatrix,
   findKNNSimilarUsers,
 } from '@/lib/recommendations/collaborativeFiltering'
@@ -44,9 +50,9 @@ import type { UserPurchase, ProductInfo, Recommendation } from '@/lib/recommenda
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 interface RequestParams {
-  params: {
+  params: Promise<{
     userId: string
-  }
+  }>
 }
 
 interface RecommendationResponse {
@@ -60,11 +66,6 @@ interface RecommendationResponse {
   error?: string
 }
 
-// Minimal shape we actually read from the `orders` table.
-// Declaring this explicitly is what fixes the
-// "Property 'user_id'/'created_at' does not exist on type '{}'" errors —
-// without it, Supabase's generic client falls back to inferring `{}`
-// for each row in `orders`.
 interface OrderRow {
   id: string
   user_id: string
@@ -101,13 +102,13 @@ const cache = new Map<string, { data: RecommendationResponse; timestamp: number 
 /**
  * Fetch all user purchases from the database
  */
-async function fetchUserPurchases(supabase: any): Promise<UserPurchase[]> {
+async function fetchUserPurchases(supabase: Awaited<ReturnType<typeof createServerClient>>): Promise<UserPurchase[]> {
   const { data: orders, error: ordersError } = await supabase
     .from('orders')
     .select('id, user_id, created_at, total, status')
     .eq('status', 'fulfilled')
     .order('created_at', { ascending: false })
-    .limit(1000) // Limit to recent orders for performance
+    .limit(1000)
 
   if (ordersError) {
     console.error('[Recommendations] Error fetching orders:', ordersError)
@@ -116,12 +117,9 @@ async function fetchUserPurchases(supabase: any): Promise<UserPurchase[]> {
 
   if (!orders || orders.length === 0) return []
 
-  // Cast the rows to the explicit OrderRow shape so TS knows
-  // `o.id`, `o.user_id`, and `o.created_at` exist below.
   const typedOrders = orders as OrderRow[]
-
-  // Fetch order items for these orders
   const orderIds = typedOrders.map((o) => o.id)
+
   const { data: orderItems, error: itemsError } = await supabase
     .from('order_items')
     .select('order_id, product_id, quantity, unit_price')
@@ -132,9 +130,7 @@ async function fetchUserPurchases(supabase: any): Promise<UserPurchase[]> {
     return []
   }
 
-  // Map orders to purchases
   const orderMap = new Map<string, OrderRow>(typedOrders.map((o) => [o.id, o]))
-
   const typedOrderItems = (orderItems ?? []) as OrderItemRow[]
 
   return typedOrderItems.map((item): UserPurchase => {
@@ -152,7 +148,7 @@ async function fetchUserPurchases(supabase: any): Promise<UserPurchase[]> {
 /**
  * Fetch all products from the database
  */
-async function fetchAllProducts(supabase: any): Promise<ProductInfo[]> {
+async function fetchAllProducts(supabase: Awaited<ReturnType<typeof createServerClient>>): Promise<ProductInfo[]> {
   const { data: products, error } = await supabase
     .from('products')
     .select('id, name, category, price, image_url, images, in_stock, stock_quantity')
@@ -179,6 +175,103 @@ async function fetchAllProducts(supabase: any): Promise<ProductInfo[]> {
 }
 
 /**
+ * 🔥 COLD START FIX: Generate trending products based on recent purchase velocity
+ * Uses a 30-day window with exponential decay to prioritize recent purchases
+ */
+async function getTrendingProducts(
+  purchases: UserPurchase[],
+  products: ProductInfo[],
+  limit: number
+): Promise<Recommendation[]> {
+  const now = Date.now()
+  const thirtyDaysAgo = now - (30 * 24 * 60 * 60 * 1000)
+  
+  // Filter to recent purchases only
+  const recentPurchases = purchases.filter(p => {
+    const purchaseTime = new Date(p.order_date).getTime()
+    return purchaseTime >= thirtyDaysAgo
+  })
+
+  if (recentPurchases.length === 0) {
+    // If no recent purchases, fall back to all-time popular products
+    return getPopularProducts(purchases, products, limit)
+  }
+
+  // Calculate trending score with exponential decay
+  // Recent purchases get higher weight
+  const productScores = new Map<string, { score: number; purchaseCount: number }>()
+  
+  recentPurchases.forEach(purchase => {
+    const purchaseTime = new Date(purchase.order_date).getTime()
+    const daysAgo = (now - purchaseTime) / (24 * 60 * 60 * 1000)
+    
+    // Exponential decay: e^(-λt) where λ = 0.1 (half-life ~7 days)
+    const decayFactor = Math.exp(-0.1 * daysAgo)
+    const weightedQuantity = purchase.quantity * decayFactor
+    
+    const existing = productScores.get(purchase.product_id) || { score: 0, purchaseCount: 0 }
+    productScores.set(purchase.product_id, {
+      score: existing.score + weightedQuantity,
+      purchaseCount: existing.purchaseCount + 1,
+    })
+  })
+
+  // Convert to recommendations
+  const recommendations: Recommendation[] = []
+  
+  productScores.forEach((data, productId) => {
+    const product = products.find(p => p.id === productId)
+    if (product && product.in_stock) {
+      recommendations.push({
+        product_id: productId,
+        product,
+        score: data.score,
+        reason: `Trending: ${data.purchaseCount} recent purchase${data.purchaseCount > 1 ? 's' : ''}`,
+        similar_users_count: 0,
+      })
+    }
+  })
+
+  // Sort by score and return top N
+  recommendations.sort((a, b) => b.score - a.score)
+  return recommendations.slice(0, limit)
+}
+
+/**
+ * Fallback: Get popular products (all-time bestsellers)
+ */
+function getPopularProducts(
+  purchases: UserPurchase[],
+  products: ProductInfo[],
+  limit: number
+): Recommendation[] {
+  const productPopularity = new Map<string, number>()
+  
+  purchases.forEach(p => {
+    const current = productPopularity.get(p.product_id) || 0
+    productPopularity.set(p.product_id, current + p.quantity)
+  })
+
+  const recommendations: Recommendation[] = []
+  
+  productPopularity.forEach((popularity, productId) => {
+    const product = products.find(p => p.id === productId)
+    if (product && product.in_stock) {
+      recommendations.push({
+        product_id: productId,
+        product,
+        score: popularity,
+        reason: 'Popular among all customers',
+        similar_users_count: 0,
+      })
+    }
+  })
+
+  recommendations.sort((a, b) => b.score - a.score)
+  return recommendations.slice(0, limit)
+}
+
+/**
  * Check cache for existing recommendations
  */
 function getCachedRecommendations(userId: string, limit: number): RecommendationResponse | null {
@@ -189,7 +282,6 @@ function getCachedRecommendations(userId: string, limit: number): Recommendation
     return cached.data
   }
   
-  // Remove expired cache
   cache.delete(cacheKey)
   return null
 }
@@ -217,16 +309,18 @@ export async function GET(
   { params }: RequestParams
 ) {
   try {
-    // 1. Authentication - Ensure user is authenticated
+    // 🔥 FIX: Await params in Next.js 15
+    const { userId: requestedUserId } = await params
+
+    // 1. Authentication
     const auth = await requireAuth()
     if (!auth.success) {
       return auth.response
     }
 
-    // 2. Authorization - Users can only fetch their own recommendations
-    // (Admins can fetch for any user)
-    const requestedUserId = params.userId as string
-    const { data: profile } = await (await auth.supabase)
+    // 2. Authorization
+    const supabase = await auth.supabase
+    const { data: profile } = await supabase
       .from('profiles')
       .select('role')
       .eq('id', auth.userId)
@@ -244,10 +338,8 @@ export async function GET(
     const { searchParams } = new URL(request.url)
     const limit = parseInt(searchParams.get('limit') || '10')
     const useHybrid = searchParams.get('useHybrid') !== 'false'
-    const enableDiversity = searchParams.get('diversity') !== 'false'
     const k = parseInt(searchParams.get('k') || '5')
 
-    // Validate parameters
     if (limit < 1 || limit > 50) {
       return NextResponse.json(
         { error: 'Invalid limit parameter. Must be between 1 and 50.' },
@@ -255,16 +347,21 @@ export async function GET(
       )
     }
 
-    // 4. Check cache first
+    // 4. Check cache
     const cached = getCachedRecommendations(requestedUserId, limit)
     if (cached) {
-      return NextResponse.json(cached)
+      return NextResponse.json(cached, {
+        headers: {
+          'X-Cache': 'HIT',
+          'X-Recommendation-Algorithm': cached.algorithm,
+        },
+      })
     }
 
-    // 5. Fetch data from database
+    // 5. Fetch data
     const [purchases, products] = await Promise.all([
-      fetchUserPurchases(auth.supabase),
-      fetchAllProducts(auth.supabase),
+      fetchUserPurchases(supabase),
+      fetchAllProducts(supabase),
     ])
 
     if (products.length === 0) {
@@ -284,15 +381,14 @@ export async function GET(
     let algorithm = 'unknown'
     let similarUsersCount = 0
 
-    // Check if user has purchase history
     const userPurchases = purchases.filter(p => p.user_id === requestedUserId)
 
     if (userPurchases.length === 0) {
-      // Cold start: use fallback strategy
-      recommendations = handleColdStart(purchases, products, limit)
-      algorithm = 'cold_start_fallback'
+      // 🔥 COLD START FIX: Use trending products instead of just popular
+      console.log(`[Recommendations] Cold start for user ${requestedUserId}, using trending fallback`)
+      recommendations = await getTrendingProducts(purchases, products, limit)
+      algorithm = 'cold_start_trending'
     } else if (useHybrid) {
-      // Use hybrid approach (CF + SVD)
       recommendations = getHybridRecommendations(
         requestedUserId,
         purchases,
@@ -302,12 +398,10 @@ export async function GET(
       )
       algorithm = 'hybrid_cf_svd'
       
-      // Count similar users for metadata
       const { userVectors } = buildUserItemMatrix(purchases)
       const similarUsers = findKNNSimilarUsers(requestedUserId, userVectors, k)
       similarUsersCount = similarUsers.length
     } else {
-      // Use pure collaborative filtering
       recommendations = getCollaborativeRecommendations(
         requestedUserId,
         purchases,
@@ -333,13 +427,14 @@ export async function GET(
       generatedAt: new Date().toISOString(),
     }
 
-    // 8. Cache the response
+    // 8. Cache
     setCachedRecommendations(requestedUserId, limit, response)
 
-    // 9. Return response with appropriate headers
+    // 9. Return
     return NextResponse.json(response, {
       headers: {
         'Cache-Control': `public, s-maxage=${CACHE_TTL}, stale-while-revalidate=300`,
+        'X-Cache': 'MISS',
         'X-Recommendation-Algorithm': algorithm,
         'X-Total-Products': products.length.toString(),
         'X-Similar-Users': similarUsersCount.toString(),
@@ -349,10 +444,19 @@ export async function GET(
   } catch (error) {
     console.error('[Recommendations API] Unexpected error:', error)
     
+    // 🔥 FIX: Safely access params in error handler
+    let userId = 'unknown'
+    try {
+      const { userId: id } = await params
+      userId = id
+    } catch {
+      // params might not be accessible in error state
+    }
+    
     return NextResponse.json(
       {
         success: false,
-        userId: params.userId,
+        userId,
         recommendations: [],
         algorithm: 'error',
         totalProductsAnalyzed: 0,
@@ -364,22 +468,23 @@ export async function GET(
   }
 }
 
-// ─── POST Handler (For triggering recommendation refresh) ───────────────────
+// ─── POST Handler (Cache Invalidation) ──────────────────────────────────────
 
 export async function POST(
   request: NextRequest,
   { params }: RequestParams
 ) {
   try {
-    // 1. Authentication
+    // 🔥 FIX: Await params in Next.js 15
+    const { userId: requestedUserId } = await params
+
     const auth = await requireAuth()
     if (!auth.success) {
       return auth.response
     }
 
-    // 2. Authorization
-    const requestedUserId = params.userId as string
-    const { data: profile } = await (await auth.supabase)
+    const supabase = await auth.supabase
+    const { data: profile } = await supabase
       .from('profiles')
       .select('role')
       .eq('id', auth.userId)
@@ -393,18 +498,23 @@ export async function POST(
       )
     }
 
-    // 3. Clear cache for this user
+    // Clear cache for this user
     const cacheKeys = Array.from(cache.keys())
+    let clearedCount = 0
     cacheKeys.forEach(key => {
       if (key.startsWith(`${requestedUserId}:`)) {
         cache.delete(key)
+        clearedCount++
       }
     })
+
+    console.log(`[Recommendations] Cleared ${clearedCount} cache entries for user ${requestedUserId}`)
 
     return NextResponse.json({
       success: true,
       message: 'Recommendation cache cleared. Next request will generate fresh recommendations.',
       userId: requestedUserId,
+      clearedEntries: clearedCount,
     })
 
   } catch (error) {

@@ -1,23 +1,4 @@
-/**
- * ============================================================================
- * CUSTOMER SEGMENTATION - ADMIN PAGE
- * ============================================================================
- * 
- * This page provides the admin with AI-powered customer segmentation using
- * K-Means clustering. It analyzes purchasing behavior to divide customers
- * into 5 distinct segments: VIP, Loyal, Normal, High Risk, and Fake Orders.
- * 
- * FEATURES:
- * - Fetches historical order data from Supabase
- * - Prepares customer metrics (Total Spent, Frequency, Variance)
- * - Runs K-Means clustering algorithm
- * - Displays segment summaries with counts and revenue
- * - Shows detailed customer lists per segment
- * - Provides mathematically-backed discount recommendations per segment
- * 
- * ALGORITHM: K-Means Clustering with K-Means++ initialization
- * ============================================================================
- */
+// app/(admin)/admin/analytics/customer-segmentation/page.tsx
 
 import { createServerClient } from '@/lib/supabase/server'
 import { requireAdmin } from '@/lib/auth'
@@ -31,16 +12,15 @@ import {
   generateSegmentSummary,
   recommendCategoryDiscounts,
   type CustomerSegment,
-  type SegmentType,
-} from '@/docs/previously integrated ml in ts/customerSegmentation'
+  type SegmentType, 
+} from '@/lib/analytics/customerSegmentation'
 
 export const metadata: Metadata = {
   title: 'Customer Segmentation',
   description: 'AI-powered customer segmentation using K-Means clustering.',
 }
 
-// ─── Segment UI Configuration ───────────────────────────────────────────────
-
+// FIX: Updated SEGMENT_CONFIG to use 'Anomalous' with neutral styling
 const SEGMENT_CONFIG: Record<SegmentType, {
   color: string
   bg: string
@@ -53,7 +33,7 @@ const SEGMENT_CONFIG: Record<SegmentType, {
     color: 'text-bushal-copper',
     bg: 'bg-bushal-copper/10',
     border: 'border-bushal-copper/20',
-    icon: '',
+    icon: '👑',
     description: 'High spenders, frequent buyers. Your most valuable customers.',
     action: 'Provide exclusive early access and personalized offers.',
   },
@@ -81,27 +61,23 @@ const SEGMENT_CONFIG: Record<SegmentType, {
     description: 'Declining engagement, churn risk.',
     action: 'Launch re-engagement campaign with aggressive discounts.',
   },
-  'Fake Orders': {
-    color: 'text-bushal-danger',
-    bg: 'bg-bushal-dangerBg',
-    border: 'border-bushal-danger/20',
-    icon: '',
-    description: 'Abnormal patterns (bots, fraud, or testing).',
-    action: 'Review for fraud. Block suspicious accounts.',
+  // FIX: Renamed from 'Fake Orders' to 'Anomalous'
+  'Anomalous': {
+    color: 'text-slate-600',
+    bg: 'bg-slate-100',
+    border: 'border-slate-200',
+    icon: '🔍',
+    description: 'Statistical outliers requiring review.',
+    action: 'Review for data quality or unusual behavioral signals.',
   },
 }
 
-// ─── Helper Functions ───────────────────────────────────────────────────────
-
+// Helper to format dates
 function formatDate(dateString: string): string {
   return new Date(dateString).toLocaleDateString('en-BD', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
+    day: 'numeric', month: 'short', year: 'numeric',
   })
 }
-
-// ─── Main Page Component ───────────────────────────────────────────────────
 
 export default async function CustomerSegmentationPage() {
   const auth = await requireAdmin()
@@ -109,7 +85,7 @@ export default async function CustomerSegmentationPage() {
 
   const supabase = await auth.supabase
 
-  // 1. Fetch all fulfilled orders (last 12 months for relevance)
+  // 1. Fetch all fulfilled orders (last 12 months)
   const twelveMonthsAgo = new Date()
   twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12)
 
@@ -120,9 +96,7 @@ export default async function CustomerSegmentationPage() {
     .gte('created_at', twelveMonthsAgo.toISOString())
     .order('created_at', { ascending: false })
 
-  if (ordersError) {
-    console.error('[Customer Segmentation] Error fetching orders:', ordersError)
-  }
+  if (ordersError) console.error('[Customer Segmentation] Error fetching orders:', ordersError)
 
   // 2. Fetch all customer profiles
   const { data: profiles, error: profilesError } = await supabase
@@ -130,9 +104,7 @@ export default async function CustomerSegmentationPage() {
     .select('id, full_name, email, role')
     .eq('role', 'customer')
 
-  if (profilesError) {
-    console.error('[Customer Segmentation] Error fetching profiles:', profilesError)
-  }
+  if (profilesError) console.error('[Customer Segmentation] Error fetching profiles:', profilesError)
 
   // 3. Prepare Customer Metrics
   const rawOrders = (orders ?? []).map((o: any) => ({
@@ -161,7 +133,10 @@ export default async function CustomerSegmentationPage() {
 
   // 7. Group customers by segment for detailed view
   const customersBySegment = new Map<SegmentType, CustomerSegment[]>()
-  summaries.forEach((s) => customersBySegment.set(s.segment, []))
+  // FIX: Explicitly initialize all known segment types to prevent missing keys
+  const allSegmentTypes: SegmentType[] = ['VIP', 'Loyal', 'Normal', 'High Risk', 'Anomalous']
+  allSegmentTypes.forEach(s => customersBySegment.set(s, []))
+  
   segments.forEach((seg) => {
     const list = customersBySegment.get(seg.segment)
     if (list) list.push(seg)
@@ -173,32 +148,26 @@ export default async function CustomerSegmentationPage() {
   })
 
   // 8. Calculate Global Category Sales (Mock data for demonstration)
-  // In a real app, you'd aggregate this from order_items + products
   const globalCategorySales: Record<string, number> = {
-    'Accessories': 45000,
-    'Clothing': 120000,
-    'Electronics': 85000,
-    'Home': 32000,
-    'Beauty': 28000,
+    'Accessories': 45000, 'Clothing': 120000, 'Electronics': 85000, 
+    'Home': 32000, 'Beauty': 28000,
   }
   const allCategories = Object.keys(globalCategorySales)
 
   // 9. Generate Category Discount Recommendations
   const discountRecommendations = recommendCategoryDiscounts(
-    segments,
-    allCategories,
-    globalCategorySales
+    segments, allCategories, globalCategorySales
   )
 
   // 10. Calculate Overall Metrics
   const totalCustomers = segments.length
   const vipCount = segments.filter((s) => s.segment === 'VIP').length
   const highRiskCount = segments.filter((s) => s.segment === 'High Risk').length
-  const fakeOrdersCount = segments.filter((s) => s.segment === 'Fake Orders').length
+  // FIX: Replaced fakeOrdersCount with anomalousCount
+  const anomalousCount = segments.filter((s) => s.segment === 'Anomalous').length
   const totalRevenue = segments.reduce((sum, s) => sum + s.total_spent, 0)
 
   // ─── Render UI ────────────────────────────────────────────────────────────
-
   return (
     <div className="space-y-8 animate-fade-in-up">
       {/* Page Header */}
@@ -231,7 +200,7 @@ export default async function CustomerSegmentationPage() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-bushal-surface rounded-2xl border border-bushal-border p-5 shadow-card">
           <p className="text-[11px] font-bold uppercase tracking-widest text-bushal-inkSoft mb-2">
             Total Customers
@@ -241,7 +210,6 @@ export default async function CustomerSegmentationPage() {
           </p>
           <p className="text-xs text-bushal-inkSoft mt-1">Active buyers</p>
         </div>
-
         <div className="bg-bushal-surface rounded-2xl border border-bushal-border p-5 shadow-card">
           <p className="text-[11px] font-bold uppercase tracking-widest text-bushal-inkSoft mb-2">
             VIP Customers
@@ -253,7 +221,6 @@ export default async function CustomerSegmentationPage() {
             {totalCustomers > 0 ? ((vipCount / totalCustomers) * 100).toFixed(1) : 0}% of base
           </p>
         </div>
-
         <div className="bg-bushal-surface rounded-2xl border border-bushal-border p-5 shadow-card">
           <p className="text-[11px] font-bold uppercase tracking-widest text-bushal-inkSoft mb-2">
             High Risk
@@ -263,25 +230,15 @@ export default async function CustomerSegmentationPage() {
           </p>
           <p className="text-xs text-bushal-inkSoft mt-1">Need re-engagement</p>
         </div>
-
+        {/* FIX: Replaced Fake Orders KPI with Anomalous KPI */}
         <div className="bg-bushal-surface rounded-2xl border border-bushal-border p-5 shadow-card">
           <p className="text-[11px] font-bold uppercase tracking-widest text-bushal-inkSoft mb-2">
-            Fake Orders
+            Anomalous
           </p>
-          <p className="text-2xl font-extrabold text-bushal-danger tabular-nums font-heading">
-            {fakeOrdersCount}
+          <p className="text-2xl font-extrabold text-slate-600 tabular-nums font-heading">
+            {anomalousCount}
           </p>
-          <p className="text-xs text-bushal-inkSoft mt-1">Suspicious activity</p>
-        </div>
-
-        <div className="bg-bushal-surface rounded-2xl border border-bushal-border p-5 shadow-card">
-          <p className="text-[11px] font-bold uppercase tracking-widest text-bushal-inkSoft mb-2">
-            Total Revenue
-          </p>
-          <p className="text-2xl font-extrabold text-bushal-forest tabular-nums font-heading">
-            {formatPrice(totalRevenue)}
-          </p>
-          <p className="text-xs text-bushal-inkSoft mt-1">Last 12 months</p>
+          <p className="text-xs text-bushal-inkSoft mt-1">Requires review</p>
         </div>
       </div>
 
@@ -297,14 +254,16 @@ export default async function CustomerSegmentationPage() {
             <h3 className="text-sm font-bold uppercase tracking-wider text-bushal-copperGlow mb-2">
               About This Analysis
             </h3>
+            {/* FIX: Updated text to remove "fake orders/bots" claim */}
             <p className="text-xs text-white/80 leading-relaxed mb-3">
-              This system uses <strong className="text-white">K-Means clustering</strong> to group customers based on 
-              three key features: <strong className="text-white">Total Spent</strong>, <strong className="text-white">Order Frequency</strong>, 
-              and <strong className="text-white">Order Variance</strong>. The algorithm automatically detects abnormal patterns 
-              to flag potential fake orders or bots.
+              This system uses <strong className="text-white">K-Means clustering</strong> to group customers based on
+              three key features: <strong className="text-white">Total Spent</strong>, <strong className="text-white">Order Frequency</strong>,
+              and <strong className="text-white">Order Variance</strong>. The algorithm automatically identifies statistical outliers
+              and distinct behavioral patterns to help tailor marketing strategies.
             </p>
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-[10px]">
-              {(['VIP', 'Loyal', 'Normal', 'High Risk', 'Fake Orders'] as SegmentType[]).map((seg) => (
+              {/* FIX: Use the explicitly defined allSegmentTypes array */}
+              {allSegmentTypes.map((seg) => (
                 <div key={seg} className="bg-white/5 rounded-lg p-2">
                   <p className="text-bushal-copperGlow font-bold">{SEGMENT_CONFIG[seg].icon} {seg}</p>
                   <p className="text-white/60 mt-0.5">{summaries.find((s) => s.segment === seg)?.count ?? 0} customers</p>
@@ -317,11 +276,12 @@ export default async function CustomerSegmentationPage() {
 
       {/* Segment Detail Cards */}
       <div className="space-y-6">
-        {(['VIP', 'Loyal', 'Normal', 'High Risk', 'Fake Orders'] as SegmentType[]).map((segmentType) => {
+        {/* FIX: Iterate over allSegmentTypes to ensure consistent rendering */}
+        {allSegmentTypes.map((segmentType) => {
           const config = SEGMENT_CONFIG[segmentType]
           const summary = summaries.find((s) => s.segment === segmentType)
           const customers = customersBySegment.get(segmentType) ?? []
-          
+
           if (!summary) return null
 
           return (
@@ -396,7 +356,7 @@ export default async function CustomerSegmentationPage() {
                           <tr key={customer.user_id} className="hover:bg-bushal-ivoryDeep/50 transition-colors">
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-3">
-                                <div className={cn('w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white', config.bg.replace('/10', '').replace('Bg', ''))} style={{ backgroundColor: segmentType === 'VIP' ? '#B87333' : segmentType === 'Loyal' ? '#1A362D' : segmentType === 'High Risk' ? '#D97706' : segmentType === 'Fake Orders' ? '#DC2626' : '#6B7280' }}>
+                                <div className={cn('w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white', config.bg.replace('/10', '').replace('Bg', ''))} style={{ backgroundColor: segmentType === 'VIP' ? '#B87333' : segmentType === 'Loyal' ? '#1A362D' : segmentType === 'High Risk' ? '#D97706' : segmentType === 'Anomalous' ? '#64748b' : '#6B7280' }}>
                                   {(profile?.name ?? 'A').charAt(0).toUpperCase()}
                                 </div>
                                 <div className="min-w-0">
@@ -482,7 +442,6 @@ export default async function CustomerSegmentationPage() {
               </div>
             </div>
           </div>
-
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
@@ -503,7 +462,8 @@ export default async function CustomerSegmentationPage() {
               </thead>
               <tbody className="divide-y divide-bushal-ivory">
                 {discountRecommendations.slice(0, 10).map((rec, i) => {
-                  const segConfig = SEGMENT_CONFIG[rec.segment]
+                  // FIX: Ensure rec.segment is treated as a valid SegmentType
+                  const segConfig = SEGMENT_CONFIG[rec.segment as SegmentType]
                   return (
                     <tr key={i} className="hover:bg-bushal-ivoryDeep/50 transition-colors">
                       <td className="px-4 py-3">

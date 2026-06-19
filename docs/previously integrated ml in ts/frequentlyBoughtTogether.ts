@@ -1,4 +1,4 @@
-// lib/recommendations/frequentlyBoughtTogether.ts
+// docs/previously integrated ml in tsfrequentlyBoughtTogether.ts
 
 
 /**

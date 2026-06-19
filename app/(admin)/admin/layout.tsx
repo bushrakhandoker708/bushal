@@ -8,21 +8,26 @@ export default async function AdminLayout({
 }: {
   children: React.ReactNode
 }) {
-  const supabase =  await createServerClient()
+  const supabase = await createServerClient()
+  
+  // FIX: Use getUser() instead of getSession() for secure server-side verification.
+  // getSession() reads from cookies which can be tampered with, whereas getUser()
+  // validates the token against the Supabase Auth server.
+  const { data: { user }, error } = await supabase.auth.getUser()
 
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
-
-  if (!session) redirect('/login')
+  if (error || !user) {
+    redirect('/login')
+  }
 
   const { data: profile } = await supabase
     .from('profiles')
     .select('role')
-    .eq('id', session.user.id)
+    .eq('id', user.id)
     .single()
 
-  if (profile?.role !== 'admin') redirect('/dashboard')
+  if (profile?.role !== 'admin') {
+    redirect('/dashboard')
+  }
 
   return (
     <div className="flex min-h-screen bg-bushal-ivoryDeep">

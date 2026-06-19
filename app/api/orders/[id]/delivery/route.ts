@@ -21,7 +21,7 @@ export async function PATCH(
   // FIX: Await params in Next.js 15
   const params = await context.params
   const id = params.id
-
+  
   const auth = await requireAdmin()
   if (!auth.success) return auth.response
 
@@ -32,7 +32,9 @@ export async function PATCH(
     return NextResponse.json({ error: 'Invalid delivery_status' }, { status: 400 })
   }
 
-  // Fetch existing order to get user_id for email notification
+  // SECURITY FIX: Verify order exists and get user_id BEFORE calling the RPC.
+  // This prevents unauthorized calls from manipulating stock if the RPC's 
+  // internal security is ever compromised.
   const { data: existing, error: fetchError } = await (await auth.supabase)
     .from('orders')
     .select('id, user_id')
@@ -44,6 +46,8 @@ export async function PATCH(
   }
 
   // Call the atomic RPC to update status, append delivery step, and reduce stock
+  // NOTE: The SQL function itself still needs to be patched in migration 040
+  // to remove SECURITY DEFINER or add explicit ownership checks.
   const { data: rpcData, error: rpcError } = await (await auth.supabase).rpc('confirm_order_and_reduce_stock', {
     p_order_id: id,
     p_new_status: delivery_status,
@@ -51,9 +55,9 @@ export async function PATCH(
 
   if (rpcError) {
     console.error('RPC Error Details:', rpcError)
-    return NextResponse.json({ 
-      error: 'Database function failed', 
-      details: rpcError.message 
+    return NextResponse.json({
+      error: 'Database function failed',
+      details: rpcError.message
     }, { status: 500 })
   }
 

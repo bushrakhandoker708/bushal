@@ -1,14 +1,9 @@
 // app/layout.tsx
-// Updated root layout to integrate the new PageTransition component
-// for buttery-smooth page transitions across the entire Bushal app.
-// This enhances the premium, luxury feel by replacing abrupt page loads
-// with elegant fade-up animations.
-
-
 import type { Metadata } from 'next'
 import './globals.css'
 import { ToastProvider } from '@/app/components/ui/Toast'
 import PageTransition from '@/app/components/layout/PageTransition'
+import CompareDrawer from '@/app/components/layout/CompareDrawer'
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://bushal.vercel.app'),
@@ -105,6 +100,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           {/* NEW: Wrapped children with PageTransition for smooth page transitions */}
           <PageTransition>
             {children}
+            {/* NEW: Integrated CompareDrawer globally so it's available on all pages */}
+            <CompareDrawer />
           </PageTransition>
         </ToastProvider>
       </body>

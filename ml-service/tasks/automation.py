@@ -173,7 +173,7 @@ def run_business_automation(conn):
             if not churn_risk_customers:
                 logger.info("   ⏭️ No High Risk customers found for retention.")
             else:
-                # 🔥 CAUSAL INFERENCE: Randomly shuffle and split into 90% Treatment / 10% Control
+                #   CAUSAL INFERENCE: Randomly shuffle and split into 90% Treatment / 10% Control
                 random.shuffle(churn_risk_customers)
                 holdout_size = max(1, int(len(churn_risk_customers) * 0.10)) # 10% holdout
                 

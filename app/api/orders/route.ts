@@ -120,7 +120,7 @@ export async function POST(request: Request) {
   })
 
   if (rpcError) {
-    console.error('🔥 Order creation RPC failed:', rpcError)
+    console.error('  Order creation RPC failed:', rpcError)
     if (rpcError.message.includes('insufficient_stock') || rpcError.code === 'P0001') {
       return NextResponse.json({ error: 'One or more items are out of stock. Please adjust your cart.' }, { status: 409 })
     }

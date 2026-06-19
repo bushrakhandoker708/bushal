@@ -1,5 +1,4 @@
 // lib/analytics/customerSegmentation.ts
-
 /**
  * ============================================================================
  * CUSTOMER SEGMENTATION - K-MEANS CLUSTERING
@@ -16,7 +15,7 @@
  * - Loyal: Consistent buyers, good lifetime value
  * - Normal: Average purchasing behavior
  * - High Risk: Declining engagement, churn risk
- * - Fake Orders: Abnormal patterns (bots, fraud, or testing)
+ * - Anomalous: Statistical outliers requiring manual review (was "Fake Orders")
  * 
  * MATHEMATICAL FOUNDATION:
  * - K-Means: Iteratively assigns points to nearest centroid and updates centroids
@@ -40,7 +39,9 @@ export interface CustomerMetrics {
   category_preferences: Record<string, number> // Category -> purchase count
 }
 
-export type SegmentType = 'VIP' | 'Loyal' | 'Normal' | 'High Risk' | 'Fake Orders'
+// FIX: Renamed 'Fake Orders' to 'Anomalous' to reflect statistical outlier status
+// rather than confirmed fraud/intent.
+export type SegmentType = 'VIP' | 'Loyal' | 'Normal' | 'High Risk' | 'Anomalous'
 
 export interface CustomerSegment {
   user_id: string
@@ -211,6 +212,10 @@ function kMeansCluster(
  * Map cluster indices to meaningful business segments.
  * This uses heuristic rules based on the normalized centroid values:
  * [Total Spent, Order Frequency, Order Variance]
+ * 
+ * FIX: Changed 'Fake Orders' label to 'Anomalous'. K-Means finds geometric 
+ * outliers, not intent. Low variance + high frequency indicates bot-like 
+ * patterns that warrant human review, not automatic fraud classification.
  */
 function mapClustersToSegments(
   centroids: number[][],
@@ -239,9 +244,10 @@ function mapClustersToSegments(
 
   // Heuristic assignment based on normalized features
   clusterMetrics.forEach((m) => {
-    // Fake Orders: Very low variance (identical orders) OR extremely high frequency with low spend
+    // FIX: Renamed from 'Fake Orders' to 'Anomalous'
+    // Very low variance (identical orders) OR extremely high frequency with low spend
     if (m.variance < 0.1 && m.freq > 0.7) {
-      mapping.set(m.idx, 'Fake Orders')
+      mapping.set(m.idx, 'Anomalous')
     }
     // VIP: High spend, high frequency
     else if (m.spent > 0.7 && m.freq > 0.6) {
@@ -263,7 +269,8 @@ function mapClustersToSegments(
 
   // Ensure all 5 segments are represented if possible
   const usedSegments = new Set(mapping.values())
-  const allSegments: SegmentType[] = ['VIP', 'Loyal', 'Normal', 'High Risk', 'Fake Orders']
+  // FIX: Updated array to include 'Anomalous' instead of 'Fake Orders'
+  const allSegments: SegmentType[] = ['VIP', 'Loyal', 'Normal', 'High Risk', 'Anomalous']
   
   for (const seg of allSegments) {
     if (!usedSegments.has(seg)) {
@@ -350,7 +357,9 @@ export function segmentCustomers(
     if (segment === 'VIP') recommendedDiscount = 15 // Reward VIPs
     else if (segment === 'Loyal') recommendedDiscount = 10
     else if (segment === 'High Risk') recommendedDiscount = 25 // Aggressive retention
-    else if (segment === 'Fake Orders') recommendedDiscount = 0 // No discounts for bots
+    // FIX: Removed discount logic for 'Fake Orders' since it's now 'Anomalous'
+    // Anomalous customers should be reviewed manually, not given automated discounts
+    else if (segment === 'Anomalous') recommendedDiscount = 0 
 
     // Boost discount if high value but high risk
     if (segment === 'High Risk' && customer.total_spent > (max[0] * 0.7)) {
@@ -397,6 +406,8 @@ export function recommendCategoryDiscounts(
     reasoning: string
   }> = []
 
+  // FIX: Excluded 'Anomalous' from discount recommendations. 
+  // These customers require manual review, not automated marketing.
   const segmentTypes: SegmentType[] = ['VIP', 'Loyal', 'Normal', 'High Risk']
 
   for (const segType of segmentTypes) {
@@ -454,7 +465,8 @@ export function generateSegmentSummary(segments: CustomerSegment[]): SegmentSumm
     customers: CustomerSegment[]
   }>()
 
-  const allSegments: SegmentType[] = ['VIP', 'Loyal', 'Normal', 'High Risk', 'Fake Orders']
+  // FIX: Updated to include 'Anomalous' instead of 'Fake Orders'
+  const allSegments: SegmentType[] = ['VIP', 'Loyal', 'Normal', 'High Risk', 'Anomalous']
   allSegments.forEach((s) => summaryMap.set(s, { count: 0, total_spent: 0, total_orders: 0, customers: [] }))
 
   segments.forEach((seg) => {
@@ -465,12 +477,13 @@ export function generateSegmentSummary(segments: CustomerSegment[]): SegmentSumm
     data.customers.push(seg)
   })
 
+  // FIX: Updated action text for 'Anomalous' to reflect review status rather than fraud blocking
   const actions: Record<SegmentType, string> = {
     'VIP': 'Provide exclusive early access and personalized offers. Maintain high service levels.',
     'Loyal': 'Implement loyalty rewards program. Encourage referrals with incentives.',
     'Normal': 'Send regular promotional emails. Upsell related products based on history.',
     'High Risk': 'Launch re-engagement campaign with aggressive discounts. Survey for feedback.',
-    'Fake Orders': 'Review for fraud. Block suspicious accounts. Do not send marketing emails.',
+    'Anomalous': 'Review for unusual behavioral patterns. Verify account legitimacy before taking action.',
   }
 
   return Array.from(summaryMap.entries()).map(([segment, data]) => ({

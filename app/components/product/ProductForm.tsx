@@ -1,4 +1,6 @@
+// app/components/product/ProductForm.tsx
 'use client'
+
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { Product } from '@/app/types/product'
@@ -30,10 +32,11 @@ export default function ProductForm({ mode, product, categories }: Props) {
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState('')
   const [uploadProgress, setUploadProgress] = useState(0)
-  
-  // FIX: Added cost_price and other_costs to form state
+
+  // FIX: Added `details` to form state for the short description / key features
   const [form, setForm] = useState({
     name: product?.name ?? '',
+    details: product?.details ?? '', 
     description: product?.description ?? '',
     price: product?.price?.toString() ?? '',
     cost_price: (product as any)?.cost_price?.toString() ?? '',
@@ -73,11 +76,9 @@ export default function ProductForm({ mode, product, categories }: Props) {
     const sellingPrice = parseFloat(form.price) || 0
     const costPrice = parseFloat(form.cost_price) || 0
     const otherCosts = parseFloat(form.other_costs) || 0
-    
     const totalCost = costPrice + otherCosts
     const profit = sellingPrice - totalCost
     const profitMargin = sellingPrice > 0 ? (profit / sellingPrice) * 100 : 0
-    
     return { sellingPrice, totalCost, profit, profitMargin }
   }, [form.price, form.cost_price, form.other_costs])
 
@@ -92,27 +93,34 @@ export default function ProductForm({ mode, product, categories }: Props) {
     setUploading(true)
     setError('')
     setUploadProgress(0)
+
     const newUrls: string[] = []
     const newPreviews: string[] = []
+
     for (let i = 0; i < files.length; i++) {
       const file = files[i]
       const localPreview = URL.createObjectURL(file)
       newPreviews.push(localPreview)
+
       const ext = file.name.split('.').pop()
       const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
       const path = `products/${fileName}`
+
       const { error: uploadError } = await supabase.storage
         .from('product-images')
         .upload(path, file, { cacheControl: '3600', upsert: false })
+
       if (uploadError) {
         setError(`Upload failed: ${uploadError.message}`)
         setUploading(false)
         return
       }
+
       const { data } = supabase.storage.from('product-images').getPublicUrl(path)
       newUrls.push(data.publicUrl)
       setUploadProgress(Math.round(((i + 1) / files.length) * 100))
     }
+
     setImages((prev) => [...prev, ...newUrls])
     setPreviews((prev) => [...prev, ...newPreviews])
     setUploading(false)
@@ -158,6 +166,7 @@ export default function ProductForm({ mode, product, categories }: Props) {
 
     const payload = {
       name: form.name.trim(),
+      details: form.details.trim() || null, // NEW: Send short description to API
       description: form.description.trim(),
       price: parseFloat(form.price),
       // New fields for profit tracking
@@ -176,7 +185,7 @@ export default function ProductForm({ mode, product, categories }: Props) {
 
     const url = mode === 'create' ? '/api/products' : `/api/products/${product?.id}`
     const method = mode === 'create' ? 'POST' : 'PUT'
-    
+
     const res = await fetch(url, {
       method,
       headers: { 'Content-Type': 'application/json' },
@@ -184,7 +193,6 @@ export default function ProductForm({ mode, product, categories }: Props) {
     })
 
     setLoading(false)
-
     if (!res.ok) {
       const data = await res.json()
       setError(data.error ?? 'Something went wrong')
@@ -211,16 +219,37 @@ export default function ProductForm({ mode, product, categories }: Props) {
         required
       />
 
-      {/* Description */}
+      {/* NEW: Key Details / Short Description */}
       <div>
-        <label className="block text-sm font-semibold text-bushal-inkMid mb-1.5">Description</label>
+        <label className="block text-sm font-semibold text-bushal-inkMid mb-1.5">
+          Key Details <span className="text-bushal-inkSoft font-normal text-xs">(Short Description)</span>
+        </label>
+        <textarea
+          name="details"
+          value={form.details}
+          onChange={handleChange}
+          rows={2}
+          maxLength={500}
+          className="w-full rounded-xl border border-bushal-border bg-bushal-surface px-4 py-3 text-bushal-ink placeholder-bushal-inkSoft/60 text-sm transition-all duration-200 focus:outline-none focus:border-bushal-copper focus:ring-2 focus:ring-bushal-copper/20 hover:border-bushal-borderMid resize-none"
+          placeholder="e.g. 100% organic cotton, machine washable, fits true to size."
+        />
+        <p className="mt-1.5 text-xs text-bushal-inkSoft">
+          Displayed prominently near the price on the product page. Max 500 characters.
+        </p>
+      </div>
+
+      {/* Full Description */}
+      <div>
+        <label className="block text-sm font-semibold text-bushal-inkMid mb-1.5">
+          Full Description
+        </label>
         <textarea
           name="description"
           value={form.description}
           onChange={handleChange}
-          rows={4}
+          rows={6}
           className="w-full rounded-xl border border-bushal-border bg-bushal-surface px-4 py-3 text-bushal-ink placeholder-bushal-inkSoft/60 text-sm transition-all duration-200 focus:outline-none focus:border-bushal-copper focus:ring-2 focus:ring-bushal-copper/20 hover:border-bushal-borderMid resize-none"
-          placeholder="Describe the product — material, size, features..."
+          placeholder="Tell the full story of the product — materials, craftsmanship, sizing details, brand history..."
         />
       </div>
 
@@ -260,7 +289,7 @@ export default function ProductForm({ mode, product, categories }: Props) {
             id="cost_price"
             name="cost_price"
             type="number"
-            label="Cost Price ()"
+            label="Cost Price (৳)"
             value={form.cost_price}
             onChange={handleChange}
             placeholder="0.00"

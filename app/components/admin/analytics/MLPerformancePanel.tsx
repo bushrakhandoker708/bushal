@@ -1,7 +1,9 @@
 // app/components/admin/analytics/MLPerformancePanel.tsx
 'use client'
-//It takes the historical accuracy data logged by your Python microservice (from the ml_model_accuracy table we just created) and renders a beautiful, premium "AI Trust Score" panel. It calculates the latest MAPE for your demand forecasts, the Silhouette Score for your customer segments, and the Average Lift for your recommendations, color-coding them so the admin instantly knows if the models are performing well or degrading.
+
 import { cn } from '@/app/lib/utils/cn'
+import { useState, useEffect } from 'react'
+import { createBrowserClient } from '@/lib/supabase/client'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export interface MLAccuracyRecord {
@@ -11,6 +13,16 @@ export interface MLAccuracyRecord {
   metric_value: number
   records_evaluated: number
   evaluated_at: string
+}
+
+export interface MLJobMetric {
+  id: string
+  job_name: string
+  execution_time_ms: number
+  records_processed: number
+  status: 'success' | 'failed' | 'partial'
+  error_message: string | null
+  created_at: string
 }
 
 interface MLPerformancePanelProps {
@@ -47,7 +59,52 @@ function getTrend(data: MLAccuracyRecord[], modelName: string, metricName: strin
   }
 }
 
+function formatMs(ms: number): string {
+  if (ms < 1000) return `${ms}ms`
+  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`
+  return `${(ms / 60000).toFixed(1)}min`
+}
+
 // ─── Sub-Components ───────────────────────────────────────────────────────────
+
+/**
+ * Status badge for pipeline job rows with FIXED duration coloring logic.
+ */
+function JobStatusBadge({ status, executionTimeMs }: { status: string; executionTimeMs?: number }) {
+  // FIX: Reordered conditions to ensure > 60000 is checked BEFORE > 30000.
+  // Previously, > 60000 was unreachable because > 30000 caught it first.
+  const durationColor = executionTimeMs 
+    ? executionTimeMs > 60000 
+      ? 'text-red-600 font-bold' 
+      : executionTimeMs > 30000 
+        ? 'text-amber-600 font-semibold' 
+        : 'text-slate-600'
+    : 'text-slate-600'
+
+  if (status === 'success') {
+    return (
+      <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold", durationColor)}>
+        <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />
+        success
+      </span>
+    )
+  }
+  if (status === 'failed') {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-xs font-bold">
+        <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
+        failed
+      </span>
+    )
+  }
+  return (
+    <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold", durationColor)}>
+      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block" />
+      partial
+    </span>
+  )
+}
+
 function TrustGauge({ 
   label, 
   value, 
@@ -149,6 +206,30 @@ function TrustGauge({
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function MLPerformancePanel({ data }: MLPerformancePanelProps) {
+  const [jobs, setJobs] = useState<MLJobMetric[]>([])
+  const [loadingJobs, setLoadingJobs] = useState(true)
+
+  // Fetch job metrics separately since they aren't in the accuracy data prop
+  useEffect(() => {
+    const fetchJobs = async () => {
+      try {
+        const supabase = createBrowserClient()
+        const { data: jobData } = await supabase
+          .from('ml_job_metrics')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(10)
+        
+        if (jobData) setJobs(jobData as MLJobMetric[])
+      } catch (error) {
+        console.error('Failed to fetch ML jobs:', error)
+      } finally {
+        setLoadingJobs(false)
+      }
+    }
+    fetchJobs()
+  }, [])
+
   // 1. Demand Forecasting (MAPE - Lower is better)
   const mapeRecord = getLatestMetric(data, 'holt_winters_forecast', 'mape_percentage')
   const mapeTrend = getTrend(data, 'holt_winters_forecast', 'mape_percentage', false)
@@ -168,7 +249,7 @@ export default function MLPerformancePanel({ data }: MLPerformancePanelProps) {
     : null
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -212,6 +293,53 @@ export default function MLPerformancePanel({ data }: MLPerformancePanelProps) {
           description="Average Lift for FP-Growth associations. How much more likely items are bought together."
           trend={liftTrend}
         />
+      </div>
+
+      {/* Pipeline Job History */}
+      <div className="bg-bushal-surface rounded-2xl border border-bushal-border overflow-hidden">
+        <div className="px-6 py-4 border-b border-bushal-border">
+          <h3 className="text-sm font-bold text-bushal-forest">Recent Pipeline Jobs</h3>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-bushal-ivoryDeep/50">
+              <tr>
+                <th className="text-left px-6 py-3 text-xs font-bold text-bushal-inkSoft uppercase">Job</th>
+                <th className="text-left px-6 py-3 text-xs font-bold text-bushal-inkSoft uppercase">Status</th>
+                <th className="text-right px-6 py-3 text-xs font-bold text-bushal-inkSoft uppercase">Duration</th>
+                <th className="text-right px-6 py-3 text-xs font-bold text-bushal-inkSoft uppercase">Records</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-bushal-border">
+              {loadingJobs ? (
+                <tr><td colSpan={4} className="px-6 py-8 text-center text-bushal-inkSoft">Loading...</td></tr>
+              ) : jobs.length === 0 ? (
+                <tr><td colSpan={4} className="px-6 py-8 text-center text-bushal-inkSoft">No jobs recorded yet.</td></tr>
+              ) : (
+                jobs.map((job) => (
+                  <tr key={job.id} className="hover:bg-bushal-ivoryDeep/30 transition-colors">
+                    <td className="px-6 py-3 font-medium text-bushal-ink">{job.job_name}</td>
+                    <td className="px-6 py-3">
+                      <JobStatusBadge status={job.status} executionTimeMs={job.execution_time_ms} />
+                    </td>
+                    <td className="px-6 py-3 text-right tabular-nums">
+                      <span className={
+                        job.execution_time_ms > 60000 ? 'text-red-600 font-bold' :
+                        job.execution_time_ms > 30000 ? 'text-amber-600 font-semibold' :
+                        'text-slate-600'
+                      }>
+                        {formatMs(job.execution_time_ms)}
+                      </span>
+                    </td>
+                    <td className="px-6 py-3 text-right tabular-nums text-bushal-inkSoft">
+                      {job.records_processed.toLocaleString()}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Playbook / Insights */}

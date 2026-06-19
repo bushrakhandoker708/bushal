@@ -1,4 +1,4 @@
-// app/components/layoutAdminSidebar.tsx
+// app/components/layout/AdminSidebar.tsx
 'use client'
 
 import Link from 'next/link'
@@ -10,7 +10,6 @@ import { useAuth } from '@/app/hooks/useAuth'
 import { createBrowserClient } from '@/lib/supabase/client'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
-
 interface NavItem {
   href: string
   label: string
@@ -27,7 +26,6 @@ interface NavSection {
 }
 
 // ─── Navigation Structure ───────────────────────────────────────────────────
-
 const NAV_SECTIONS: NavSection[] = [
   {
     title: 'Main',
@@ -50,7 +48,6 @@ const NAV_SECTIONS: NavSection[] = [
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
           </svg>
         ),
-
       } as NavItem,
     ],
   },
@@ -149,7 +146,6 @@ const NAV_SECTIONS: NavSection[] = [
 ]
 
 // ─── Badge Component ────────────────────────────────────────────────────────
-
 function NavBadge({ text, color = 'copper' }: { text: string | number; color?: string }) {
   const colorMap: Record<string, string> = {
     copper: 'bg-bushal-copper/20 text-bushal-copperGlow border-bushal-copper/30',
@@ -158,7 +154,6 @@ function NavBadge({ text, color = 'copper' }: { text: string | number; color?: s
     danger: 'bg-rose-500/20 text-rose-300 border-rose-400/30',
     info: 'bg-blue-500/20 text-blue-300 border-blue-400/30',
   }
-
   return (
     <span className={cn(
       'text-[9px] font-bold px-1.5 py-0.5 rounded-md border tracking-wide uppercase',
@@ -170,7 +165,6 @@ function NavBadge({ text, color = 'copper' }: { text: string | number; color?: s
 }
 
 // ─── Nav Item Component ─────────────────────────────────────────────────────
-
 function NavItemButton({
   item,
   isActive,
@@ -204,12 +198,10 @@ function NavItemButton({
             : 'text-white/60 hover:text-white/90'
         )}
       >
-        {/* Active indicator bar */}
+        {/* FIX: Removed layoutId to prevent Framer Motion layout recalculation delay */}
         {isActive && !hasChildren && (
-          <motion.div
-            layoutId="activeIndicator"
+          <div
             className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-bushal-copper rounded-r-full"
-            transition={{ type: 'spring', stiffness: 400, damping: 30 }}
           />
         )}
 
@@ -302,7 +294,6 @@ function NavItemButton({
 }
 
 // ─── Search Component ───────────────────────────────────────────────────────
-
 function SidebarSearch({ isExpanded }: { isExpanded: boolean }) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<NavItem[]>([])
@@ -313,7 +304,6 @@ function SidebarSearch({ isExpanded }: { isExpanded: boolean }) {
       setResults([])
       return
     }
-
     const allItems = NAV_SECTIONS.flatMap(s => s.items)
     const filtered = allItems.filter(item =>
       item.label.toLowerCase().includes(query.toLowerCase())
@@ -372,7 +362,6 @@ function SidebarSearch({ isExpanded }: { isExpanded: boolean }) {
 }
 
 // ─── User Profile Card ──────────────────────────────────────────────────────
-
 function UserProfileCard({ isExpanded, onSignOut }: { isExpanded: boolean; onSignOut: () => void }) {
   const { user } = useAuth()
   const supabase = createBrowserClient()
@@ -449,7 +438,6 @@ function UserProfileCard({ isExpanded, onSignOut }: { isExpanded: boolean; onSig
 }
 
 // ─── Main Sidebar Component ─────────────────────────────────────────────────
-
 export default function AdminSidebar() {
   const pathname = usePathname()
   const router = useRouter()
@@ -483,7 +471,6 @@ export default function AdminSidebar() {
       }
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault()
-        // Focus search if expanded
         const input = document.querySelector<HTMLInputElement>('input[placeholder="Quick search..."]')
         input?.focus()
       }
@@ -532,6 +519,7 @@ export default function AdminSidebar() {
             <p className="text-[9px] text-bushal-copperGlow font-semibold uppercase tracking-wider">Admin</p>
           </div>
         </div>
+        {/* Hamburger Icon on the Right */}
         <button
           onClick={() => setMobileOpen(true)}
           className="p-2 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-all"
@@ -554,12 +542,13 @@ export default function AdminSidebar() {
               onClick={() => setMobileOpen(false)}
               className="lg:hidden fixed inset-0 z-[55] bg-black/60 backdrop-blur-sm"
             />
+            {/* FIX: Drawer now slides from the RIGHT to match the hamburger icon position */}
             <motion.aside
-              initial={{ x: '-100%' }}
+              initial={{ x: '100%' }} 
               animate={{ x: 0 }}
-              exit={{ x: '-100%' }}
+              exit={{ x: '100%' }}
               transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-              className="lg:hidden fixed top-0 left-0 bottom-0 z-[60] w-72 bg-bushal-forest flex flex-col"
+              className="lg:hidden fixed top-0 right-0 bottom-0 z-[60] w-72 bg-bushal-forest flex flex-col shadow-2xl shadow-bushal-ink/50"
             >
               {/* Mobile Header */}
               <div className="flex items-center justify-between px-5 pt-6 pb-4 border-b border-white/[0.06]">
@@ -609,8 +598,8 @@ export default function AdminSidebar() {
                 ))}
               </nav>
 
-              {/* Mobile User Card */}
-              <div className="mt-auto pt-4 border-t border-white/[0.06]">
+              {/* Mobile User Card - FIX: Added safe area padding for modern iPhones */}
+              <div className="mt-auto pt-4 border-t border-white/[0.06] pb-[env(safe-area-inset-bottom)]">
                 <UserProfileCard isExpanded={true} onSignOut={handleSignOut} />
               </div>
             </motion.aside>
@@ -729,7 +718,7 @@ export default function AdminSidebar() {
         </AnimatePresence>
 
         {/* User Profile */}
-        <div className="mt-auto pt-3 border-t border-white/[0.06]">
+        <div className="mt-auto pt-3 border-t border-white/[0.06] pb-[env(safe-area-inset-bottom)]">
           <UserProfileCard isExpanded={isExpanded} onSignOut={handleSignOut} />
         </div>
       </aside>

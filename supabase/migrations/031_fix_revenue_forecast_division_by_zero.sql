@@ -64,11 +64,11 @@ sum_x2 := n * (n + 1) * (2 * n + 1) / 6.0;
 SELECT SUM(v), SUM(i * v) INTO sum_y, sum_xy
 FROM unnest(last_6_months) WITH ORDINALITY AS t(v, i);
 
--- 🔥 FIX: Use NULLIF to prevent division by zero if all revenues are identical.
+--   FIX: Use NULLIF to prevent division by zero if all revenues are identical.
 -- If the denominator is 0, NULLIF returns NULL, and slope becomes NULL.
 slope := (n * sum_xy - sum_x * sum_y) / NULLIF(n * sum_x2 - sum_x * sum_x, 0);
 
--- 🔥 FIX: Use COALESCE(slope, 0) so intercept and predictions don't crash if slope is NULL
+--   FIX: Use COALESCE(slope, 0) so intercept and predictions don't crash if slope is NULL
 intercept := (sum_y - COALESCE(slope, 0) * sum_x) / n;
 
 next_month_pred := GREATEST(COALESCE(slope, 0) * (n + 1) + intercept, 0);

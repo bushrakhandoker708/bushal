@@ -1,4 +1,4 @@
-// app/components/product/FrequentlyBoughtTogether.tsx
+// app/components/product/SimilarProducts.tsx
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
@@ -8,20 +8,18 @@ import { useCart } from '@/app/hooks/useCart'
 import { cn } from '@/app/lib/utils/cn'
 import Link from 'next/link'
 
-// ─── Types ─────────────────────────────────────────────────────────────────
-interface FBTRecommendation {
-  product_id: string
+// ─── Types ────────────────────────────────────────────────────────────────
+interface GraphRecommendation {
+  productId: string
   name: string
   price: number
   image_url: string | null
   images: string[]
+  category: string
   in_stock: boolean
-  support: number
-  confidence: number
-  lift: number
-  frequency: number
-  reason: string
-  category?: string
+  score: number
+  rwrProbability: number
+  pageRankScore: number
 }
 
 interface Props {
@@ -30,8 +28,8 @@ interface Props {
 }
 
 // The model name that generated these recommendations.
-// Matches the Python ML microservice's FP-Growth pipeline.
-const MODEL_NAME = 'fp_growth'
+// Matches the seed data in migration 034_add_recommendation_ab_testing.sql
+const MODEL_NAME = 'pagerank_rwr'
 
 // ─── Tracking Helper ────────────────────────────────────────────────────────
 // Fire-and-forget tracking event to the A/B testing API.
@@ -52,10 +50,10 @@ function trackRecommendationEvent(
       keepalive: true,
     }).catch((err) => {
       // Silent fail - tracking should never break the user experience
-      console.warn('[FBT Tracking] Failed to log event:', err)
+      console.warn('[SimilarProducts Tracking] Failed to log event:', err)
     })
   } catch (err) {
-    console.warn('[FBT Tracking] Unexpected error:', err)
+    console.warn('[SimilarProducts Tracking] Unexpected error:', err)
   }
 }
 
@@ -76,76 +74,81 @@ const itemVariants = {
   show: { 
     opacity: 1, 
     y: 0, 
-    transition: { duration: 0.5, ease: [0.16, 1, 0.3, 1] as const } 
+    transition: { 
+      duration: 0.5, 
+      ease: [0.16, 1, 0.3, 1] as [number, number, number, number]
+    } 
   },
 }
 
 // ─── Component ──────────────────────────────────────────────────────────────
-export default function FrequentlyBoughtTogether({ productId, className }: Props) {
+export default function SimilarProducts({ productId, className }: Props) {
   const { addItem } = useCart()
-  const [recommendations, setRecommendations] = useState<FBTRecommendation[]>([])
+  const [recommendations, setRecommendations] = useState<GraphRecommendation[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set())
 
-  useEffect(() => {
-    const fetchRecommendations = async () => {
-      try {
-        setLoading(true)
-        setError('')
-        const response = await fetch(`/api/recommendations/frequently-bought/${productId}`)
-        if (!response.ok) {
-          throw new Error('Failed to fetch recommendations')
-        }
-        const data = await response.json()
-        if (data.success && data.recommendations?.length > 0) {
-          setRecommendations(data.recommendations)
-          // 🔥 TRACKING: Log impression events for all displayed recommendations
-          data.recommendations.forEach((rec: FBTRecommendation) => {
-            trackRecommendationEvent('impression', rec.product_id)
-          })
-        } else {
-          setRecommendations([])
-        }
-      } catch (err) {
-        console.error('[FBT Component] Error fetching recommendations:', err)
-        setError('Unable to load recommendations')
-        setRecommendations([])
-      } finally {
-        setLoading(false)
+  const fetchRecommendations = useCallback(async () => {
+    try {
+      setLoading(true)
+      setError('')
+      // Fetch graph-based similar products (alpha=0.7 blends 70% RWR similarity + 30% PageRank popularity)
+      const response = await fetch(`/api/products/graph-similar/${productId}?limit=8&alpha=0.7`)
+      if (!response.ok) {
+        throw new Error('Failed to fetch similar products')
       }
-    }
-
-    if (productId) {
-      fetchRecommendations()
+      const data = await response.json()
+      if (data.success && data.recommendations?.length > 0) {
+        setRecommendations(data.recommendations)
+        // 🔥 TRACKING: Log impression events for all displayed recommendations
+        data.recommendations.forEach((rec: GraphRecommendation) => {
+          trackRecommendationEvent('impression', rec.productId)
+        })
+      } else {
+        setRecommendations([])
+      }
+    } catch (err) {
+      console.error('[SimilarProducts] Error fetching recommendations:', err)
+      setError('Unable to load similar products')
+      setRecommendations([])
+    } finally {
+      setLoading(false)
     }
   }, [productId])
 
-  const handleAddToCart = useCallback((recommendation: FBTRecommendation) => {
-    if (!recommendation.in_stock) return
+  useEffect(() => {
+    if (productId) {
+      fetchRecommendations()
+    }
+  }, [productId, fetchRecommendations])
+
+  const handleAddToCart = useCallback((rec: GraphRecommendation) => {
+    if (!rec.in_stock) return
 
     const productForCart = {
-      id: recommendation.product_id,
-      name: recommendation.name,
-      price: recommendation.price,
-      image_url: recommendation.image_url,
-      images: recommendation.images,
-      in_stock: recommendation.in_stock,
-      stock_quantity: 99, // Assume in stock for cart logic
-      category: recommendation.category,
+      id: rec.productId,
+      name: rec.name,
+      price: rec.price,
+      image_url: rec.image_url,
+      images: rec.images,
+      in_stock: rec.in_stock,
+      stock_quantity: 99, // Assume in stock
+      category: rec.category,
+      created_at: new Date().toISOString(),
     }
 
     addItem(productForCart as any)
 
     // 🔥 TRACKING: Log a 'purchase' event (Add to Cart is the conversion metric)
-    trackRecommendationEvent('purchase', recommendation.product_id)
+    trackRecommendationEvent('purchase', rec.productId)
 
     // Track which items were added for UI feedback
-    setAddedIds(prev => new Set(prev).add(recommendation.product_id))
+    setAddedIds(prev => new Set(prev).add(rec.productId))
     setTimeout(() => {
       setAddedIds(prev => {
         const next = new Set(prev)
-        next.delete(recommendation.product_id)
+        next.delete(rec.productId)
         return next
       })
     }, 2500)
@@ -167,21 +170,21 @@ export default function FrequentlyBoughtTogether({ productId, className }: Props
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] as const }}
+        transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] }}
         className="flex items-center gap-5 mb-8"
       >
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-bushal-forest/5 border border-bushal-forest/10 flex items-center justify-center text-bushal-forest flex-shrink-0">
+          <div className="w-10 h-10 rounded-xl bg-bushal-copper/5 border border-bushal-copper/10 flex items-center justify-center text-bushal-copper flex-shrink-0">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
           </div>
           <div>
             <p className="text-[10px] font-bold uppercase tracking-widest text-bushal-copper mb-0.5">
-              Smart Recommendations
+              Graph Intelligence
             </p>
             <h2 className="font-heading text-2xl lg:text-3xl text-bushal-forest leading-tight">
-              Frequently Bought Together
+              Similar Products
             </h2>
           </div>
         </div>
@@ -209,10 +212,24 @@ export default function FrequentlyBoughtTogether({ productId, className }: Props
         </div>
       )}
 
-      {/* Error State */}
+      {/* Error State with Retry */}
       {error && !loading && (
         <div className="bg-bushal-dangerBg border border-bushal-danger/20 rounded-2xl p-6 text-center">
-          <p className="text-sm text-bushal-danger font-medium">{error}</p>
+          <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-bushal-danger/10 flex items-center justify-center">
+            <svg className="w-6 h-6 text-bushal-danger" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <p className="text-sm text-bushal-danger font-medium mb-3">{error}</p>
+          <button
+            onClick={fetchRecommendations}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold text-bushal-danger bg-white hover:bg-bushal-dangerBg transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            Try Again
+          </button>
         </div>
       )}
 
@@ -227,27 +244,29 @@ export default function FrequentlyBoughtTogether({ productId, className }: Props
         >
           {recommendations.map((rec) => {
             const cover = (Array.isArray(rec.images) && rec.images[0]) || rec.image_url
-            const isAdded = addedIds.has(rec.product_id)
-            const confidencePercent = Math.round(rec.confidence * 100)
+            const isAdded = addedIds.has(rec.productId)
+            const rwrPercent = Math.round(rec.rwrProbability * 100)
+            const prScore = rec.pageRankScore.toFixed(2)
 
             return (
               <motion.div
-                key={rec.product_id}
+                key={rec.productId}
                 variants={itemVariants}
                 layout
                 className="group bg-bushal-surface rounded-2xl border border-bushal-border overflow-hidden shadow-card hover:shadow-cardHover hover:border-bushal-borderMid transition-all duration-300 flex flex-col"
               >
                 {/* Image Container */}
                 <Link 
-                  href={`/product/${rec.product_id}`} 
+                  href={`/product/${rec.productId}`} 
                   className="block relative aspect-[3/4] overflow-hidden bg-bushal-ivoryDeep"
-                  onClick={() => handleProductClick(rec.product_id)}
+                  onClick={() => handleProductClick(rec.productId)}
                 >
                   {cover ? (
                     <img
                       src={cover}
                       alt={rec.name}
                       className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                      loading="lazy"
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-bushal-borderMid">
@@ -257,12 +276,12 @@ export default function FrequentlyBoughtTogether({ productId, className }: Props
                     </div>
                   )}
 
-                  {/* Confidence Badge (Glassmorphism) */}
+                  {/* RWR Probability Badge (Glassmorphism) */}
                   <div className="absolute top-3 left-3 bg-bushal-forest/90 backdrop-blur-md text-white text-[10px] font-bold tracking-wider uppercase px-2.5 py-1 rounded-full shadow-lg flex items-center gap-1.5">
                     <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                     </svg>
-                    {confidencePercent}% Match
+                    {rwrPercent}% Match
                   </div>
 
                   {/* Stock Badge */}
@@ -276,32 +295,32 @@ export default function FrequentlyBoughtTogether({ productId, className }: Props
                 {/* Details Container */}
                 <div className="p-4 flex flex-col flex-1 gap-3">
                   <Link 
-                    href={`/product/${rec.product_id}`} 
+                    href={`/product/${rec.productId}`} 
                     className="group/link"
-                    onClick={() => handleProductClick(rec.product_id)}
+                    onClick={() => handleProductClick(rec.productId)}
                   >
                     <p className="text-[10px] font-bold uppercase tracking-widest text-bushal-copper mb-1.5">
-                      {rec.category || 'Collection'}
+                      {rec.category}
                     </p>
-                    <h3 className="font-heading text-base lg:text-lg text-bushal-forest leading-tight line-clamp-2 group-hover/link:text-bushal-copper transition-colors">
+                    <h3 className="font-heading text-sm sm:text-base lg:text-lg text-bushal-forest leading-tight line-clamp-2 group-hover/link:text-bushal-copper transition-colors">
                       {rec.name}
                     </h3>
                   </Link>
 
                   {/* Price */}
                   <div className="flex items-baseline gap-2 mt-auto">
-                    <span className="font-heading text-lg lg:text-xl font-bold text-bushal-copper">
+                    <span className="font-heading text-base sm:text-lg lg:text-xl font-bold text-bushal-copper">
                       {formatPrice(rec.price)}
                     </span>
                   </div>
 
-                  {/* Metrics Pills */}
-                  <div className="flex items-center gap-2 flex-wrap">
+                  {/* Algorithm Metrics Pills - Hidden on very small screens */}
+                  <div className="hidden sm:flex items-center gap-2 flex-wrap">
                     <span className="bg-bushal-ivoryDeep text-bushal-inkMid px-2 py-0.5 rounded-full text-[10px] font-semibold border border-bushal-border/50">
-                      Bought {rec.frequency}× together
+                      PR: {prScore}
                     </span>
                     <span className="bg-bushal-copper/10 text-bushal-copper px-2 py-0.5 rounded-full text-[10px] font-bold border border-bushal-copper/20">
-                      Lift: {rec.lift.toFixed(1)}
+                      RWR: {rec.rwrProbability.toFixed(2)}
                     </span>
                   </div>
 
@@ -312,6 +331,7 @@ export default function FrequentlyBoughtTogether({ productId, className }: Props
                     className={cn(
                       "w-full py-2.5 rounded-xl text-xs font-bold tracking-wide uppercase transition-all mt-auto",
                       "flex items-center justify-center gap-2",
+                      "min-h-touch", // Touch target for mobile
                       rec.in_stock
                         ? isAdded
                           ? "bg-bushal-success text-white shadow-md shadow-bushal-success/20"
@@ -332,7 +352,7 @@ export default function FrequentlyBoughtTogether({ productId, className }: Props
                         >
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                         </motion.svg>
-                        Added to Bag
+                        Added
                       </>
                     ) : rec.in_stock ? (
                       <>
@@ -360,7 +380,7 @@ export default function FrequentlyBoughtTogether({ productId, className }: Props
           transition={{ delay: 0.8 }}
           className="text-xs text-bushal-inkSoft text-center mt-8 font-medium"
         >
-          Powered by FP-Growth Association Mining · Optimized via Thompson Sampling
+          Powered by Product Graph (PageRank + RWR) · Optimized via Thompson Sampling
         </motion.p>
       )}
     </section>

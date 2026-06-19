@@ -3,8 +3,8 @@
 // ============================================================================
 // EXPLANATION:
 // This is the main Server Component for the Admin Analytics dashboard.
-// It fetches all heavy analytics RPCs in parallel from Supabase and passes 
-// the typed data to the AdminAnalyticsClient.
+// It fetches all heavy analytics RPCs AND ML accuracy metrics in parallel 
+// from Supabase and passes the typed data to the AdminAnalyticsClient.
 //
 // ENHANCEMENTS:
 // 1. Integrated the new MLHealthPanel component to display Model Drift Alerts 
@@ -13,6 +13,8 @@
 //    perfect and is easily navigable on mobile, tablet, and desktop devices.
 // 3. Migration-013 RPCs are wrapped in Promise.resolve() so .catch() is 
 //    available — Supabase .then() returns PromiseLike, not Promise.
+// 4. MOVED ML ACCURACY FETCH TO SERVER: Fetches ml_model_accuracy here instead
+//    of in the client component to eliminate loading flashes and improve UX.
 // ============================================================================
 
 import { createServerClient } from '@/lib/supabase/server'
@@ -21,11 +23,19 @@ import MLHealthPanel from '@/app/components/admin/MLHealthPanel'
 import type { RFMData } from '@/app/components/admin/analytics/RFMMatrix'
 import type { CohortRow } from '@/app/components/admin/analytics/CohortHeatmap'
 import type { CLVData, ForecastData } from '@/app/components/admin/analytics/PredictiveInsights'
+import type { MLAccuracyRecord } from '@/app/components/admin/analytics/MLPerformancePanel'
 
 export const dynamic = 'force-dynamic'
 
 export default async function AnalyticsPage() {
   const supabase = await createServerClient()
+
+  // Fetch ML Accuracy data in parallel with other analytics
+  const { data: mlAccuracyRaw } = await supabase
+    .from('ml_model_accuracy')
+    .select('id, model_name, metric_name, metric_value, records_evaluated, evaluated_at')
+    .order('evaluated_at', { ascending: false })
+    .limit(50)
 
   const [
     { data: summaryRaw },
@@ -107,6 +117,8 @@ export default async function AnalyticsPage() {
           cohortData={cohortResult}
           clvData={clvResult}
           advancedForecast={advForecastResult}
+          // NEW: Pass ML accuracy data fetched on the server
+          mlAccuracyData={(mlAccuracyRaw as MLAccuracyRecord[]) || []}
         />
 
         {/* ML Health & A/B Testing Panel (Drift Alerts + Thompson Sampling) */}
