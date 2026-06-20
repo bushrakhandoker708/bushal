@@ -2,7 +2,7 @@
 import { createServerClient } from '@/lib/supabase/server'
 import AdminOrdersClient from '@/app/components/admin/AdminOrderClient'
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// ─── Types ───────────────────────────────────────────────────────────────────
 // IMPORTANT: Supabase v2 PostgREST returns FK joins as a single OBJECT, not an
 // array, when the relationship is a many-to-one (order_items → products).
 // The old code used Array.isArray(item.products) which always returned false,
@@ -154,7 +154,9 @@ export default async function AdminOrdersPage() {
     const orderItems: EnrichedOrderItem[] = (o.order_items ?? []).map((item) => {
       // BUGFIX: item.products is an object, not an array.
       // Supabase v2 PostgREST returns many-to-one FK joins as objects.
-      const product = item.products as OrderProduct | null
+      // We use 'as unknown as' to bypass the incorrect TS inference that 
+      // expects an array for nested FKs.
+      const product = item.products as unknown as OrderProduct | null
 
       const productData =
         product && product.id
