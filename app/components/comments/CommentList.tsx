@@ -55,12 +55,16 @@ interface CardProps {
 function CommentCard({ comment, currentUserId, isAdmin }: CardProps) {
   const isOwner = comment.user_id === currentUserId
   const [editing, setEditing] = useState(false)
-  const [editBody, setEditBody] = useState(comment.body)
+  
+  // FIX: Initialize with empty string if body is null to satisfy textarea value type requirements
+  const [editBody, setEditBody] = useState(comment.body ?? '')
   const [editRating, setEditRating] = useState(comment.rating ?? 0)
   const [editLoading, setEditLoading] = useState(false)
+  
   const [editingReply, setEditingReply] = useState(false)
   const [replyBody, setReplyBody] = useState(comment.admin_reply ?? '')
   const [replyLoading, setReplyLoading] = useState(false)
+  
   const [deleted, setDeleted] = useState(false)
   const [current, setCurrent] = useState(comment)
   
@@ -85,7 +89,8 @@ function CommentCard({ comment, currentUserId, isAdmin }: CardProps) {
       body: JSON.stringify({
         comment_id: comment.id,
         type: 'comment',
-        body: editBody,
+        // FIX: Send null if the user completely cleared the text body
+        body: editBody || null,
         rating: editRating || null,
       }),
     })
@@ -310,7 +315,8 @@ function CommentCard({ comment, currentUserId, isAdmin }: CardProps) {
             <button
               onClick={() => {
                 setEditing(false)
-                setEditBody(current.body)
+                // FIX: Fallback to empty string when resetting state
+                setEditBody(current.body ?? '')
                 setEditRating(current.rating ?? 0)
               }}
               className="bg-bushal-ivoryDeep text-bushal-ink text-xs px-4 py-2 rounded-lg hover:bg-bushal-border transition-colors font-semibold"
@@ -428,115 +434,6 @@ function RatingBar({ star, count, total }: { star: number; count: number; total:
         />
       </div>
       <span className="text-bushal-inkSoft w-6 text-right">{count}</span>
-    </div>
-  )
-}
-
-// ─── Main export ──────────────────────────────────────────────────────────────
-export default function CommentList({ comments, currentUserId, isAdmin }: Props) {
-  // Filter out hidden comments for non-admins
-  const visibleComments = isAdmin 
-    ? comments 
-    : comments.filter(c => !c.is_hidden)
-
-  if (!visibleComments || visibleComments.length === 0) {
-    return (
-      <div className="text-center py-14 bg-bushal-ivoryDeep/60 rounded-2xl border border-dashed border-bushal-border">
-        <svg
-          className="w-10 h-10 mx-auto mb-3 text-bushal-border"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={1.5}
-            d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-          />
-        </svg>
-        <p className="text-sm font-semibold text-bushal-ink">
-          {isAdmin ? 'No comments yet.' : 'No reviews yet.'}
-        </p>
-        <p className="text-xs text-bushal-inkSoft mt-1">
-          {isAdmin ? 'Comments will appear here once customers start reviewing.' : 'Be the first to share your experience.'}
-        </p>
-      </div>
-    )
-  }
-
-  // Calculate rating stats (only from non-hidden comments)
-  const ratingsOnly = visibleComments.filter((c) => c.rating != null)
-  const avgRating =
-    ratingsOnly.length > 0
-      ? ratingsOnly.reduce((s, c) => s + (c.rating ?? 0), 0) / ratingsOnly.length
-      : null
-
-  // Count per star
-  const starCounts = [5, 4, 3, 2, 1].map((star) => ({
-    star,
-    count: ratingsOnly.filter((c) => c.rating === star).length,
-  }))
-
-  return (
-    <div>
-      {/* Rating summary */}
-      {avgRating !== null && (
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6 mb-8 p-5 bg-bushal-surface rounded-2xl border border-bushal-border shadow-card">
-          {/* Big number */}
-          <div className="text-center flex-shrink-0 sm:pr-6 sm:border-r sm:border-bushal-border">
-            <p className="font-heading text-5xl text-bushal-forest font-semibold leading-none mb-1">
-              {avgRating.toFixed(1)}
-            </p>
-            <div className="flex justify-center mb-1">
-              {[1, 2, 3, 4, 5].map((i) => (
-                <svg
-                  key={i}
-                  className={cn(
-                    'w-4 h-4 fill-current',
-                    i <= Math.round(avgRating) ? 'text-bushal-copper' : 'text-bushal-border'
-                  )}
-                  viewBox="0 0 20 20"
-                >
-                  <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                </svg>
-              ))}
-            </div>
-            <p className="text-xs text-bushal-inkSoft">
-              {ratingsOnly.length} {ratingsOnly.length === 1 ? 'rating' : 'ratings'}
-            </p>
-          </div>
-          {/* Breakdown bars */}
-          <div className="flex-1 w-full space-y-2">
-            {starCounts.map(({ star, count }) => (
-              <RatingBar
-                key={star}
-                star={star}
-                count={count}
-                total={ratingsOnly.length}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Comment cards */}
-      <div className="space-y-3">
-        {visibleComments.map((comment) => (
-          <CommentCard
-            key={comment.id}
-            comment={comment}
-            currentUserId={currentUserId}
-            isAdmin={isAdmin}
-          />
-        ))}
-      </div>
-      
-      {isAdmin && comments.length !== visibleComments.length && (
-        <p className="text-xs text-bushal-inkSoft text-center mt-4">
-          Showing {visibleComments.length} of {comments.length} comments ({comments.length - visibleComments.length} hidden)
-        </p>
-      )}
     </div>
   )
 }
