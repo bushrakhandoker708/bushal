@@ -1,4 +1,3 @@
-// app/components/comments/CommentList.tsx
 'use client'
 
 import { useState } from 'react'
@@ -33,7 +32,6 @@ function StarDisplay({ rating, size = 'sm' }: { rating: number; size?: 'sm' | 'm
   )
 }
 
-// Deterministic avatar color from name
 function avatarColor(name: string) {
   const palette = [
     'bg-bushal-copper/15 text-bushal-copper',
@@ -56,7 +54,6 @@ function CommentCard({ comment, currentUserId, isAdmin }: CardProps) {
   const isOwner = comment.user_id === currentUserId
   const [editing, setEditing] = useState(false)
   
-  // FIX: Initialize with empty string if body is null to satisfy textarea value type requirements
   const [editBody, setEditBody] = useState(comment.body ?? '')
   const [editRating, setEditRating] = useState(comment.rating ?? 0)
   const [editLoading, setEditLoading] = useState(false)
@@ -68,13 +65,10 @@ function CommentCard({ comment, currentUserId, isAdmin }: CardProps) {
   const [deleted, setDeleted] = useState(false)
   const [current, setCurrent] = useState(comment)
   
-  // Admin hide state
   const [isHidden, setIsHidden] = useState(comment.is_hidden ?? false)
   const [hiding, setHiding] = useState(false)
 
   if (deleted) return null
-  
-  // If hidden and not admin, don't render
   if (isHidden && !isAdmin) return null
 
   const displayName = comment.profiles?.full_name ?? 'Anonymous'
@@ -89,7 +83,6 @@ function CommentCard({ comment, currentUserId, isAdmin }: CardProps) {
       body: JSON.stringify({
         comment_id: comment.id,
         type: 'comment',
-        // FIX: Send null if the user completely cleared the text body
         body: editBody || null,
         rating: editRating || null,
       }),
@@ -161,7 +154,6 @@ function CommentCard({ comment, currentUserId, isAdmin }: CardProps) {
       })
 
       if (!res.ok) {
-        // Revert on failure
         setIsHidden(previousState)
         const data = await res.json()
         throw new Error(data.error ?? 'Failed to update visibility')
@@ -182,7 +174,6 @@ function CommentCard({ comment, currentUserId, isAdmin }: CardProps) {
           ? "border-amber-200 hover:shadow-cardHover hover:border-bushal-borderMid" 
           : "border-bushal-border hover:shadow-cardHover hover:border-bushal-borderMid"
     )}>
-      {/* Header row */}
       <div className="flex items-start justify-between gap-3 mb-3.5">
         <div className="flex items-center gap-3 min-w-0">
           <div
@@ -199,14 +190,12 @@ function CommentCard({ comment, currentUserId, isAdmin }: CardProps) {
                 {displayName}
               </p>
               
-              {/* Hidden Badge */}
               {isHidden && (
                 <span className="text-[10px] font-bold text-bushal-danger bg-bushal-dangerBg px-1.5 py-0.5 rounded-full">
                   Hidden
                 </span>
               )}
               
-              {/* Needs Reply Badge */}
               {!current.admin_reply && !isHidden && (
                 <span className="text-[10px] font-bold text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded-full">
                   Needs Reply
@@ -223,7 +212,6 @@ function CommentCard({ comment, currentUserId, isAdmin }: CardProps) {
             <StarDisplay rating={current.rating} />
           )}
           
-          {/* Rating Only Indicator */}
           {current.rating != null && !current.body && !editing && (
             <span className="text-xs text-bushal-inkSoft italic ml-2">
               (Rating only)
@@ -256,7 +244,6 @@ function CommentCard({ comment, currentUserId, isAdmin }: CardProps) {
                 Remove
               </button>
               
-              {/* Admin Hide Toggle */}
               <button
                 onClick={handleToggleHide}
                 disabled={hiding}
@@ -275,7 +262,6 @@ function CommentCard({ comment, currentUserId, isAdmin }: CardProps) {
         </div>
       </div>
 
-      {/* Body — edit or display */}
       {editing ? (
         <div className="space-y-3">
           <div className="flex gap-1">
@@ -315,7 +301,6 @@ function CommentCard({ comment, currentUserId, isAdmin }: CardProps) {
             <button
               onClick={() => {
                 setEditing(false)
-                // FIX: Fallback to empty string when resetting state
                 setEditBody(current.body ?? '')
                 setEditRating(current.rating ?? 0)
               }}
@@ -334,7 +319,6 @@ function CommentCard({ comment, currentUserId, isAdmin }: CardProps) {
         </p>
       )}
 
-      {/* Admin reply — display */}
       {current.admin_reply && !editingReply && (
         <div className="mt-4 bg-bushal-copper/5 border border-bushal-copper/20 rounded-xl p-4">
           <div className="flex items-center justify-between mb-2">
@@ -374,7 +358,6 @@ function CommentCard({ comment, currentUserId, isAdmin }: CardProps) {
         </div>
       )}
 
-      {/* Admin reply — edit form */}
       {editingReply && isAdmin && (
         <div className="mt-4 space-y-3">
           <textarea
@@ -402,7 +385,6 @@ function CommentCard({ comment, currentUserId, isAdmin }: CardProps) {
         </div>
       )}
 
-      {/* Admin reply input (no existing reply) */}
       {isAdmin && !current.admin_reply && !editingReply && (
         <button
           onClick={() => setEditingReply(true)}
@@ -418,7 +400,6 @@ function CommentCard({ comment, currentUserId, isAdmin }: CardProps) {
   )
 }
 
-// ─── Rating distribution bar ──────────────────────────────────────────────────
 function RatingBar({ star, count, total }: { star: number; count: number; total: number }) {
   const pct = total > 0 ? Math.round((count / total) * 100) : 0
   return (
@@ -434,6 +415,105 @@ function RatingBar({ star, count, total }: { star: number; count: number; total:
         />
       </div>
       <span className="text-bushal-inkSoft w-6 text-right">{count}</span>
+    </div>
+  )
+}
+
+// FIX 4: Re-added the missing main CommentList component that was cut off in your code.
+export default function CommentList({ comments, currentUserId, isAdmin }: Props) {
+  const [sortBy, setSortBy] = useState<'recent' | 'highest' | 'lowest'>('recent')
+
+  // Filter out hidden comments for non-admins
+  const visibleComments = comments.filter(c => isAdmin ? true : !c.is_hidden)
+
+  const sorted = [...visibleComments].sort((a, b) => {
+    if (sortBy === 'recent') return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    if (sortBy === 'highest') return (b.rating || 0) - (a.rating || 0)
+    if (sortBy === 'lowest') return (a.rating || 0) - (b.rating || 0)
+    return 0
+  })
+
+  const ratingCounts = [5, 4, 3, 2, 1].map(star => ({
+    star,
+    count: visibleComments.filter(c => c.rating === star).length,
+  }))
+  
+  const totalRatings = visibleComments.filter(c => c.rating !== null).length
+  const avgRating = totalRatings > 0
+    ? visibleComments.reduce((sum, c) => sum + (c.rating || 0), 0) / totalRatings
+    : 0
+
+  if (visibleComments.length === 0) {
+    return (
+      <div className="text-center py-16 bg-bushal-ivory/30 rounded-2xl border border-dashed border-bushal-border">
+        <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-bushal-forest/5 flex items-center justify-center">
+          <svg className="w-8 h-8 text-bushal-forest/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+          </svg>
+        </div>
+        <p className="text-lg font-heading font-semibold text-bushal-forest mb-1">No reviews yet</p>
+        <p className="text-sm text-bushal-inkSoft max-w-xs mx-auto">
+          Be the first to share your thoughts and help others make a decision.
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      {/* Rating Summary */}
+      <div className="flex flex-col sm:flex-row gap-8 bg-gradient-to-br from-bushal-ivory to-white rounded-2xl p-6 border border-bushal-border mb-8 shadow-sm">
+        <div className="flex flex-col items-center justify-center text-center sm:min-w-[140px] border-b sm:border-b-0 sm:border-r border-bushal-border pb-6 sm:pb-0 sm:pr-8">
+          <p className="font-heading text-5xl font-bold text-bushal-forest leading-none">
+            {avgRating.toFixed(1)}
+          </p>
+          <div className="my-2">
+            <StarDisplay rating={Math.round(avgRating)} size="md" />
+          </div>
+          <p className="text-xs font-medium text-bushal-inkSoft">
+            {totalRatings} Review{totalRatings !== 1 ? 's' : ''}
+          </p>
+        </div>
+        <div className="flex-1 space-y-2.5">
+          {ratingCounts.map(({ star, count }) => (
+            <RatingBar key={star} star={star} count={count} total={totalRatings} />
+          ))}
+        </div>
+      </div>
+
+      {/* Sort Controls */}
+      <div className="flex items-center justify-between mb-6">
+        <h3 className="text-lg font-heading font-semibold text-bushal-ink">
+          Reviews ({visibleComments.length})
+        </h3>
+        <div className="flex items-center gap-2">
+          <label htmlFor="sort-reviews" className="text-xs text-bushal-inkSoft font-medium">
+            Sort by:
+          </label>
+          <select
+            id="sort-reviews"
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as any)}
+            className="text-xs font-semibold text-bushal-ink bg-bushal-surface border border-bushal-border rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-bushal-forest/20 cursor-pointer"
+          >
+            <option value="recent">Most Recent</option>
+            <option value="highest">Highest Rated</option>
+            <option value="lowest">Lowest Rated</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Comments List */}
+      <div className="space-y-4">
+        {sorted.map((comment) => (
+          <CommentCard
+            key={comment.id}
+            comment={comment}
+            currentUserId={currentUserId}
+            isAdmin={isAdmin}
+          />
+        ))}
+      </div>
     </div>
   )
 }
