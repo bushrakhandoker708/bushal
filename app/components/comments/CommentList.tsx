@@ -1,6 +1,5 @@
-'use client'
-
 // app/components/comments/CommentList.tsx
+'use client'
 
 import { useState } from 'react'
 import { formatDate } from '@/app/lib/utils/formatDate'
@@ -55,20 +54,24 @@ interface CardProps {
 
 function CommentCard({ comment, currentUserId, isAdmin }: CardProps) {
   const isOwner = comment.user_id === currentUserId
-
   const [editing, setEditing] = useState(false)
   const [editBody, setEditBody] = useState(comment.body)
   const [editRating, setEditRating] = useState(comment.rating ?? 0)
   const [editLoading, setEditLoading] = useState(false)
-
   const [editingReply, setEditingReply] = useState(false)
   const [replyBody, setReplyBody] = useState(comment.admin_reply ?? '')
   const [replyLoading, setReplyLoading] = useState(false)
-
   const [deleted, setDeleted] = useState(false)
   const [current, setCurrent] = useState(comment)
+  
+  // Admin hide state
+  const [isHidden, setIsHidden] = useState(comment.is_hidden ?? false)
+  const [hiding, setHiding] = useState(false)
 
   if (deleted) return null
+  
+  // If hidden and not admin, don't render
+  if (isHidden && !isAdmin) return null
 
   const displayName = comment.profiles?.full_name ?? 'Anonymous'
   const initial = displayName.charAt(0).toUpperCase()
@@ -136,8 +139,44 @@ function CommentCard({ comment, currentUserId, isAdmin }: CardProps) {
     }
   }
 
+  const handleToggleHide = async () => {
+    setHiding(true)
+    const previousState = isHidden
+    setIsHidden(!previousState)
+
+    try {
+      const res = await fetch('/api/comments', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          comment_id: comment.id,
+          type: 'hide',
+          is_hidden: !previousState 
+        }),
+      })
+
+      if (!res.ok) {
+        // Revert on failure
+        setIsHidden(previousState)
+        const data = await res.json()
+        throw new Error(data.error ?? 'Failed to update visibility')
+      }
+    } catch (err: any) {
+      console.error('Hide toggle failed:', err)
+    } finally {
+      setHiding(false)
+    }
+  }
+
   return (
-    <div className="bg-bushal-surface rounded-2xl border border-bushal-border p-5 shadow-card hover:shadow-cardHover hover:border-bushal-borderMid transition-all duration-200">
+    <div className={cn(
+      "bg-bushal-surface rounded-2xl border p-5 shadow-card transition-all duration-200",
+      isHidden 
+        ? "border-bushal-border bg-bushal-ivoryDeep/50 opacity-75" 
+        : !comment.admin_reply 
+          ? "border-amber-200 hover:shadow-cardHover hover:border-bushal-borderMid" 
+          : "border-bushal-border hover:shadow-cardHover hover:border-bushal-borderMid"
+    )}>
       {/* Header row */}
       <div className="flex items-start justify-between gap-3 mb-3.5">
         <div className="flex items-center gap-3 min-w-0">
@@ -150,18 +189,40 @@ function CommentCard({ comment, currentUserId, isAdmin }: CardProps) {
             {initial}
           </div>
           <div className="min-w-0">
-            <p className="font-semibold text-bushal-ink text-sm leading-tight truncate">
-              {displayName}
-            </p>
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="font-semibold text-bushal-ink text-sm leading-tight truncate">
+                {displayName}
+              </p>
+              
+              {/* Hidden Badge */}
+              {isHidden && (
+                <span className="text-[10px] font-bold text-bushal-danger bg-bushal-dangerBg px-1.5 py-0.5 rounded-full">
+                  Hidden
+                </span>
+              )}
+              
+              {/* Needs Reply Badge */}
+              {!current.admin_reply && !isHidden && (
+                <span className="text-[10px] font-bold text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded-full">
+                  Needs Reply
+                </span>
+              )}
+            </div>
             <p className="text-[11px] text-bushal-inkSoft mt-0.5">
               {formatDate(comment.created_at)}
             </p>
           </div>
         </div>
-
         <div className="flex items-center gap-2 flex-shrink-0">
           {current.rating != null && !editing && (
             <StarDisplay rating={current.rating} />
+          )}
+          
+          {/* Rating Only Indicator */}
+          {current.rating != null && !current.body && !editing && (
+            <span className="text-xs text-bushal-inkSoft italic ml-2">
+              (Rating only)
+            </span>
           )}
 
           {isOwner && !editing && (
@@ -180,14 +241,31 @@ function CommentCard({ comment, currentUserId, isAdmin }: CardProps) {
               </button>
             </div>
           )}
-
+          
           {isAdmin && !isOwner && (
-            <button
-              onClick={handleDelete}
-              className="text-[11px] text-bushal-danger font-semibold px-2 py-1 rounded-lg hover:bg-bushal-dangerBg transition-colors ml-1"
-            >
-              Remove
-            </button>
+            <div className="flex gap-1 ml-1">
+              <button
+                onClick={handleDelete}
+                className="text-[11px] text-bushal-danger font-semibold px-2 py-1 rounded-lg hover:bg-bushal-dangerBg transition-colors"
+              >
+                Remove
+              </button>
+              
+              {/* Admin Hide Toggle */}
+              <button
+                onClick={handleToggleHide}
+                disabled={hiding}
+                className={cn(
+                  "text-[11px] font-semibold px-2 py-1 rounded-lg transition-colors",
+                  isHidden 
+                    ? "text-bushal-success hover:bg-bushal-successBg" 
+                    : "text-bushal-warning hover:bg-bushal-warningBg",
+                  hiding && "opacity-50 cursor-not-allowed"
+                )}
+              >
+                {isHidden ? 'Unhide' : 'Hide'}
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -242,8 +320,11 @@ function CommentCard({ comment, currentUserId, isAdmin }: CardProps) {
           </div>
         </div>
       ) : (
-        <p className="text-bushal-inkMid text-sm leading-relaxed whitespace-pre-wrap">
-          {current.body}
+        <p className={cn(
+          "text-bushal-inkMid text-sm leading-relaxed whitespace-pre-wrap",
+          isHidden && "line-through opacity-60"
+        )}>
+          {current.body || <span className="italic text-bushal-inkSoft">(No written review)</span>}
         </p>
       )}
 
@@ -332,7 +413,6 @@ function CommentCard({ comment, currentUserId, isAdmin }: CardProps) {
 }
 
 // ─── Rating distribution bar ──────────────────────────────────────────────────
-
 function RatingBar({ star, count, total }: { star: number; count: number; total: number }) {
   const pct = total > 0 ? Math.round((count / total) * 100) : 0
   return (
@@ -353,9 +433,13 @@ function RatingBar({ star, count, total }: { star: number; count: number; total:
 }
 
 // ─── Main export ──────────────────────────────────────────────────────────────
-
 export default function CommentList({ comments, currentUserId, isAdmin }: Props) {
-  if (!comments || comments.length === 0) {
+  // Filter out hidden comments for non-admins
+  const visibleComments = isAdmin 
+    ? comments 
+    : comments.filter(c => !c.is_hidden)
+
+  if (!visibleComments || visibleComments.length === 0) {
     return (
       <div className="text-center py-14 bg-bushal-ivoryDeep/60 rounded-2xl border border-dashed border-bushal-border">
         <svg
@@ -371,13 +455,18 @@ export default function CommentList({ comments, currentUserId, isAdmin }: Props)
             d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
           />
         </svg>
-        <p className="text-sm font-semibold text-bushal-ink">No reviews yet.</p>
-        <p className="text-xs text-bushal-inkSoft mt-1">Be the first to share your experience.</p>
+        <p className="text-sm font-semibold text-bushal-ink">
+          {isAdmin ? 'No comments yet.' : 'No reviews yet.'}
+        </p>
+        <p className="text-xs text-bushal-inkSoft mt-1">
+          {isAdmin ? 'Comments will appear here once customers start reviewing.' : 'Be the first to share your experience.'}
+        </p>
       </div>
     )
   }
 
-  const ratingsOnly = comments.filter((c) => c.rating != null)
+  // Calculate rating stats (only from non-hidden comments)
+  const ratingsOnly = visibleComments.filter((c) => c.rating != null)
   const avgRating =
     ratingsOnly.length > 0
       ? ratingsOnly.reduce((s, c) => s + (c.rating ?? 0), 0) / ratingsOnly.length
@@ -417,7 +506,6 @@ export default function CommentList({ comments, currentUserId, isAdmin }: Props)
               {ratingsOnly.length} {ratingsOnly.length === 1 ? 'rating' : 'ratings'}
             </p>
           </div>
-
           {/* Breakdown bars */}
           <div className="flex-1 w-full space-y-2">
             {starCounts.map(({ star, count }) => (
@@ -434,7 +522,7 @@ export default function CommentList({ comments, currentUserId, isAdmin }: Props)
 
       {/* Comment cards */}
       <div className="space-y-3">
-        {comments.map((comment) => (
+        {visibleComments.map((comment) => (
           <CommentCard
             key={comment.id}
             comment={comment}
@@ -443,6 +531,12 @@ export default function CommentList({ comments, currentUserId, isAdmin }: Props)
           />
         ))}
       </div>
+      
+      {isAdmin && comments.length !== visibleComments.length && (
+        <p className="text-xs text-bushal-inkSoft text-center mt-4">
+          Showing {visibleComments.length} of {comments.length} comments ({comments.length - visibleComments.length} hidden)
+        </p>
+      )}
     </div>
   )
 }

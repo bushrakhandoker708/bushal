@@ -1,6 +1,5 @@
-'use client'
-
 // app/components/comments/CommentForm.tsx
+'use client'
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -22,7 +21,8 @@ const RATING_LABELS: Record<number, string> = {
 export default function CommentForm({ productId }: Props) {
   const { user } = useAuth()
   const router = useRouter()
-
+  
+  // Separate state for rating and body to support independent submission
   const [rating, setRating] = useState(0)
   const [hoverRating, setHoverRating] = useState(0)
   const [body, setBody] = useState('')
@@ -40,8 +40,8 @@ export default function CommentForm({ productId }: Props) {
             </svg>
           </div>
           <div>
-            <p className="text-sm font-semibold text-bushal-forest">Sign in to leave a review</p>
-            <p className="text-xs text-bushal-inkSoft">Your experience helps others shop with confidence.</p>
+            <p className="text-sm font-semibold text-bushal-forest">Sign in to leave feedback</p>
+            <p className="text-xs text-bushal-inkSoft">Share your experience with ratings or written reviews.</p>
           </div>
         </div>
         <div className="flex gap-2.5">
@@ -64,29 +64,40 @@ export default function CommentForm({ productId }: Props) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (rating === 0) {
-      setError('Please select a star rating.')
+    
+    // Validation: At least one of rating or body must be provided
+    if (rating === 0 && !body.trim()) {
+      setError('Please provide a star rating or write a comment.')
       return
     }
-    if (body.trim().length < 5) {
-      setError('Please write at least 5 characters.')
+    
+    // If there is text, enforce minimum length
+    if (body.trim().length > 0 && body.trim().length < 5) {
+      setError('Comments must be at least 5 characters long.')
       return
     }
 
     setLoading(true)
     setError('')
-
+    
     try {
       const res = await fetch('/api/comments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ product_id: productId, rating, body: body.trim() }),
+        body: JSON.stringify({ 
+          product_id: productId, 
+          rating: rating || null, // Send null if no rating selected
+          body: body.trim() || null // Send null if no text provided
+        }),
       })
+      
       const data = await res.json()
+      
       if (!res.ok) {
-        setError(data.error ?? 'Failed to submit review.')
+        setError(data.error ?? 'Failed to submit feedback.')
         return
       }
+      
       setSuccess(true)
       setRating(0)
       setBody('')
@@ -110,7 +121,7 @@ export default function CommentForm({ productId }: Props) {
         <svg className="w-4 h-4 text-bushal-copper flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
         </svg>
-        <h3 className="font-heading text-xl font-semibold text-bushal-forest">Write a review</h3>
+        <h3 className="font-heading text-xl font-semibold text-bushal-forest">Leave Feedback</h3>
       </div>
 
       {/* Feedback banners */}
@@ -119,10 +130,10 @@ export default function CommentForm({ productId }: Props) {
           <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
           </svg>
-          Review published. Thank you!
+          Feedback submitted successfully!
         </div>
       )}
-
+      
       {error && (
         <div className="mb-5 flex items-start gap-2.5 bg-bushal-dangerBg border border-bushal-danger/20 text-bushal-danger px-4 py-3 rounded-xl text-sm animate-fade-in animate-shake">
           <svg className="w-4 h-4 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
@@ -132,10 +143,10 @@ export default function CommentForm({ productId }: Props) {
         </div>
       )}
 
-      {/* Star rating */}
+      {/* Star rating section */}
       <div className="mb-5">
         <label className="block text-xs font-semibold text-bushal-inkMid uppercase tracking-wider mb-3">
-          Rating <span className="text-bushal-danger">*</span>
+          Rating <span className="text-bushal-inkSoft">(Optional)</span>
         </label>
         <div className="flex items-center gap-1">
           {[1, 2, 3, 4, 5].map((val) => (
@@ -167,13 +178,13 @@ export default function CommentForm({ productId }: Props) {
         </div>
       </div>
 
-      {/* Review body */}
+      {/* Review body section */}
       <div className="mb-6">
         <label
           htmlFor="review-body"
           className="block text-xs font-semibold text-bushal-inkMid uppercase tracking-wider mb-2"
         >
-          Your review <span className="text-bushal-danger">*</span>
+          Written Review <span className="text-bushal-inkSoft">(Optional)</span>
         </label>
         <textarea
           id="review-body"
@@ -186,7 +197,7 @@ export default function CommentForm({ productId }: Props) {
             'w-full rounded-xl border bg-bushal-ivory px-4 py-3 text-sm text-bushal-ink placeholder-bushal-inkSoft/50',
             'transition-all duration-200 resize-none',
             'focus:outline-none focus:border-bushal-copper focus:ring-2 focus:ring-bushal-copper/15 focus:bg-bushal-surface',
-            error && body.trim().length < 5
+            error && body.trim().length > 0 && body.trim().length < 5
               ? 'border-bushal-danger'
               : 'border-bushal-border hover:border-bushal-borderMid'
           )}
@@ -201,7 +212,7 @@ export default function CommentForm({ productId }: Props) {
 
       <button
         type="submit"
-        disabled={loading || body.trim().length < 5 || rating === 0}
+        disabled={loading || (rating === 0 && !body.trim())}
         className={cn(
           'w-full sm:w-auto inline-flex items-center justify-center gap-2 px-7 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200',
           'disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:translate-y-0',
@@ -219,7 +230,7 @@ export default function CommentForm({ productId }: Props) {
             Submitting…
           </>
         ) : (
-          'Submit review'
+          'Submit feedback'
         )}
       </button>
     </form>
