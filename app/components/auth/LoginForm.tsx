@@ -1,15 +1,12 @@
+// app/components/auth/LoginForm.tsx
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { createBrowserClient } from '@/lib/supabase/client'
 import Input from '@/app/components/ui/Input'
 import PasswordInput from '@/app/components/ui/PasswordInput'
 import Button from '@/app/components/ui/Button'
 
 export default function LoginForm() {
-  const router = useRouter()
-  const supabase = createBrowserClient()
   const [form, setForm] = useState({ email: '', password: '' })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -24,29 +21,29 @@ export default function LoginForm() {
     setLoading(true)
     setError('')
 
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-      email: form.email,
-      password: form.password,
-    })
+    try {
+      const res = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: form.email, password: form.password }),
+      })
+      const data = await res.json()
 
-    if (authError || !authData.user) {
+      if (res.status === 429) {
+        setError(data.error ?? 'Too many attempts. Please wait a minute and try again.')
+        setLoading(false)
+        return
+      }
+      if (!res.ok) {
+        setError(data.error ?? 'Invalid email or password')
+        setLoading(false)
+        return
+      }
+
+      window.location.href = data.role === 'admin' ? '/admin' : '/dashboard'
+    } catch {
+      setError('Something went wrong. Please try again.')
       setLoading(false)
-      setError(authError?.message ?? 'Invalid email or password')
-      return
-    }
-
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', authData.user.id)
-      .single()
-
-    const role = profile?.role ?? 'customer'
-
-    if (role === 'admin') {
-      window.location.href = '/admin'
-    } else {
-      window.location.href = '/dashboard'
     }
   }
 
