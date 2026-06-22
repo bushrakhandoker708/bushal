@@ -1,3 +1,5 @@
+//next.comfig.mjs
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   images: {

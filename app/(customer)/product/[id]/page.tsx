@@ -237,7 +237,7 @@ export default async function ProductPage({ params }: Props) {
 
         <ProductRecommendations productId={product.id} userId={currentUserId} />
 
-        <section className="mt-20 lg:mt-28">
+        <section className="mt-20 lg:mt-28  mb-32">
           <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-8 lg:mb-10">
             <div className="flex-1">
               <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-bushal-copper mb-1">

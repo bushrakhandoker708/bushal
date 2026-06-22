@@ -9,17 +9,20 @@ import HeroBanner from '@/app/components/home/HeroBanner'
 import SectionHeader from '@/app/components/ui/SectionHeader'
 import PageWrapper from '@/app/components/layout/PageWrapper'
 import { formatPrice } from '@/app/lib/utils/formatPrice'
-import CategoryFilter from '@/app/components/product/CatagoryFilter'
+import CategoryFilter from '@/app/components/dashboard/CatagoryFilter'
 import VerificationToast from '@/app/components/dashboard/VerificationToast'
+import TrendingNow from '@/app/components/dashboard/TrendingNow'
+import HotDealsGrid from '@/app/components/dashboard/HotDealsGrid'
 
-import TrendingNow from '@/app/components/product/TrendingNow'
 
 export const metadata: Metadata = {
   title: 'Home — Premium Curated Products',
-  description: 'Shop heritage-quality, handpicked products at Bushal. Fast delivery across Bangladesh, secure bKash payments, and transparent pricing. Explore our collection today.',
+  description:
+    'Shop heritage-quality, handpicked products at Bushal. Fast delivery across Bangladesh, secure bKash payments, and transparent pricing.',
   openGraph: {
     title: 'Bushal — Shop Premium Curated Products',
-    description: 'Heritage-quality goods delivered across Bangladesh. Transparent pricing & secure bKash payments.',
+    description:
+      'Heritage-quality goods delivered across Bangladesh. Transparent pricing & secure bKash payments.',
     url: 'https://bushal.vercel.app/dashboard',
   },
 }
@@ -29,7 +32,7 @@ export default async function DashboardPage() {
   const { data: products, error } = await supabase
     .from('products')
     .select(`*, comments ( rating )`)
-    .is('is_deleted', false) // Ensures soft-deleted products remain hidden
+    .is('is_deleted', false)
     .order('created_at', { ascending: false })
 
   if (error) console.error('Error fetching products:', error)
@@ -41,75 +44,24 @@ export default async function DashboardPage() {
     .slice(0, 3)
 
   return (
-    <div className="min-h-screen bg-bushal-ivory">
+    <div className="min-h-screen bg-bushal-ivory overflow-x-hidden">
       <VerificationToast />
       <Navbar />
       <HeroBanner />
 
-      <PageWrapper maxWidth="7xl" className="pb-28 md:pb-12">
+      <PageWrapper maxWidth="7xl" className="pb-28 md:pb-16">
 
-        {/* ── Trending Products Section ── */}
+
+        {/* ── Trending Products ── */}
         <TrendingNow className="mt-0 lg:mt-8" limit={8} />
 
+        {/* ── Hot Deals ── */}
         {discounted.length > 0 && (
-          <section className="mb-10">
-            <SectionHeader
-              title="Hot Deals"
-              subtitle="Limited-time discounts on top products"
-              action={
-                <Link
-                  href="#products"
-                  className="text-sm font-semibold text-bushal-copper hover:text-bushal-copperLight transition-colors"
-                >
-                  See all →
-                </Link>
-              }
-            />
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {discounted.map((p) => {
-                const cover = (Array.isArray(p.images) && p.images[0]) || p.image_url
-                const discountedPrice = p.price * (1 - (p.discount_percent ?? 0) / 100)
-                const saved = p.price - discountedPrice
-                return (
-                  <Link
-                    key={p.id}
-                    href={`/product/${p.id}`}
-                    className="group flex gap-4 items-center bg-bushal-surface rounded-xl border border-bushal-border p-3.5 shadow-card hover:shadow-cardHover hover:border-bushal-borderMid hover:-translate-y-0.5 transition-all duration-200"
-                  >
-                    <div className="w-20 h-20 rounded-xl overflow-hidden bg-bushal-ivoryDeep flex-shrink-0 border border-bushal-border">
-                      {cover ? (
-                        <img
-                          src={cover}
-                          alt={p.name}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-bushal-borderMid">
-                          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                          </svg>
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="inline-block bg-bushal-danger text-white text-[10px] font-bold px-2 py-0.5 rounded-full mb-1.5">
-                        -{p.discount_percent}% OFF
-                      </div>
-                      <p className="text-bushal-ink text-sm font-semibold leading-tight line-clamp-2 mb-1.5">{p.name}</p>
-                      <div className="flex items-baseline gap-1.5">
-                        <span className="text-bushal-forest font-bold text-base">{formatPrice(discountedPrice)}</span>
-                        <span className="text-bushal-inkSoft text-xs line-through">{formatPrice(p.price)}</span>
-                      </div>
-                      <p className="text-bushal-success text-xs font-semibold mt-0.5">Save {formatPrice(saved)}</p>
-                    </div>
-                  </Link>
-                )
-              })}
-            </div>
-          </section>
+          <HotDealsGrid discounted={discounted} />
         )}
 
-        <section id="products">
+        {/* ── All Products ── */}
+        <section id="products" className="relative">
           <SectionHeader
             title="All Products"
             subtitle={`${allProducts.length} items available`}
@@ -117,6 +69,7 @@ export default async function DashboardPage() {
           <CategoryFilter products={allProducts} />
         </section>
       </PageWrapper>
+
       <Footer />
       <BottomNav />
     </div>
